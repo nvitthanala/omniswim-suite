@@ -78,6 +78,11 @@ Asked after P1. The state file `docs/reference/REDESIGN_2026-10-25_STATE.json` (
 | R54 | Draft meets (P3) | A meet with no teams saves as a draft. Scoring and the optimizer refuse a draft. |
 | R55 | Overlay bundle | Switch the overlay's validation to `zod/mini`. |
 | R56 | Panel widths (Q16) | Claude may resize the user's window to measure. The window stayed maximized, so the harness checks the panel geometry instead (D3 §13). |
+| R57 | Dark status colors | Carry the light warn pair (`#EF6C00` fill, black text) into dark mode. Good and bad stay system colors in dark: the 800 shades fail 4.5:1 on a dark background. |
+| R58 | LCM to SCY conversions (Q-D2-swimswam) | Disregard Table D for every event. User: "completely disregard table d, its incorrect." Record SwimSwam converter outputs per event instead, labeled tool-derived, with an "est." badge. SwimCloud's own conversion still comes first (R10). Captures and the fitted model: `data/conversions/swimswam/`. This replaces R29's SwimSwam plan and Table D's role in R10. It is a user-approved exception to the CLAUDE.md data-provenance rule against estimates: the values are inferred from tool outputs and labeled as such. |
+| R59 | Conversion precision | User: "you can round, we dont need precision beyond final resultant times to hundreths of seconds." The R29 check value 4:00.00 → about 4:34 is SCM to SCY. LCM to SCY gives 4:28.90. |
+| R60 | Conversion sources | Convert to SCY from each source course: SCM uses the NCAA-archived factors (Table A); LCM uses R58. Convert individual swims and relay splits. The 800 free relay's full-relay conversion is not needed ("most times its a moot point"). |
+| R61 | Cut tags from estimates | An estimated (converted) time may earn an "estimated cut achieved" tag. When the swimmer swims the cut, the normal cut tag replaces it. This replaces the earlier rule that estimated times never tag. |
 
 NSISC is the New South Intercollegiate Swim Conference. The repo's meet data
 labels its meet "New South Championships". It is not the Northern Sun
@@ -95,6 +100,7 @@ nothing from that Northern Sun material is used here.
   for 100 yards at 3,000 to 4,250 ft; the PDF and the code both read 0.
 - **Table C** (NSISC event order): no published source archived yet. Ships as
   a `user-stated` session preset.
-- **Table D** (LCM to SCY with turn adjustments): no source found. Used only
-  as the fallback in R10, stored as `user-stated`, shown with an "est." badge,
-  and never used for cut tagging.
+- **Table D** (LCM to SCY with turn adjustments): disregarded for every event
+  (R58). The user called it incorrect. Its distance rows convert a 4:00.00
+  400 m to 3:28.37 for the 500. The LCM fallback is now the SwimSwam capture
+  in `data/conversions/swimswam/`.
