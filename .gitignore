@@ -62,6 +62,9 @@ test-results/
 legacy/data/training/*
 !legacy/data/training/MANIFEST.md
 !legacy/data/training/checksums.txt
+# The footage lived in data/training/ before 2026-10-25. Older clones may still
+# hold it there; keep that path ignored too.
+data/training/
 
 # Conference results PDFs and text name every athlete at the meet: keep local.
 data/relay-programs/sources/*.pdf

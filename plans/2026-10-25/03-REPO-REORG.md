@@ -66,6 +66,10 @@ tests/                        active tests only
 - **`data/`**: `demo-seed.json`, `training/` and `scoring_settings.json` serve
   the legacy app only. Move them to `legacy/data/`. Keep `cutlines/`,
   `relay-programs/`, `scoring_presets/` and `scoring_rules/` at the root.
+  **As built (d9f5c894 and its review fix-up):** `training/` and `scoring_settings.json` moved.
+  `demo-seed.json` stays at the root: the shell's `DATA_DIR` and four active
+  tests and scripts read it there. The shell, the Python backend and the e2e
+  and harness data copies read `legacy/data/scoring_settings.json`.
 - **`omniswim-suite/README.md`** (a tracked one-file folder) and the untracked
   `omniswim-suite/data/` in the main clone (open item M3): ask the user. Do
   not move or delete them in the reorg commit.

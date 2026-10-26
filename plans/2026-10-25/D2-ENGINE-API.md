@@ -7,7 +7,9 @@ records wrap these payload types.
 Evidence: [ran] = a command was run on tree 2f7c501d. [read] = code read there.
 **Base the extraction on the reorg commit** (`03-REPO-REORG.md` rule 4) and
 rerun the import scan there before Step A. Graph numbers below come from
-`packages/core/src` as of 2f7c501d.
+`packages/core/src` as of 2f7c501d. Test and script paths were updated after
+the reorg commits (d9f5c894 and its review fix-up); line numbers come from 2f7c501d and may have
+shifted, so find each line by its content.
 
 Section 6 lists the open questions this spec raised. Section 7 lists findings
 about the existing code.
@@ -151,7 +153,14 @@ repointed in Step A.
 
 ### 2.3 Steps
 
-**Step 0: baseline** (orchestrator, main clone, at the reorg commit).
+**Step 0: baseline** (orchestrator, at the reorg commits, in a checkout with
+the full local data). The main clone has no `data/meets.json` and only part of
+the captures. On 2026-10-25 the full set lived in the oyster worktree. Seed a
+fresh worktree from it: `data/meets.json`, `data/swimcloud-captures/`,
+`data/local-rosters/`, `data/relay-programs/sources/*.pdf` and `*.txt`, and
+`data/training/` into `legacy/data/training/`. Run with `SKIP_BUDGET_ENV=local`.
+Expected: vitest 4932 passed / 25 skipped (active + legacy), scripts 89 / 1,
+both skip budgets green.
 1. `npm ci` (F10).
 2. `npm run lint`, `npm test`, `npx vitest run`. Record pass and skip counts per
    file in the state file.
@@ -179,8 +188,8 @@ None imports `types.ts` or anything outside the set [ran]. In the same step:
 the package (2.1), the shims, the purity test (E3), and these repoints:
 - `tests/raceAnalysisPurity.test.ts:30` → `packages/engine/src/lib/raceAnalysis`.
 - `stryker.config.mjs` mutate path for `ncaaScoringRules.ts` → engine path.
-- `scripts/test_team_abbreviation_parity.mjs:25` → engine JSON path.
-- `backend/pdf_parser.py:42` (at its post-reorg path) → engine JSON path. It
+- `legacy/scripts/test_team_abbreviation_parity.mjs:25` → engine JSON path.
+- `legacy/backend/pdf_parser.py:42` → engine JSON path. It
   fails loudly on a missing file (:47).
 
 Step A proves shims, aliases, tsx, Stryker and the purity gate before the
@@ -188,18 +197,18 @@ large move.
 
 **Step B: everything else (62 files: 61 `.ts` + `team_colors.json`)**, including
 the cycle and `types.ts`, in one diff. Repoints in the same step:
-- `tests/altitudeAdjustment.test.ts:516`: allowlist →
+- `legacy/tests/altitudeAdjustment.test.ts:516`: allowlist →
   `packages/engine/src/constants.ts` and `packages/engine/src/lib/altitude.ts`
   (fails loudly without it).
 - `scripts/test_cutlines.mjs:687` → engine `cutlines.ts`; `:694` walks both
   `packages/engine/src` and `packages/core/src`.
 - `scripts/test_cutline_tags.mjs:1193` → engine `lib/cutlineTags.ts` and
   `data/teamDivisions.ts`.
-- `tests/theoreticalMeetShellNits.test.ts:111` → engine `lib/theoreticalMeetLabel.ts`.
-- `tests/relayLegCredits.test.ts:93` → engine `types.ts` (works through the
+- `legacy/tests/theoreticalMeetShellNits.test.ts:111` → engine `lib/theoreticalMeetLabel.ts`.
+- `legacy/tests/relayLegCredits.test.ts:93` → engine `types.ts` (works through the
   shim already; repoint for clarity).
 - The other 8 `stryker.config.mjs` mutate paths → engine paths.
-- `tests/optimizeStepOwnership.test.ts:16,32` (legacy after the reorg): mock
+- `legacy/tests/optimizeStepOwnership.test.ts:16,32` (legacy after the reorg): mock
   `@omniswim/engine/lib/rosterOptimizer`. After the move the worker path
   (`scoringWorker → optimizeJob → rosterOptimizer`) runs inside the engine,
   so a spy on the core path sees no call.
@@ -832,7 +841,7 @@ automatically.
 | # | Wrong move | How it fails | Guard |
 | --- | --- | --- | --- |
 | 1 | A source scan reads a shim | Passes, checks nothing | Non-vacuity asserts, E5 canaries |
-| 2 | Real-data scripts run in a worktree without `data/meets.json` | "Unchanged" proven by skipping | Orchestrator runs them in the main clone; a skip is not run (E7) |
+| 2 | Real-data scripts run in a worktree without `data/meets.json` | "Unchanged" proven by skipping | Orchestrator runs them in a checkout seeded with the full local data (Step 0); a skip is not run (E7) |
 | 3 | Stryker mutates shims | About 0 mutants | E6 exact numbers |
 | 4 | Moving through the cycle file by file | Does not compile | Step B moves everything at once |
 | 5 | Editing moved code during the move | Breaks R100 and E1's meaning | E2 |
@@ -899,7 +908,7 @@ automatically.
   declared only by `apps/shell/package.json`, which moves to legacy.
 - **F10.** The main clone's `node_modules` was stale (zod 3.25.76 installed vs
   4.6.7 locked); `npm ci` fixed it on 2026-10-25.
-- **F11.** `backend/pdf_parser.py:42` reads core's JSON by path; Step A repoints it.
+- **F11.** `legacy/backend/pdf_parser.py:42` reads core's JSON by path; Step A repoints it.
 - **F12.** `docs/INVARIANTS.md` #5 says `calculatePoints` lives in `utils.ts`; it
   now lives in `lib/calculatePoints.ts` and `utils.ts:132-133` re-exports it.
 - **F13.** The plan presented "scoring-team size: 18" as decided; no user
@@ -908,9 +917,10 @@ automatically.
   manifest; the generic preset cites `data/scoring_rules/sources/manifest.json`.
   D3 now accepts any `data/**/sources/manifest.json`.
 - **F15.** `tests/eventStrengthRanking.test.ts:633-652` and
-  `tests/altitudeAdjustment.test.ts:516-527` walk `apps/` and `extensions/`;
+  `legacy/tests/altitudeAdjustment.test.ts:516-527` walk `apps/` and `extensions/`;
   after the reorg they must also walk `legacy/` or they lose coverage.
-- **F16.** `tests/theoreticalMeetGolden.test.ts` skips 5 tests in the main clone
+  **Fixed** in the reorg review fix-up after d9f5c894.
+- **F16.** `legacy/tests/theoreticalMeetGolden.test.ts` skips 5 tests in the main clone
   (`:411-413`) because the real captures are absent.
 
 What the architect ran: an import-graph and impurity scan of

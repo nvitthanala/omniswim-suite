@@ -24,7 +24,7 @@
  *     men's SwimCloud history rows, verbatim from the HSU 2026-27 Roster Plan
  *     workspace (provenance in the file).
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -650,7 +650,9 @@ describe('buildCategorizedScoringInputs: which catalog events fill the cap', () 
       }
     };
     walk(join(repoRoot, 'packages'));
-    walk(join(repoRoot, 'apps'));
+    // apps/ holds no tracked files until the extension lands; a fresh checkout lacks it.
+    if (existsSync(join(repoRoot, 'apps'))) walk(join(repoRoot, 'apps'));
+    expect(existsSync(join(repoRoot, 'legacy/apps/shell')), 'legacy shell must be scanned').toBe(true);
     walk(join(repoRoot, 'legacy/packages'));
     walk(join(repoRoot, 'legacy/apps'));
     expect(offenders).toStrictEqual([]);

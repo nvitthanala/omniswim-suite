@@ -71,7 +71,7 @@ describe('amber ratchet', () => {
 });
 
 describe('warning-tone utilities follow the theme', () => {
-    const css = readFileSync(join(ROOT, 'legacy/packages/ui/src/index.css'), 'utf8');
+  const css = readFileSync(join(ROOT, 'legacy/packages/ui/src/index.css'), 'utf8');
   const defined = new Set([...css.matchAll(/@utility\s+([\w-]+)\s*\{/g)].map(m => m[1]));
 
   it('defines --color-warning for Dark (:root) and Light', () => {

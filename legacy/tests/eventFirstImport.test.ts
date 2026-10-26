@@ -44,7 +44,7 @@ import {
   skipReasonLabel,
 } from '../packages/matrix/src/lib/swimCloudImportDiagnostics';
 
-const CAPTURES = path.resolve(__dirname, '..', 'data', 'swimcloud-captures');
+const CAPTURES = path.resolve(__dirname, '..', '..', 'data', 'swimcloud-captures');
 const PAGES = path.join(CAPTURES, 'pages');
 const MEET_CAPTURE = path.join(CAPTURES, 'captures', 'meet-356467.json');
 

@@ -227,7 +227,7 @@ def _resolve_scoring_settings(scoring_settings=None, overrides=None):
 
             for candidate in (
 
-                repo_root / 'legacy' / 'data' / 'scoring_settings.json',
+                repo_root / 'data' / 'scoring_settings.json',
 
                 repo_root / 'scoring_settings.json',
 

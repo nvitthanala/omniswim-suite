@@ -59,7 +59,7 @@ import { buildTheoreticalMeetWorkspace, isTheoreticalMeet, theoreticalEventOrder
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_ROOT = join(here, '../../tests/fixtures/theoretical-meet');
-const REAL_ROOT = resolve(here, '..', 'data', 'swimcloud-captures');
+const REAL_ROOT = resolve(here, '..', '..', 'data', 'swimcloud-captures');
 const CAPTURE_IDS = ['team-412-2026-2027', 'team-58-2026-2027', 'team-48-2026-2027'];
 const TEAMS = ['Ouachita Baptist University', 'Henderson State University', 'Delta State University'];
 const WORKSPACE_ID = 'ws-theoretical-golden';

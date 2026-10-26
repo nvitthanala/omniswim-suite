@@ -49,7 +49,7 @@ function scriptTestFiles(): string[] {
 }
 
 function registeredNames(): Set<string> {
-  const runners = scriptsDirs.map((dir, i) => readFileSync(path.join(dir, i === 0 ? 'run-tests.mjs' : 'run-tests.mjs'), 'utf-8'));
+  const runners = scriptsDirs.map(dir => readFileSync(path.join(dir, 'run-tests.mjs'), 'utf-8'));
   return new Set(runners.flatMap(runner => runner.match(/test_[a-zA-Z0-9_]+\.mjs/g) ?? []));
 }
 

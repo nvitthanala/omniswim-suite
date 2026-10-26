@@ -435,9 +435,11 @@ on the user's machine, single-threaded.
   random values.
 - D4 still sets a time limit and reports the gap. A browser solve may be
   slower than Node.
-- Scripts: OpenCode's `spikes/s4-highs/` (worktree `redesign-s4-highs`, not
-  committed) and the lead's variant scripts in the session scratchpad. Both
-  are throwaway.
+- Scripts: `spikes/s4-highs/` in the worktree `redesign-s4-highs` (not
+  committed). `run.mjs` and `gen.mjs` are OpenCode's random-value run.
+  `formulation-a-structured.mjs` and `formulation-b.mjs` are the lead's
+  structured-value runs; run each as `node <file> <spike dir> [gap]`. All are
+  throwaway; the table above is the record.
 
 The architect owns this formulation (design item D4). It must prove the
 column bound does not drop a better lineup, or report the gap. "Too deep"

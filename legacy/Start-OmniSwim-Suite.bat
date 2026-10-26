@@ -6,6 +6,8 @@ title Omni Swim Suite
 set "SUITE_ROOT=%~dp0"
 :: Strip trailing backslash for cleaner display
 if "%SUITE_ROOT:~-1%"=="\" set "SUITE_ROOT=%SUITE_ROOT:~0,-1%"
+:: This script lives in legacy\ since 2026-10-25; the suite root is one folder up.
+for %%I in ("%SUITE_ROOT%\..") do set "SUITE_ROOT=%%~fI"
 cd /d "%SUITE_ROOT%"
 
 echo.

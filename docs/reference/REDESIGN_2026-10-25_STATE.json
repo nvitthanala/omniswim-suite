@@ -40,9 +40,25 @@
         },
         {
           "id": "P1.reorg",
-          "status": "in-progress",
+          "status": "verified-committed",
           "doc": "plans/2026-10-25/03-REPO-REORG.md",
-          "dispatch": "orca run_e227c1d43d7e task_d2a54ddb3b3e, codex, worktree C:/Users/nihar/orca/workspaces/omniswim-suite/redesign-reorg (branch nvitthanala/redesign-reorg, ff to 50d318dd). Attempts: ctx_6b84497f0e61 failed (worktree based on main, plan files missing); ctx_93e03ee451f3 failed (Codex update menu); ctx_a73688b491b3 running. Codex baseline in its worktree: vitest 4892 passed / 65 skipped (311+4 files; extra skips need gitignored local data); run-tests.mjs did not exit there. Dispatch marked failed (turn unobserved) but the terminal is alive; follow-up sent to term_b1cfdf6c with the worktree baseline as target and the F15 source-scan fix."
+          "dispatch": "orca run_e227c1d43d7e task_d2a54ddb3b3e, codex, worktree C:/Users/nihar/orca/workspaces/omniswim-suite/redesign-reorg (branch nvitthanala/redesign-reorg, ff to 50d318dd). Attempts: ctx_6b84497f0e61 failed (worktree based on main, plan files missing); ctx_93e03ee451f3 failed (Codex update menu); ctx_a73688b491b3 running. Codex baseline in its worktree: vitest 4892 passed / 65 skipped (311+4 files; extra skips need gitignored local data); run-tests.mjs did not exit there. Dispatch marked failed (turn unobserved) but the terminal is alive; follow-up sent to term_b1cfdf6c with the worktree baseline as target and the F15 source-scan fix.",
+          "commit": "d9f5c894 (Codex moves); review fix-up pending commit",
+          "note": "Codex dispatch ctx_a73688b491b3 released. Claude architect review found: Python settings path legacy/legacy (fixed + pytest), 3 moved tests reading legacy/data (silent skips, fixed), 2 source scans ENOENT on fresh checkout (fixed, non-vacuity asserts), skip budget split (legacy/tests/skip-budget.json + --config/--budget flags), Stryker includes legacy/tests, chart scan covers legacy, e2e/harness copy scoring_settings, harness EXTENSION_DIR, vitest double run in CI, eslint . minus legacy, .bat launchers resolve repo root, data/training kept ignored, dead root playwright.config.ts removed. Also: test_scoring_preset_routes now uses a temp data copy (it had started the server on the real data/ and migrated data/omniswim.db to v9; backup data/omniswim-pre-v9-20261025T212107Z.db). Main clone had 382 stale CRLF working files; re-checked out as LF.",
+          "followUps": [
+            "package-lock.json stale extraneous entries for moved workspaces: regenerate on a clean clone",
+            "active tests that guard only legacy code (uiAmberRatchet, uiCaseAndColorRatchet, navigationTargets, tests/harness, test_chart_bundle) belong in legacy/ eventually",
+            "gates must run with full local data: the main clone has only part of the captures; oyster worktree data is the full set"
+          ],
+          "verifiedBy": [
+            "fresh worktree at d9f5c894 + fix-up, oyster gitignored data copied in, SKIP_BUDGET_ENV=local, no Postgres: npm ci 0, lint 0, lint:legacy 0, build 0",
+            "vitest active 2047 passed / 0 skipped + legacy 2885 / 25 = 4932 / 25 (baseline 4932 / 25)",
+            "scripts active 65 / 0 skipped + legacy 24 / 1 = 89 / 1 (baseline 89 / 1); playwright e2e PASS",
+            "skip budgets (local column): active 0 of 0, legacy 25 of 25",
+            "legacy/backend: ruff clean, pytest 63 passed (includes test_scoring_settings_location.py)",
+            "test_scoring_preset_routes leaves data/backups and data/omniswim.db-wal untouched",
+            "NOT verified: CI column of both budgets, the Postgres tests, the harness step (CI runs only on PRs and main)"
+          ]
         },
         {
           "id": "D1",
@@ -151,11 +167,10 @@
     "Q-D5 diving and load preference"
   ],
   "resumeOrder": [
-    "P1.reorg",
-    "P0",
-    "D1",
-    "P1.engine",
-    "P1.skeleton"
+    "P0 (Claude in Chrome now connects; recon first)",
+    "P1.engine (D2 steps 0/A/B/C; needs no recon)",
+    "D1 (finish after recon Q19-21)",
+    "P1.skeleton (after recon)"
   ],
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",

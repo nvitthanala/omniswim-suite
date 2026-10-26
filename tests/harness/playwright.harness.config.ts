@@ -19,6 +19,8 @@ function dataDir(): string {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
     cpSync(join(root, 'data'), dir, { recursive: true, filter: src => !/[\\/]data[\\/]backups([\\/]|$)/.test(src) });
+    // The settings file moved to legacy/data; the server reads it from OMNI_DATA_DIR.
+    cpSync(join(root, 'legacy', 'data', 'scoring_settings.json'), join(dir, 'scoring_settings.json'));
   }
   return dir;
 }

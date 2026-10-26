@@ -1,7 +1,9 @@
 # Phase P0: SwimCloud meet simulator recon
 
-Status: **blocked on the Claude in Chrome connection.** Start the next
-session as `01-REDESIGN-PLAN.md` section 12 says; it has the fallback chain. The user authorized
+Status: **ready to run.** The Claude in Chrome tools (`mcp__claude-in-chrome__*`)
+appeared in a Claude Code session on 2026-10-25. If they are missing at the
+start of a session, use `01-REDESIGN-PLAN.md` section 12; it has the fallback
+chain. P0 is the first step of the next session. The user authorized
 live research through Claude in Chrome on 2026-10-25 ("run your own research,
 i trust it"). Decision U12 of the 2026-10-10 plan covers the posture: the
 user's own Chrome and sign-in, a separate tab, human pace, captures never

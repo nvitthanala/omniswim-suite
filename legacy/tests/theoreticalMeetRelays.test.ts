@@ -151,7 +151,7 @@ describe('the relay program', () => {
   });
 
   it("is the same five relays in the women's real results (data/meets.json, local only)", () => {
-    const path = resolve(import.meta.dirname, '..', 'data', 'meets.json');
+    const path = resolve(import.meta.dirname, '..', '..', 'data', 'meets.json');
     if (!existsSync(path)) return;
     const all = JSON.parse(readFileSync(path, 'utf8')) as unknown;
     const found: string[] = [];

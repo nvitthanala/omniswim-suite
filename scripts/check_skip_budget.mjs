@@ -13,6 +13,8 @@
  * Usage:
  *   node scripts/check_skip_budget.mjs                 run vitest, then check
  *   node scripts/check_skip_budget.mjs --from report.json   check an existing vitest JSON report
+ *   --config <vitest config>   run vitest with this config (default: the root config)
+ *   --budget <budget json>     check against this file (default: tests/skip-budget.json)
  *   SKIP_BUDGET_ENV=ci|local                            choose the column (default: ci when CI is set)
  *
  * It does not change which tests skip. It exits 1 when vitest fails or the budget is exceeded.
@@ -23,15 +25,20 @@ import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 
 const repoRoot = join(import.meta.dirname, '..');
-const budget = JSON.parse(readFileSync(join(repoRoot, 'tests', 'skip-budget.json'), 'utf8'));
+const argAfter = flag => {
+  const i = process.argv.indexOf(flag);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+};
+const budgetFile = argAfter('--budget') ?? 'tests/skip-budget.json';
+const vitestConfig = argAfter('--config');
+const budget = JSON.parse(readFileSync(join(repoRoot, budgetFile), 'utf8'));
 const env = process.env.SKIP_BUDGET_ENV ?? (process.env.CI ? 'ci' : 'local');
 if (env !== 'ci' && env !== 'local') {
   console.error(`SKIP_BUDGET_ENV must be "ci" or "local", got "${env}".`);
   process.exit(2);
 }
 
-const fromIndex = process.argv.indexOf('--from');
-let reportPath = fromIndex >= 0 ? process.argv[fromIndex + 1] : undefined;
+let reportPath = argAfter('--from');
 let tempDir;
 let vitestStatus = 0;
 
@@ -39,7 +46,7 @@ if (!reportPath) {
   tempDir = mkdtempSync(join(tmpdir(), 'skip-budget-'));
   reportPath = join(tempDir, 'vitest.json');
   const bin = join(repoRoot, 'node_modules', 'vitest', 'vitest.mjs');
-  const run = spawnSync(process.execPath, [bin, 'run', '--reporter=default', '--reporter=json', `--outputFile.json=${reportPath}`], {
+  const run = spawnSync(process.execPath, [bin, 'run', ...(vitestConfig ? ['--config', vitestConfig] : []), '--reporter=default', '--reporter=json', `--outputFile.json=${reportPath}`], {
     cwd: repoRoot,
     stdio: 'inherit',
   });
@@ -68,7 +75,7 @@ const totalAllowed = Object.keys(budget.files).reduce((sum, f) => sum + allowedF
 const over = [];
 const under = [];
 for (const [file, count] of skippedByFile) {
-  if (count > allowedFor(file)) over.push(`${file}: ${count} skipped, budget ${allowedFor(file)}${budget.files[file] ? '' : ' (file not in tests/skip-budget.json)'}`);
+  if (count > allowedFor(file)) over.push(`${file}: ${count} skipped, budget ${allowedFor(file)}${budget.files[file] ? '' : ` (file not in ${budgetFile})`}`);
 }
 for (const file of Object.keys(budget.files)) {
   const count = skippedByFile.get(file) ?? 0;
@@ -78,7 +85,7 @@ for (const file of Object.keys(budget.files)) {
 console.log(`\n[skip-budget] env=${env}: ${totalSkipped} skipped, budget ${totalAllowed}`);
 for (const [file, count] of [...skippedByFile].sort()) console.log(`  ${String(count).padStart(3)}  ${file}`);
 if (under.length) {
-  console.log('[skip-budget] Under budget. Lower these numbers in tests/skip-budget.json:');
+  console.log(`[skip-budget] Under budget. Lower these numbers in ${budgetFile}:`);
   for (const line of under) console.log(`  ${line}`);
 }
 
@@ -90,7 +97,7 @@ if (vitestStatus !== 0) {
 if (over.length) {
   console.error('[skip-budget] FAIL: skips above budget. A fixture or tool that tests need is missing:');
   for (const line of over) console.error(`  ${line}`);
-  console.error('Restore the missing fixture or tool. Raise the budget only with a reason in tests/skip-budget.json.');
+  console.error(`Restore the missing fixture or tool. Raise the budget only with a reason in ${budgetFile}.`);
   failed = true;
 }
 process.exit(failed ? 1 : 0);

@@ -23,6 +23,8 @@ function e2eDataDir(): string | undefined {
       recursive: true,
       filter: src => !/[\\/]data[\\/]backups([\\/]|$)/.test(src),
     });
+    // The settings file moved to legacy/data; the server reads it from OMNI_DATA_DIR.
+    cpSync(join(import.meta.dirname, 'data', 'scoring_settings.json'), join(dir, 'scoring_settings.json'));
   }
   return existsSync(dir) ? dir : undefined;
 }

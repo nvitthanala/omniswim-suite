@@ -23,7 +23,7 @@
  */
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -515,9 +515,18 @@ describe('no code path subtracts the altitude chart from an imported time', () =
     // on purpose, next to the reason it is safe.
     const allowed = new Set(['packages/core/src/constants.ts', 'packages/core/src/lib/altitude.ts']);
     const offenders: string[] = [];
-    for (const root of ['packages', 'apps', 'extensions', 'legacy/packages', 'legacy/apps', 'legacy/extensions'].map((d) => join(repoRoot, d))) {
+    // apps/ and extensions/ hold no tracked files after the legacy move, so a
+    // fresh checkout lacks them. The legacy roots must exist and be scanned.
+    for (const d of ['packages', 'legacy/packages', 'legacy/apps', 'legacy/extensions']) {
+      expect(existsSync(join(repoRoot, d)), `${d} must exist`).toBe(true);
+    }
+    const scanned: string[] = [];
+    for (const root of ['packages', 'apps', 'extensions', 'legacy/packages', 'legacy/apps', 'legacy/extensions']
+      .map((d) => join(repoRoot, d))
+      .filter((d) => existsSync(d))) {
       for (const file of sourceFiles(root)) {
         const rel = relative(repoRoot, file).replace(/\\/g, '/');
+        scanned.push(rel);
         if (allowed.has(rel)) continue;
         const text = readFileSync(file, 'utf8');
         if (/NCAA_ALTITUDE_ADJUSTMENT_TABLE|ncaaAltitudeAdjustment\(|adjustSwimForAltitude\(/.test(text)) {
@@ -525,6 +534,8 @@ describe('no code path subtracts the altitude chart from an imported time', () =
         }
       }
     }
+    expect(scanned).toContain('packages/core/src/lib/altitude.ts');
+    expect(scanned.some((f) => f.startsWith('legacy/apps/shell/'))).toBe(true);
     expect(offenders).toStrictEqual([]);
   });
 });

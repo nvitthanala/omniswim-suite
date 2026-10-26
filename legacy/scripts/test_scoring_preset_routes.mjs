@@ -20,6 +20,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,7 +28,17 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const PORT = Number(process.env.OMNI_PRESET_TEST_PORT ?? 3209);
 const BASE = `http://127.0.0.1:${PORT}`;
 const TEST_ID = 'zz-preset-route-test';
-const TEST_FILE = path.join(REPO_ROOT, 'data', 'scoring_presets', `${TEST_ID}.json`);
+// The server runs on a temp copy of data/, never the real folder: starting it on
+// data/ wrote startup backups and migrated the coach's database (2026-10-25).
+// The copy leaves out the database, backups and captures, so the server starts
+// fresh, as in CI.
+const DATA_COPY = fs.mkdtempSync(path.join(os.tmpdir(), 'omni-preset-routes-'));
+fs.cpSync(path.join(REPO_ROOT, 'data'), DATA_COPY, {
+  recursive: true,
+  filter: src => !/[\\/]data[\\/](backups|swimcloud-captures)([\\/]|$)|\.db(-shm|-wal)?$/.test(src),
+});
+fs.copyFileSync(path.join(REPO_ROOT, 'legacy', 'data', 'scoring_settings.json'), path.join(DATA_COPY, 'scoring_settings.json'));
+const TEST_FILE = path.join(DATA_COPY, 'scoring_presets', `${TEST_ID}.json`);
 
 /** A valid, minimal rule set: a real published table, so nothing here is invented. */
 const VALID_SETTINGS = {
@@ -94,7 +105,7 @@ if (fs.existsSync(TEST_FILE)) fs.rmSync(TEST_FILE);
  */
 const server = spawn(process.execPath, ['--import', 'tsx', path.join('legacy', 'apps', 'shell', 'server.ts')], {
   cwd: REPO_ROOT,
-  env: { ...process.env, PORT: String(PORT), OMNI_PORT: String(PORT), OMNI_HOST: '127.0.0.1' },
+  env: { ...process.env, PORT: String(PORT), OMNI_PORT: String(PORT), OMNI_HOST: '127.0.0.1', OMNI_DATA_DIR: DATA_COPY },
   stdio: ['ignore', 'pipe', 'pipe'],
   detached: process.platform !== 'win32',
 });
@@ -351,6 +362,7 @@ try {
   stopServer();
   // Give the port a moment to be released before this process exits.
   await new Promise(r => setTimeout(r, 300));
+  fs.rmSync(DATA_COPY, { recursive: true, force: true });
 }
 
 if (failed) {

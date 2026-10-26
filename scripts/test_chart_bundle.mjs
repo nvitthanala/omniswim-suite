@@ -10,7 +10,8 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const repoRoot = join(import.meta.dirname, '..');
-const sourceRoots = ['packages', 'apps'];
+// The recharts code (matrix, metrics, shell) moved under legacy/ on 2026-10-25.
+const sourceRoots = ['packages', 'apps', 'legacy/packages', 'legacy/apps'];
 
 const forbiddenInSource = [
   /from\s+['"]recharts['"].*ResponsiveContainer/,
@@ -19,6 +20,7 @@ const forbiddenInSource = [
 ];
 
 let failures = 0;
+let legacyScanned = 0;
 
 for (const root of sourceRoots) {
   const dir = join(repoRoot, root);
@@ -29,6 +31,7 @@ for (const root of sourceRoots) {
     // Tracked files can be deleted in the working tree before the removal commit lands.
     .filter(f => existsSync(join(repoRoot, f)));
   for (const rel of files) {
+    if (rel.startsWith('legacy/')) legacyScanned += 1;
     const text = readFileSync(join(repoRoot, rel), 'utf8');
     if (rel.includes('node_modules')) continue;
     for (const pattern of forbiddenInSource) {
@@ -43,6 +46,11 @@ for (const root of sourceRoots) {
       }
     }
   }
+}
+
+if (legacyScanned === 0) {
+  console.error('FAIL  scanned no source under legacy/: the chart code has moved again');
+  failures += 1;
 }
 
 // Single recharts version across workspaces
