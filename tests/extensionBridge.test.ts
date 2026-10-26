@@ -659,17 +659,17 @@ async function realSnapshotMessage(): Promise<Obj> {
 }
 
 describe('sim-overlay: validates every bridge message (bridge trust rule)', () => {
-  it('logs a valid SimSnapshot with the [OmniSwim] prefix', async () => {
+  it('logs a valid SimSnapshot with the [OmniSwim] prefix and forwards it to the docked panel', async () => {
     const message = await realSnapshotMessage();
     const h = makeWindow();
     const log = fakeLog();
-    startOverlay(h.win, log);
+    const onSnapshot = vi.fn();
+    startOverlay(h.win, log, onSnapshot);
     deliver(h.win, message);
-    expect(log.log).toHaveBeenCalledTimes(1);
-    expect(log.log.mock.calls[0]?.[0]).toBe('[OmniSwim] SimSnapshot');
+    expect(onSnapshot).toHaveBeenCalledTimes(1);
+    expect(Object.keys(onSnapshot.mock.calls[0]?.[0] as Obj).sort()).toStrictEqual(['rosters', 'settings', 'splashes', 'swimmers', 'swims', 'teams', 'totalScores']);
     expect(LOG_PREFIX).toBe('[OmniSwim]');
-    const logged = log.log.mock.calls[0]?.[1] as Obj;
-    expect(Object.keys(logged).sort()).toStrictEqual(['rosters', 'settings', 'splashes', 'swimmers', 'swims', 'teams', 'totalScores']);
+    expect(log.log).toHaveBeenCalledWith(`${LOG_PREFIX} SimSnapshot`, onSnapshot.mock.calls[0]?.[0]);
     expect(log.warn).not.toHaveBeenCalled();
     expect(h.win.document.querySelector<HTMLElement>('[data-osx-host]')?.dataset.osxState).toBe('ready');
   });
@@ -771,8 +771,9 @@ describe('sim-overlay: validates every bridge message (bridge trust rule)', () =
       define(tg, 'indexedDB', fakeIdb);
     }
     const log = fakeLog();
+    const onSnapshot = vi.fn();
     try {
-      startOverlay(h.win, log);
+      startOverlay(h.win, log, onSnapshot);
       FakeXHR.instances = [];
       define(h.win as unknown as Record<string, unknown>, 'XMLHttpRequest', FakeXHR);
       deliver(h.win, message); // valid snapshot
@@ -787,6 +788,7 @@ describe('sim-overlay: validates every bridge message (bridge trust rule)', () =
       });
     }
     // The messages were processed, so the "not called" checks below are not vacuous.
+    expect(onSnapshot).toHaveBeenCalledTimes(1);
     expect(log.log).toHaveBeenCalledTimes(1);
     expect(log.debug).toHaveBeenCalledTimes(1);
     expect(log.error).toHaveBeenCalledTimes(1);

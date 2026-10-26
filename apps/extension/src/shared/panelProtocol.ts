@@ -10,6 +10,9 @@
  * the host page shares the content script's origin and could forge a "save lineup" message.
  */
 
+import { simSnapshotSchema } from './bridgeSchema';
+import type { SimSnapshot } from './bridgeSchema';
+
 export const PANEL_PORT_PREFIX = 'osx-panel:';
 
 /** 16 random bytes as lower-case hex. Anything else is not a nonce. */
@@ -34,6 +37,18 @@ export interface PanelPong {
   readonly kind: 'pong';
   readonly n: number;
   readonly nonce: string;
+}
+
+/** Validated page snapshot forwarded to the docked extension page. */
+export interface PanelSnapshot {
+  readonly kind: 'simulator-snapshot';
+  readonly snapshot: SimSnapshot;
+}
+
+export function isPanelSnapshot(m: unknown): m is PanelSnapshot {
+  if (typeof m !== 'object' || m === null) return false;
+  const r = m as { kind?: unknown; snapshot?: unknown };
+  return r.kind === 'simulator-snapshot' && simSnapshotSchema.safeParse(r.snapshot).success;
 }
 
 export function isPanelPing(m: unknown): m is PanelPing {

@@ -27,6 +27,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, expect, test } from '@playwright/test';
 import type { BrowserContext, Frame, Page } from '@playwright/test';
+import { buildSnapshot } from '../helpers/simulatorFixtures';
 
 const root = join(import.meta.dirname, '..', '..');
 /** The harness build (scripts/run-extension-harness.mjs makes it), not the production dist/. */
@@ -242,6 +243,38 @@ test.describe('S3 workers and the docked iframe', () => {
           return `chrome.runtime.connect reached the iframe DIRECTLY (no service-worker relay) on connect attempt ${attempts}: ping -> pong x${pongs}; foreign port name rejected, not answered`;
         });
 
+        await record(8, 'simulator snapshot re-scores in the docked panel', async () => {
+          if (!frame) throw new Error('no iframe');
+          const snapshot = buildSnapshot('A').snapshot;
+          await page.evaluate((value) => window.postMessage({ source: 'osx-bridge', v: 1, kind: 'snapshot', snapshot: value }, location.origin), snapshot);
+          await expect(frame.locator('[data-testid="parity"]')).toContainText('Matches SwimCloud');
+          const expected = Object.values(buildSnapshot('A').config.totalScores).map((score) => score.points);
+          await expect(frame.locator('[data-testid="team-results"] tbody tr')).toHaveCount(expected.length);
+          for (const points of expected) await expect(frame.locator('[data-testid="team-results"]')).toContainText(String(points));
+          return 'config-A table and parity line rendered';
+        });
+
+        await record(9, 'entry point difference renders a mismatch event', async () => {
+          if (!frame) throw new Error('no iframe');
+          const snapshot = structuredClone(buildSnapshot('A').snapshot);
+          if (!snapshot.splashes?.length) throw new Error('config-A has no splashes');
+          const entry = snapshot.splashes[0]!;
+          snapshot.splashes[0] = { ...entry, points: (entry.points ?? 0) + 1 };
+          await page.evaluate((value) => window.postMessage({ source: 'osx-bridge', v: 1, kind: 'snapshot', snapshot: value }, location.origin), snapshot);
+          await expect(frame.locator('[data-testid="parity"]')).toContainText('differing events');
+          await expect(frame.locator('[data-testid="parity"] li').first()).toContainText('engine');
+          return 'per-event entry mismatch shown';
+        });
+
+        await record(10, 'AdapterError renders not compared with reason', async () => {
+          if (!frame) throw new Error('no iframe');
+          const snapshot = structuredClone(buildSnapshot('A').snapshot);
+          snapshot.settings.eventCourse = 'LCM';
+          await page.evaluate((value) => window.postMessage({ source: 'osx-bridge', v: 1, kind: 'snapshot', snapshot: value }, location.origin), snapshot);
+          await expect(frame.locator('[data-testid="parity"]')).toContainText('Not compared: unsupported_course');
+          return 'unsupported LCM case shows AdapterError reason';
+        });
+
         await record(5, 'injection leaves styleSheets and computed style unchanged', async () => {
           expect(baselineInjected, 'the baseline page must hold no OmniSwim host').toBe(0);
           expect(await page.locator('[data-osx-host]').count(), 'the simulator page must hold the OmniSwim host').toBe(1);
@@ -317,7 +350,7 @@ test.describe('S3 workers and the docked iframe', () => {
 
       const failed = [...results].filter(([, r]) => !r.ok).map(([n, r]) => `${n}: ${r.detail}`);
       expect(failed, 'failed assertions').toStrictEqual([]);
-      expect(results.size).toBe(7);
+      expect(results.size).toBe(10);
     });
   }
 });

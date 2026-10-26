@@ -8,5 +8,5 @@
 import { mountDockedPanel } from './dockedPanel';
 import { mountShadowHost, startOverlay } from './overlay';
 
-startOverlay(window);
-mountDockedPanel(mountShadowHost(document), chrome.runtime);
+const panel = mountDockedPanel(mountShadowHost(document), chrome.runtime);
+startOverlay(window, console, (snapshot) => panel.sendSnapshot(snapshot));

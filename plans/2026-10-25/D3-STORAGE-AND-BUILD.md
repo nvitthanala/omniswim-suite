@@ -947,6 +947,33 @@ not carry it.
   map and an override). T-M6 runs for each version with a golden snapshot.
   A new test shows v1 to v2 only adds the empty store. Another shows an
   upgrade refuses a missing or stale `meta.db`.
+
 - Golden gate: the regenerated `v1.expected-current.json` differs from the
   old one by the version (2), one empty store, `meta.db.schemaVersion` and one
   `migrationLog` entry. Every v1 record is byte-identical.
+
+## 15. P2: simulator parity in the docked panel (2026-10-26)
+
+The isolated `sim-overlay` validates each bridge snapshot with
+`simSnapshotSchema` and forwards it over the existing nonce-named
+`osx-panel:<nonce>` runtime port as `{ kind: 'simulator-snapshot', snapshot }`.
+It also still logs `[OmniSwim] SimSnapshot` to the page console, because the
+user's live load check reads that line. The dashboard validates that message again before accepting it. This keeps
+page-forgeable `window.postMessage` data out of the extension page unless it
+has passed the snapshot schema, and the overlay imports no simulator adapter
+or engine code. The dashboard runs `rescoreSimulator` locally from the copied
+snapshot; it makes no SwimCloud request.
+
+The dashboard renders engine and SwimCloud team totals together. A parity
+result shows "Matches SwimCloud", an event and entry list for differences, or
+"Not observed" when SwimCloud totals were absent. Missing load inputs and
+pending preset settings are named explicitly. An `AdapterError` is rendered
+as "Not compared" with its code and message. The simulator preset remains an
+internal parity input; it is not persisted, exposed by preset selection, or
+copied to a user preset.
+
+The compact table uses the existing `--osx-*` tokens. Good and bad are text
+colors; warning appears only as a filled chip with
+`--osx-warn-bg`/`--osx-warn-fg`, matching README R46/R57 in both themes. The
+Playwright harness exercises config-A parity, an altered entry-point
+mismatch, and an unsupported LCM adapter error.

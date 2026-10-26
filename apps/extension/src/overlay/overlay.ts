@@ -10,10 +10,11 @@
  * message. It touches no IndexedDB here: in this world that would be
  * SwimCloud's own database (D3 0.2, enforced by tests/extensionBundleBoundaries).
  *
- * For now it logs a valid SimSnapshot to the console and mounts an empty
- * shadow host. The docked iframe goes into that host in a later phase.
+ * It logs a valid SimSnapshot to the console and hands it to `onSnapshot`,
+ * which forwards it to the docked panel (D3 15).
  */
 import { parseBridgeMessage } from '../shared/bridgeSchema';
+import type { SimSnapshot } from '../shared/bridgeSchema';
 import { bindTheme } from '../shared/theme';
 import type { ThemeController, ThemeOptions, ThemePreference } from '../shared/theme';
 import { ROOT_CLASS, SHADOW_CSS } from './shadowStyle';
@@ -70,7 +71,7 @@ export function mountShadowHost(doc: Document, opts: ShadowHostOptions = {}): HT
 }
 
 /** Listen for bridge messages. Returns a function that stops listening. */
-export function startOverlay(win: Window & typeof globalThis, log: OverlayLog = console): () => void {
+export function startOverlay(win: Window & typeof globalThis, log: OverlayLog = console, onSnapshot: (snapshot: SimSnapshot) => void = () => undefined): () => void {
   const host = mountShadowHost(win.document);
 
   const onMessage = (e: MessageEvent): void => {
@@ -88,7 +89,9 @@ export function startOverlay(win: Window & typeof globalThis, log: OverlayLog = 
     switch (m.kind) {
       case 'snapshot':
         host.dataset.osxState = 'ready';
+        // The console line stays: the user's live load check reads it (D3 15, P1 `userCheck` in the state file).
         log.log(`${LOG_PREFIX} SimSnapshot`, m.snapshot);
+        onSnapshot(m.snapshot);
         break;
       case 'response':
         log.debug(`${LOG_PREFIX} team response`, m.url);

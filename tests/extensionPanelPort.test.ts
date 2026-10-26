@@ -12,8 +12,9 @@ import { makeNonce, mountDockedPanel } from '../apps/extension/src/overlay/docke
 import type { PanelPort, PanelRuntime } from '../apps/extension/src/overlay/dockedPanel';
 import { mountShadowHost } from '../apps/extension/src/overlay/overlay';
 import { listenForPanelPort, readNonce } from '../apps/extension/src/dashboard/panelPort';
-import { isPanelPortName, NONCE_PATTERN, panelPortName } from '../apps/extension/src/shared/panelProtocol';
+import { isPanelPortName, isPanelSnapshot, NONCE_PATTERN, panelPortName } from '../apps/extension/src/shared/panelProtocol';
 import { OPTIMIZER_UNAVAILABLE } from '../apps/extension/src/shared/optimizerProtocol';
+import { buildSnapshot } from './helpers/simulatorFixtures';
 
 type Listener<A extends unknown[]> = (...args: A) => void;
 
@@ -102,6 +103,14 @@ describe('panel names and nonce', () => {
     expect(isPanelPortName('')).toBe(false);
   });
 
+  it('validates forwarded simulator snapshots and rejects malformed payloads', () => {
+    const snapshot = buildSnapshot('A').snapshot;
+    expect(isPanelSnapshot({ kind: 'simulator-snapshot', snapshot })).toBe(true);
+    expect(isPanelSnapshot({ kind: 'simulator-snapshot', snapshot: { ...snapshot, teams: 'not teams' } })).toBe(false);
+    expect(isPanelSnapshot({ kind: 'simulator-snapshot', snapshot, nonce: 'wrong' })).toBe(true);
+    expect(isPanelSnapshot(null)).toBe(false);
+  });
+
   it('the unsupported-request error is explicit', () => {
     expect(OPTIMIZER_UNAVAILABLE).toMatch(/^optimizer not available/);
   });
@@ -131,8 +140,8 @@ describe('mountDockedPanel (overlay side)', () => {
     expect(fake.ports).toHaveLength(0); // nothing connects before the iframe loads
     fireLoad(panel.iframe);
     expect(fake.ports.map((p) => p.name)).toStrictEqual([panelPortName(panel.nonce)]);
-    expect(own).toStrictEqual({ accepted: 1, rejected: 0, pings: 1 });
-    expect(other).toStrictEqual({ accepted: 0, rejected: 1, pings: 0 }); // another iframe heard it and left it alone
+    expect(own).toStrictEqual({ accepted: 1, rejected: 0, pings: 1, snapshots: 0 });
+    expect(other).toStrictEqual({ accepted: 0, rejected: 1, pings: 0, snapshots: 0 }); // another iframe heard it and left it alone
     expect(host.dataset.osxPanel).toBe('connected');
     expect(host.dataset.osxPanelVia).toBe('direct');
     expect(host.dataset.osxPanelAttempts).toBe('1');
@@ -183,11 +192,23 @@ describe('listenForPanelPort (iframe side)', () => {
     const foreign = fake.runtime.connect({ name: panelPortName('b'.repeat(32)) }) as FakePort;
     foreign.postMessage({ kind: 'ping', n: 1 });
     expect(foreign.peer!.sent).toStrictEqual([]);
-    expect(stats).toStrictEqual({ accepted: 0, rejected: 1, pings: 0 });
+    expect(stats).toStrictEqual({ accepted: 0, rejected: 1, pings: 0, snapshots: 0 });
     const own = fake.runtime.connect({ name: panelPortName('a'.repeat(32)) }) as FakePort;
     own.postMessage({ kind: 'ping', n: 7 });
     own.postMessage({ kind: 'save-lineup' });
     expect(own.peer!.sent).toStrictEqual([{ kind: 'pong', n: 7, nonce: 'a'.repeat(32) }]);
-    expect(stats).toStrictEqual({ accepted: 1, rejected: 1, pings: 1 });
+    expect(stats).toStrictEqual({ accepted: 1, rejected: 1, pings: 1, snapshots: 0 });
+  });
+
+  it('delivers only validated snapshots from the iframe nonce port', () => {
+    const fake = fakeRuntime();
+    fake.state.listening = true;
+    const seen: unknown[] = [];
+    listenForPanelPort(fake.iframeRuntime, 'a'.repeat(32), (snapshot) => seen.push(snapshot));
+    const port = fake.runtime.connect({ name: panelPortName('a'.repeat(32)) }) as FakePort;
+    const snapshot = buildSnapshot('A').snapshot;
+    port.postMessage({ kind: 'simulator-snapshot', snapshot });
+    port.postMessage({ kind: 'simulator-snapshot', snapshot: { teams: null } });
+    expect(seen).toStrictEqual([snapshot]);
   });
 });

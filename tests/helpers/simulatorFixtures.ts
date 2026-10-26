@@ -22,13 +22,14 @@
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { simSnapshotSchema } from '../../apps/extension/src/shared/bridgeSchema';
 import type { SimSnapshot } from '../../apps/extension/src/shared/bridgeSchema';
 
 export type Obj = Record<string, unknown>;
 export type ConfigName = 'A' | 'B' | 'C' | 'D';
 
-export const FIXTURES = path.join(__dirname, '..', 'fixtures', 'swimcloud', 'simulator');
+export const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'swimcloud', 'simulator');
 export const fixture = (name: string): Obj => JSON.parse(readFileSync(path.join(FIXTURES, name), 'utf8')) as Obj;
 
 export type Row = [string, number, string, string, string | null, boolean | null];

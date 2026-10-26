@@ -7,8 +7,9 @@
  * side accepts one name only: `osx-panel:<its own nonce>`, where the nonce is the URL fragment it
  * was loaded with. Register it at module top level, before the overlay's connect can arrive.
  */
-import { isPanelPing, NONCE_PATTERN, panelPortName } from '../shared/panelProtocol';
+import { isPanelPing, isPanelSnapshot, NONCE_PATTERN, panelPortName } from '../shared/panelProtocol';
 import type { PanelPong } from '../shared/panelProtocol';
+import type { SimSnapshot } from '../shared/bridgeSchema';
 
 export interface PanelStats {
   /** Ports with our name. */
@@ -17,6 +18,7 @@ export interface PanelStats {
   rejected: number;
   /** Pings answered. */
   pings: number;
+  snapshots: number;
 }
 
 /** The slice of `chrome.runtime` this file uses. */
@@ -38,8 +40,8 @@ export function readNonce(hash: string): string | null {
   return NONCE_PATTERN.test(nonce) ? nonce : null;
 }
 
-export function listenForPanelPort(runtime: PanelListenerRuntime, nonce: string): PanelStats {
-  const stats: PanelStats = { accepted: 0, rejected: 0, pings: 0 };
+export function listenForPanelPort(runtime: PanelListenerRuntime, nonce: string, onSnapshot: (snapshot: SimSnapshot) => void = () => undefined): PanelStats {
+  const stats: PanelStats = { accepted: 0, rejected: 0, pings: 0, snapshots: 0 };
   const ours = panelPortName(nonce);
   runtime.onConnect.addListener((port) => {
     if (port.name !== ours) {
@@ -52,6 +54,11 @@ export function listenForPanelPort(runtime: PanelListenerRuntime, nonce: string)
       stats.pings += 1;
       const pong: PanelPong = { kind: 'pong', n: message.n, nonce };
       port.postMessage(pong);
+    });
+    port.onMessage.addListener((message) => {
+      if (!isPanelSnapshot(message)) return;
+      stats.snapshots += 1;
+      onSnapshot(message.snapshot);
     });
   });
   return stats;

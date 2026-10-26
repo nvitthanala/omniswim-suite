@@ -17,8 +17,9 @@
  * retries a few times if the port closes before the first reply.
  */
 import { THEME_ATTRIBUTE } from '../shared/theme';
-import { isPanelPong, panelPortName } from '../shared/panelProtocol';
-import type { PanelPing } from '../shared/panelProtocol';
+import { isPanelPong, isPanelSnapshot, panelPortName } from '../shared/panelProtocol';
+import type { PanelPing, PanelSnapshot } from '../shared/panelProtocol';
+import type { SimSnapshot } from '../shared/bridgeSchema';
 
 /** The slice of a `chrome.runtime.Port` this file uses. A test passes a fake. */
 export interface PanelPort {
@@ -52,6 +53,7 @@ export interface DockedPanel {
   readonly nonce: string;
   /** The URL the iframe loads, `#<nonce>` included. */
   readonly url: string;
+  sendSnapshot(snapshot: SimSnapshot): void;
 }
 
 /** 32 lower-case hex characters from `crypto.getRandomValues`. */
@@ -87,10 +89,14 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
 
   let attempt = 0;
   let pings = 0;
+  let activePort: PanelPort | null = null;
+  let latest: PanelSnapshot | null = null;
   const connect = (): void => {
     attempt += 1;
     let answered = false;
     const port = runtime.connect({ name: panelPortName(nonce) });
+    activePort = port;
+    if (latest) port.postMessage(latest);
     port.onMessage.addListener((message) => {
       // Only our own iframe holds our nonce, so only it can answer with it.
       if (!isPanelPong(message) || message.nonce !== nonce) return;
@@ -101,6 +107,7 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
       host.dataset.osxPanelPongs = String(Number(host.dataset.osxPanelPongs ?? '0') + 1);
     });
     port.onDisconnect.addListener(() => {
+      if (activePort === port) activePort = null;
       void runtime.lastError;
       if (answered) return;
       if (attempt < maxAttempts) setTimeout(connect, retryDelayMs);
@@ -114,5 +121,13 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
   iframe.addEventListener('load', connect, { once: true });
   iframe.src = url;
   root.append(iframe);
-  return { iframe, nonce, url };
+  return {
+    iframe, nonce, url,
+    sendSnapshot(snapshot) {
+      const message: PanelSnapshot = { kind: 'simulator-snapshot', snapshot };
+      if (!isPanelSnapshot(message)) return;
+      latest = message;
+      activePort?.postMessage(message);
+    },
+  };
 }

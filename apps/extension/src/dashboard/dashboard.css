@@ -56,3 +56,14 @@ body {
 .osx-dashboard p {
   color: var(--osx-fg-muted);
 }
+
+.osx-results { margin-top: 16px; border-top: 1px solid var(--osx-border); padding-top: 12px; }
+.osx-results h2 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.osx-results table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.osx-results th, .osx-results td { padding: 5px 6px; border-bottom: 1px solid var(--osx-border); text-align: right; }
+.osx-results th:first-child { text-align: left; }
+.osx-status { margin: 10px 0 0; font-size: 12px; }
+.osx-status--good { color: var(--osx-good) !important; }
+.osx-status--bad { color: var(--osx-bad); }
+.osx-status--warn { padding: 7px 9px; background: var(--osx-warn-bg); color: var(--osx-warn-fg) !important; border-radius: var(--osx-radius); }
+.osx-status ul { margin: 6px 0 0; padding-left: 18px; }
