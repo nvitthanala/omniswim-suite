@@ -202,6 +202,35 @@ or any other script is run" [doc 9].
 page-level trust. `sim-overlay` validates its shape and never starts a storage
 write or a SwimCloud request from a bridge message alone.
 
+#### Recon outcome (P0, 2026-10-25; `02-SIMULATOR-RECON.md` Q5, S1, Q19–Q21)
+
+The simulator matches two rows: **JSON via XHR** and **framework store**.
+The page fetches each team with axios (XHR):
+`GET /api/teams/{teamId}/simulator/?start_date&end_date&eventgender&eventcourse&divecourse=6&time_to_use`.
+It keeps everything in a Redux store. The store also holds what no response
+carries: the page's chosen entries (`simulatedMeet.splashes`) and its scores
+(`totalScores`).
+
+| Decision | Rule | Source |
+| --- | --- | --- |
+| `sim-bridge` world and timing | MAIN world at `document_start`, as in 2.6. No manifest change. | Q5, Q21 |
+| Network hook | Wrap `XMLHttpRequest.prototype.open/send` before page scripts run. Clone only responses whose path matches `^/api/teams/\d+/simulator/$`. Also wrap `fetch` with the same pattern; it costs nothing and survives a switch away from axios. | Q5 |
+| Store read | The same script reads the store after `#simulator` mounts: `#simulator` → `__reactContainer$…` fiber → `Provider` `memoizedProps.store`. Subscribe with `store.subscribe`; post a snapshot on change, debounced. This is a React and Redux internal. Fail loudly (an error state in the overlay) when the path is missing. Never fall back to a guess. The simulator's CSS-module class names change per build; never select by them. | S1, Q15 |
+| `run_at` | Stays `document_start`. The store row's `document_idle` would miss the first team request. One script does both: hook at start, store read on mount. | Q5, S1 |
+| `matches` | `https://www.swimcloud.com/meetsimulator/*` is enough. `swimcloud.com` 301s to `www`. | Q20 |
+| `host_permissions`, DNR | Not requested. The page has no service worker and no data worker, so page-thread hooks see every request. | Q21 |
+| Docked iframe | No CSP and no `X-Frame-Options` on the page, so nothing blocks the extension iframe. Recheck in the P1 harness: curl headers can differ from what Chrome gets behind Cloudflare. | Q19 |
+| Wider window (R7) | Deferred. S2 is accepted but its extent is unsettled (Q7). The date range is store state, so the mechanism, if S2 holds, is a store dispatch (`@SETTER/startDate`) the user starts, not a URL rewrite. Decide after S2 is settled. | Q6, Q7 |
+
+The bridge trust rule above applies unchanged to both the network and the
+store messages.
+
+**Final URL rule (added 2026-10-26, after the P1 cross-provider review).**
+The XHR and `fetch` paths both refuse a response whose final URL
+(`responseURL`, `Response.url`) is not the requested simulator path. A
+refused response posts `response-url` and reads no body. No error detail
+carries a non-simulator URL: it names the requested simulator URL only.
+
 - [doc 9] https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts
 
 ---
@@ -667,3 +696,73 @@ final exports and signatures.
    default export (5.6).
 9. **Side panel is the fallback host** if SwimCloud's CSP blocks the iframe.
    It bends R2 (beside the page, not in it); tell the user before switching.
+
+## 10. Deviations taken during P1.skeleton (2026-10-26)
+
+1. **`sim-bridge` is minified** (whitespace, syntax and identifiers). The
+   5 KB cap in 2.2 holds only this way: the hardened hook and the
+   required-key checks bring the bridge to 5,768 B unminified, and minified
+   it is 4,975 B. Every other entry keeps `minify: false`.
+2. **`build:extension` builds `apps/extension`.** The frozen legacy
+   extension builds with `build:extension:legacy`. CI builds the new
+   extension before the first test step, so T-B3 runs.
+3. **The bridge test uses happy-dom**, because jsdom is not installed.
+4. **SimSnapshot** adds `splashes` (recon Q14), `rosters`,
+   `settings.meetChanges` and splash `exhibition`. The P2 parity check can
+   then tell coach edits from a rule mismatch. Splash `relay_id` and
+   `legposition` come from the archived bundle, not a live capture, so they
+   are optional until the live load confirms them.
+
+## 11. Deviations taken during P1.storage (2026-10-26)
+
+An Opus audit accepted each of these.
+1. Validators are hand-written on top of the engine parsers, not zod. One
+   copy of the rules cannot drift from another. The SessionPreset and
+   Lineup checks are interim until P5.
+2. `replace` on import writes the stored `rev + 1`, not `rev: 1`. Otherwise
+   a tab that holds rev 1 of the old record could silently overwrite the
+   import.
+3. `keep-both` acts as skip on stores keyed by natural keys: `settings`,
+   `tags`, `swimmerHistory` and `rosters`.
+4. A `published` source must also match its manifest sha256.
+5. `openOmniDb` awaits the migration chain and requires
+   `meta.db.schemaVersion === db.version` (`DatabaseInconsistentError`). A
+   migration that awaits a non-IndexedDB promise otherwise ends the upgrade
+   early and leaves a half-built schema open.
+6. The change bus reports a `MissedChange` with `stores: 'unknown'` on a rev
+   gap.
+7. Export reads every store in one readonly transaction
+   (`StorageRepo.listMany`).
+8. Open decisions for later phases:
+   - **P4:** a roster cache row with `memberIds: []` is rejected. That
+     merges "fetched, verified empty" into "never fetched".
+   - **P3:** `teamIds` non-empty may reject a draft meet.
+   - **Not built yet:** cache delete (5.7) and the service-worker storage
+     dispatcher.
+
+## 12. Deviations taken during P1.shadow (2026-10-26)
+
+Source: `docs/reference/REDESIGN_2026-10-25_STATE.json`, item `P1.shadow`.
+Code: `apps/extension/src/shared/theme.ts`,
+`apps/extension/src/overlay/shadowStyle.ts`.
+
+1. An extra token, `--osx-accent-soft`. It is `color-mix()` of the accent
+   and the surface. It is derived, not a Q15 value.
+2. `applyAccent` picks `--osx-accent-fg` as black or white by WCAG
+   relative luminance, not with `color-mix()`. A mix cannot guarantee
+   contrast.
+3. An accent override also replaces the dark theme's accent.
+4. The dark accent is the Q15 `#1565C0` mixed 65% with `CanvasText`.
+   SwimCloud has no dark theme, so no dark value claims to be SwimCloud's.
+5. `--osx-good`, `--osx-warn` and `--osx-bad` are `CanvasText` in both
+   themes. Q15 records none, and no CSS system color means good, warn or
+   bad. No UI may use them to tell states apart until the user picks a
+   source (state file `Q-semantic-colors`).
+6. **Gap, trap 8.** The dashboard inside the docked iframe binds its own
+   theme, which is always light. No preference crosses the iframe boundary
+   yet. This is safe only while both sides are pinned light. The phase that
+   adds a theme setting must pass it to the iframe, by URL parameter or
+   port message.
+7. The keyboard guard sits on the `.osx-root` wrapper. A page listener in
+   the capture phase on `window` or `document` still runs first. No content
+   script can prevent that.

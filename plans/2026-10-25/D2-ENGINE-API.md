@@ -984,3 +984,38 @@ What the architect ran: an import-graph and impurity scan of
 resolution check; `npx vitest run` on `tests/mutation`, `theoreticalMeetGolden`,
 `altitudeAdjustment`, `raceAnalysisPurity`, `eventStrengthRanking` (486 passed,
 5 skipped); the float and Table D arithmetic.
+
+## 8. Deviations taken during P1.engine (2026-10-26)
+
+The orchestrator accepted each of these. The state file holds the evidence
+(`REDESIGN_2026-10-25_STATE.json`, `P1.engine.steps`).
+
+1. **E2 without commits.** The user has not asked for commits, so no R100
+   exists. Instead, each engine file's sha256 equals that of
+   `git show HEAD:packages/core/src/<p>`, and each core shim is exactly the
+   two lines of 2.2. The check reported 79 moved, 0 problems after A, B and C.
+2. **E1 theoretical case.** `tests/fixtures/theoretical-meet/` holds
+   captures, not workspaces. `legacy/scripts/gen_engine_fingerprint_workspace.ts`
+   builds one with the parameters of `theoreticalMeetGolden.test.ts:99-100`.
+   `tests/engineExtractionFingerprintTheoretical.test.ts` hashes it.
+3. **E1 optimizer ids.** `activeEntryIds` are uuids. The fingerprint projects
+   them to plan positions.
+4. **E5 row 4.** tsc does not fail on `import 'react'`, because react
+   resolves and `types: []` only stops automatic globals. The engine `lint`
+   script now runs tsc, then eslint.
+5. **E6.** `relayScoring.ts` gives 161 mutants: 144 killed, 0 timeout,
+   11 survived, 6 no coverage. The extra survivor (L185 `&&` → `||`) also
+   survives at HEAD before the move, so it is test-suite drift since
+   2026-10-14, not a move defect.
+6. **3.12 `BUILTIN_TABLE_D`** is `readonly Builtin<TableDPreset>[]`, so v1
+   stays addressable once v2 exists.
+7. **Section 4 `scorers.divingPerEventScorerCap`** is
+   `{kind: 'same-as-swimming'}` (R27, "same rule as swimming").
+   `{cap: 'unlimited'}` is not a value of the union. Its bridged form
+   (`own`, unlimited → 999) makes the legacy scorer throw on every dive
+   under a meet-wide pool.
+8. **Section 3 additions** (additive): `parseProvenance`, `parseSetting`,
+   `RulePresetErrorCode`, `RulePresetError.paths`.
+9. **NSISC v1 points stay pending.** Recon Q17 found SwimCloud has no NSISC
+   preset. The user is asked (state file `Q-NSISC-points`), and a yes ships
+   as `nsisc` v2.
