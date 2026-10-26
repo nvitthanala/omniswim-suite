@@ -1,0 +1,56 @@
+/*
+ * Dashboard page styles. Plain CSS with --osx-* properties; no Tailwind (D3 2.1 item 6).
+ *
+ * The token block below is the output of tokenCss(':root') in src/shared/theme.ts, which is the
+ * source of truth. tests/extensionTheme.test.ts fails if the two drift. Light values come from
+ * recon Q15 only (see theme.ts). Units are px and em, never rem.
+ */
+:root {
+  color-scheme: light;
+  --osx-bg: #FAFAFA;
+  --osx-surface: #FFFFFF;
+  --osx-fg: rgba(0,0,0,0.87);
+  --osx-fg-muted: rgba(0,0,0,0.54);
+  --osx-border: #E0E0E0;
+  --osx-accent: #1565C0;
+  --osx-accent-fg: Canvas;
+  --osx-good: CanvasText;
+  --osx-warn: CanvasText;
+  --osx-bad: CanvasText;
+  --osx-font: Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --osx-radius: 8px;
+  --osx-accent-soft: color-mix(in srgb, var(--osx-accent) 12%, var(--osx-surface));
+}
+:root[data-osx-theme="dark"] {
+  color-scheme: dark;
+  --osx-bg: Canvas;
+  --osx-surface: color-mix(in srgb, Canvas 92%, CanvasText);
+  --osx-fg: CanvasText;
+  --osx-fg-muted: GrayText;
+  --osx-border: color-mix(in srgb, Canvas 80%, CanvasText);
+  --osx-accent: color-mix(in srgb, #1565C0 65%, CanvasText);
+  --osx-accent-fg: Canvas;
+  --osx-good: CanvasText;
+  --osx-warn: CanvasText;
+  --osx-bad: CanvasText;
+  --osx-font: Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --osx-radius: 8px;
+  --osx-accent-soft: color-mix(in srgb, var(--osx-accent) 12%, var(--osx-surface));
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--osx-bg);
+  color: var(--osx-fg);
+  font-family: var(--osx-font);
+  font-size: 14px;
+}
+
+.osx-dashboard {
+  padding: 16px;
+}
+
+.osx-dashboard p {
+  color: var(--osx-fg-muted);
+}

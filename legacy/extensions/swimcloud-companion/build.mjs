@@ -27,7 +27,7 @@
  * `tests/swimCloudExtensionBuildFreshness.test.ts` can rebuild with the same
  * options and fail when a committed artifact is stale.
  *
- * Run with: `npm run build:extension` (or `node extensions/swimcloud-companion/build.mjs`)
+ * Run with: `npm run build:extension:legacy` (or `node extensions/swimcloud-companion/build.mjs`)
  */
 import * as esbuild from 'esbuild';
 import { entries, sharedBuildOptions } from './build.config.mjs';

@@ -1,0 +1,98 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * D3 5.8, T-P1: built-in presets live in code and are never copied into IndexedDB.
+ */
+import { describe, expect, it } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { BUILTIN_RULE_PRESETS, BUILTIN_SESSION_PRESETS, builtinRulePreset } from '@omniswim/engine';
+import { createStorageRepo } from '../apps/extension/src/storage/repo';
+import { openOmniDb } from '../apps/extension/src/storage/open';
+import {
+  listRulePresetChoices,
+  listSessionPresetChoices,
+  newerBuiltinVersion,
+  resolveRulePreset,
+  resolveSessionPreset,
+} from '../apps/extension/src/storage/presets';
+import type { RulePresetRecord } from '../apps/extension/src/storage/schema';
+import { dumpDb, freshFactory, steppingClock } from './helpers/extensionDb';
+import { fixtureRecord, withoutRev } from './helpers/extensionRecords';
+
+async function fresh() {
+  const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'install-1' });
+  return { db, repo: createStorageRepo(db, { now: steppingClock() }) };
+}
+
+describe('built-in presets are code, not data (D3 5.8)', () => {
+  it('T-P1: on a fresh database list("rulePresets") is empty and the picker still offers NSISC', async () => {
+    const { db, repo } = await fresh();
+    expect(await repo.list('rulePresets')).toEqual([]);
+    expect(await repo.list('sessionPresets')).toEqual([]);
+
+    const choices = await listRulePresetChoices(repo);
+    expect(choices.map(c => c.label)).toEqual(['NSISC', 'Generic NCAA championship']);
+    expect(choices[0]).toEqual({ source: 'builtin', ref: { kind: 'builtin', id: 'nsisc', version: 1 }, label: 'NSISC' });
+    expect(choices.every(c => c.source === 'builtin')).toBe(true);
+    const sessions = await listSessionPresetChoices(repo);
+    expect(sessions.map(c => c.ref)).toEqual([{ kind: 'builtin', id: 'nsisc-table-c', version: 1 }]);
+
+    // Listing and resolving write nothing: the preset stores and the change counter stay as they were.
+    const resolved = await resolveRulePreset(repo, { kind: 'builtin', id: 'nsisc', version: 1 });
+    expect(resolved).toEqual({ found: true, value: builtinRulePreset('nsisc', 1) });
+    const dump = await dumpDb(db);
+    for (const store of ['rulePresets', 'sessionPresets', 'settings', 'meets', 'tags', 'lineups']) expect(dump.stores[store]?.records, store).toEqual([]);
+    expect(dump.stores.meta?.records.map(r => (r as { key: string }).key)).toEqual(['db']);
+    db.close();
+  });
+
+  it('the picker lists built-ins first, then the user presets by name; a ref resolves to the right preset', async () => {
+    const { db, repo } = await fresh();
+    const base = withoutRev(fixtureRecord<RulePresetRecord>('rulePresets', 0));
+    await repo.put('rulePresets', { ...base, id: 'u-b', name: 'Zeta' }, 'new');
+    await repo.put('rulePresets', { ...base, id: 'u-a', name: 'Alpha' }, 'new');
+    const choices = await listRulePresetChoices(repo);
+    expect(choices.map(c => c.label)).toEqual(['NSISC', 'Generic NCAA championship', 'Alpha', 'Zeta']);
+    expect(choices[2]).toEqual({ source: 'user', ref: { kind: 'user', id: 'u-a' }, label: 'Alpha', rev: 1 });
+    expect(await resolveRulePreset(repo, { kind: 'user', id: 'u-a' })).toMatchObject({ found: true, rev: 1 });
+    db.close();
+  });
+
+  it('an unknown ref resolves to {found:false}: no fallback version, no empty preset', async () => {
+    const { db, repo } = await fresh();
+    expect(await resolveRulePreset(repo, { kind: 'builtin', id: 'nsisc', version: 2 })).toEqual({ found: false });
+    expect(await resolveRulePreset(repo, { kind: 'builtin', id: 'nope', version: 1 })).toEqual({ found: false });
+    expect(await resolveRulePreset(repo, { kind: 'user', id: 'gone' })).toEqual({ found: false });
+    expect(await resolveSessionPreset(repo, { kind: 'builtin', id: 'nsisc-table-c', version: 1 })).toMatchObject({ found: true });
+    expect(await resolveSessionPreset(repo, { kind: 'user', id: 'gone' })).toEqual({ found: false });
+    db.close();
+  });
+
+  it('a user copy is flagged when its built-in has a newer version, and only then', () => {
+    const registry = [
+      { id: 'nsisc', version: 1 },
+      { id: 'nsisc', version: 2 },
+      { id: 'generic', version: 1 },
+    ];
+    expect(newerBuiltinVersion('rule', { builtinId: 'nsisc', builtinVersion: 1 }, registry)).toBe(2);
+    expect(newerBuiltinVersion('rule', { builtinId: 'nsisc', builtinVersion: 2 }, registry)).toBeNull();
+    expect(newerBuiltinVersion('rule', { builtinId: 'generic', builtinVersion: 1 }, registry)).toBeNull();
+    expect(newerBuiltinVersion('rule', { builtinId: 'removed', builtinVersion: 1 }, registry)).toBeNull();
+    expect(newerBuiltinVersion('rule', undefined, registry)).toBeNull();
+    // Against the engine's own registry today: every built-in is at v1, so nothing is newer.
+    for (const b of BUILTIN_RULE_PRESETS) expect(newerBuiltinVersion('rule', { builtinId: b.id, builtinVersion: b.version })).toBeNull();
+    for (const b of BUILTIN_SESSION_PRESETS) expect(newerBuiltinVersion('session', { builtinId: b.id, builtinVersion: b.version })).toBeNull();
+  });
+
+  it('no storage code seeds a built-in: only presets.ts reads the registries, and it never writes', () => {
+    const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'extension', 'src', 'storage');
+    const files = readdirSync(dir).filter(f => f.endsWith('.ts'));
+    expect(files).toContain('presets.ts');
+    const users = files.filter(f => /BUILTIN_(RULE|SESSION)_PRESETS|builtinRulePreset/.test(readFileSync(path.join(dir, f), 'utf8')));
+    expect(users).toEqual(['presets.ts']);
+    expect(readFileSync(path.join(dir, 'presets.ts'), 'utf8')).not.toMatch(/\.(put|add|putCache|delete)\(/);
+  });
+});

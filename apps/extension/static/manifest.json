@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "OmniSwim for SwimCloud",
+  "version": "0.1.0",
+  "minimum_chrome_version": "120",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4E/wf8qOn+eeLbV53lRcM75af4OL09Ry0BOQ5/5eGHTJSA6ZRpIZWVHnsG58URzCrnNcSw+8V8TtLeXLK8k1aQL813EISwSYCvszABwyPL+1/Z7QbhXbKvyOv2FoChFcNGiqzD39oZPJhOZRavAecy00sgZPfwxMC6wSJkoGa56rK8WzOSPXRu5JVc6RHOLMc7A0J5UEwyyq+/J000c2oKA2jYg8Z7S7U4LCtlWW+s2YAVvNCUpSQObNfnTswEzAY9MaoyGtypezzcKBLIyb2NayPKdjZmhTDTl2omstAirHQuHrQe2+tJlco3oPgzO9j9KDeTXEL/WqQ7dTelMLTwIDAQAB",
+  "permissions": [
+    "storage",
+    "unlimitedStorage"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "OmniSwim"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.swimcloud.com/meetsimulator/*"
+      ],
+      "js": [
+        "sim-bridge.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.swimcloud.com/meetsimulator/*"
+      ],
+      "js": [
+        "sim-overlay.js"
+      ],
+      "css": [
+        "light.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dashboard.html"
+      ],
+      "matches": [
+        "https://www.swimcloud.com/*"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}

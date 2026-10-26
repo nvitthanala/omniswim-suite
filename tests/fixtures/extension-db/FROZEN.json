@@ -1,0 +1,6 @@
+{
+  "note": "sha256 of each shipped fixture, LF-normalized. A shipped fixture is never edited. Add a new vN.json for a new version.",
+  "fixtures": {
+    "v1.json": "24ed7497b775e71cb5c8787c94b60eed4d66b9a85a4584e2256c0bbebcf7b2ba"
+  }
+}

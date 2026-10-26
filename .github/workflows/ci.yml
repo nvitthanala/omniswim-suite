@@ -100,6 +100,11 @@ jobs:
           python -m ruff check .
           python -m pytest
 
+      # apps/extension/dist/ is not committed (D3 2.4). tests/extensionBuildFreshness.test.ts
+      # (T-B3) fails under CI when it is missing, so build it before any test step.
+      - name: Build OmniSwim extension
+        run: npm run build:extension
+
       # Runs the script suite and the Playwright e2e specs. run-tests.mjs picks a free
       # PORT for the e2e dev server itself; do not set PORT here, because
       # test_scoring_preset_routes.mjs starts a server with OMNI_PORT and the server
@@ -138,12 +143,20 @@ jobs:
         run: npm run test:harness
         timeout-minutes: 15
 
+      # The S3 worker harness (D3 section 3): the built OmniSwim extension (built above) in
+      # real Chromium on a synthetic simulator page, with and without a page CSP. It aborts
+      # every request except that page, so it never contacts swimcloud.com. A skip fails
+      # here because CI is set.
+      - name: OmniSwim extension S3 harness
+        run: npm run test:extension-harness
+        timeout-minutes: 10
+
       - name: Build
         run: npm run build
 
-      # The extension bundles are committed artifacts. This does not
-      # regenerate them for the build -- tests/swimCloudExtensionBuildFreshness.test.ts
+      # The legacy extension bundles are committed artifacts. This does not
+      # regenerate them for the build -- legacy/tests/swimCloudExtensionBuildFreshness.test.ts
       # already fails when a committed bundle is stale. This step proves the
-      # build script itself still runs on a clean checkout.
-      - name: Build browser extension
-        run: npm run build:extension
+      # legacy build script itself still runs on a clean checkout.
+      - name: Build legacy browser extension
+        run: npm run build:extension:legacy

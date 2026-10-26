@@ -38,6 +38,7 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/dist-harness/**',
       'test-results/**',
       'venv/**',
       // Stryker (npm run test:mutation) leaves a sandbox copy and a report here.
@@ -178,6 +179,47 @@ export default tseslint.config(
   {
     files: ['legacy/extensions/swimcloud-companion/**/*.js', 'legacy/extensions/swimcloud-companion/**/*.ts'],
     languageOptions: { globals: { chrome: 'readonly' } },
+  },
+
+  // The engine is pure (D2 section 2.1): no UI, no network, no storage, no Node, no clock timers.
+  // Dropping DOM from `lib` in packages/engine/tsconfig.json is the compile-time half of this gate.
+  // tests/enginePurity.test.ts is the scan half.
+  {
+    files: ['packages/engine/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['react', 'react-dom', 'fs', 'path', 'playwright-core'].map(name => ({ name, message: 'The engine is pure: no UI, Node or browser dependency.' })),
+          patterns: [
+            { group: ['react/*', 'react-dom/*', '@tanstack/*', 'node:*', 'fs/*', 'path/*', 'playwright-core/*', '@omniswim/*'], message: 'The engine is pure: no UI, Node, browser or sibling-package dependency.' },
+          ],
+        },
+      ],
+      'no-restricted-globals': [
+        'error',
+        ...['window', 'document', 'fetch', 'XMLHttpRequest', 'localStorage', 'sessionStorage', 'indexedDB', 'navigator', 'self', 'postMessage', 'Worker', 'chrome', 'setTimeout', 'setInterval'].map(name => ({
+          name,
+          message: 'The engine is pure: no browser, worker or timer global.',
+        })),
+      ],
+    },
+  },
+
+  // The extension imports the engine root only (D2 decision 0.4), never a subpath and never core.
+  {
+    files: ['apps/extension/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            { group: ['@omniswim/engine/*'], message: 'Import from @omniswim/engine only. Subpaths are for core shims and the engine itself.' },
+            { group: ['@omniswim/core', '@omniswim/core/*'], message: 'The extension does not use @omniswim/core.' },
+          ],
+        },
+      ],
+    },
   },
 
   // Tests and scripts run in Node and legitimately do things app code must not.

@@ -388,7 +388,7 @@ Run it:
 
 1. `npm ci`
 2. `npx playwright install chromium`
-3. `npm run build:extension`
+3. `npm run build:extension:legacy`
 4. `npm run test:harness`
 
 The script skips with a message, and exits 0, when Chromium or the extension build is missing.

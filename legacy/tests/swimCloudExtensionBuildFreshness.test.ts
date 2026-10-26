@@ -82,7 +82,7 @@ describe('extension bundles are in sync with their source', () => {
 
       expect(
         normalise(committed),
-        `${artifact} is stale. Run: npm run build:extension`,
+        `${artifact} is stale. Run: npm run build:extension:legacy`,
       ).toBe(normalise(rebuilt));
     }, 30_000);
   }

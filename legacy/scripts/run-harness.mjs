@@ -32,7 +32,7 @@ if (!existsSync(chromiumPath)) skip(`Chromium is not installed (looked for ${chr
 
 for (const file of ['background.js', 'crawler.js', 'content.js', 'manifest.json']) {
   if (!existsSync(join(root, 'legacy', 'extensions', 'swimcloud-companion', file))) {
-    skip(`the extension build is missing (extensions/swimcloud-companion/${file}).`, 'npm run build:extension');
+    skip(`the extension build is missing (extensions/swimcloud-companion/${file}).`, 'npm run build:extension:legacy');
   }
 }
 
