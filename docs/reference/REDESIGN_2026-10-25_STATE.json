@@ -628,8 +628,8 @@
   ],
   "resumeOrder": [
     "DONE: answers backlog (NSISC v2, storage fields, zod/mini, colors, conversion capture).",
-    "executor: engine LCM->SCY preset from data/conversions/swimswam (see conversionCapture.next)",
-    "architect: P2 risk - verify a per-swimmer history endpoint without a Cloudflare challenge before Load history is built",
+    "DONE: engine LCM->SCY (8d188a27)",
+    "DONE: P2 risk. profile_fastest_times answers without a challenge (bests only; see p2Risk).",
     "P2 per plan; adapter brief notes flystart optional on relay rows"
   ],
   "notes": [
@@ -803,6 +803,10 @@
     {
       "sha": "29c4484f",
       "subject": "Add the status colors from R46 and R57"
+    },
+    {
+      "sha": "8d188a27",
+      "subject": "Convert LCM to SCY from the SwimSwam capture"
     }
   ],
   "lowPriority": {
@@ -849,15 +853,29 @@
     "sizes": "sim-overlay.js 810,945 -> 76,698 bytes; sim-bridge.js 4,974 unchanged",
     "minifyNote": "esbuild minify would roughly halve the overlay again; not enabled"
   },
-  "inFlight": {
-    "item": "engine LCM->SCY preset from data/conversions/swimswam (R58-R61): tool-derived provenance, table-d-user retired from use, SCM via Table A, relay splits, estimated-cut tag",
-    "agent": "Claude executor, background, dispatched 2026-10-26 afternoon",
-    "scope": "packages/engine/**, tests/engine*, D2 new section",
-    "onResume": "resume with SendMessage; do not re-brief. Then cross-provider review by Codex (Orca, read-only) before commit."
-  },
   "awayMode": {
     "since": "2026-10-26 afternoon",
     "user": "\"continue work, i will be away from computer. move ahead and build everything you can, keep tab on open items or questions you have for me and i will let you know answers when i return.\"",
-    "questionsForUser": []
+    "questionsForUser": [
+      "Q-history-depth: profile_fastest_times gives one best swim per event and course (all teams, back to 2012), not every swim. Is that enough for Load history (R50) and recruits (R52)? If the date window (R49) must pick the best swim inside the window, a full per-swim history endpoint is needed; may Claude look for one (a few requests, stop on any challenge)?",
+      "Q-R61-weaker-real: when a real swim earns a weaker cut than an estimated one (real B, estimated A), foldEventCutTags keeps both tags, real first. Keep both, or show only the stronger one?"
+    ]
+  },
+  "p2Risk": {
+    "done": "2026-10-26",
+    "endpoint": "/api/swimmers/{id}/profile_fastest_times/",
+    "result": "200 JSON, no Cloudflare challenge, from the simulator tab (same origin). One best per event+course, cross-team (follows the swimmer). Details: 02-SIMULATOR-RECON.md, P2 risk section.",
+    "limit": "bests only; cannot answer best-within-window"
+  },
+  "lcmToScyDone": {
+    "commit": "8d188a27",
+    "review": "Codex ctx_0c99fe7da53e: one defect (fixed gender), fixed with red test; rest clean",
+    "gates": "lint ok; vitest 2577; npm test 65/0; golden clean",
+    "followUps": [
+      "docs/INVARIANTS.md #10 and #11 wording check against R61",
+      "extension storage validate.ts does not check the archive sha for tool-derived provenance",
+      "pickers must hide built-ins with retired set (presets.ts latestBuiltins)",
+      "nothing in the extension calls the new conversion/cut functions yet (P4)"
+    ]
   }
 }
