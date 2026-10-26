@@ -44,6 +44,7 @@ const sha = (value: unknown): string => createHash('sha256').update(JSON.stringi
 /** kind|id|version to the sha256 of the sorted-key JSON of the preset. */
 const PINNED: Readonly<Record<string, string>> = {
   'rule|nsisc|1': 'd753a42865adf2450528464be02b6cf69697558d1e08dbf3f046a6a1edd72348',
+  'rule|nsisc|2': '6000b59d78e33663ff6f4a485dd3a75a5d20c060eb4ad70fc65a34fb2e7dd2c2',
   'rule|generic|1': '56d58f3ed13b00de5732039b3f40da7f5117c9562fdce0df3bfb7f0829668ac4',
   'session|nsisc-table-c|1': '17c5ccef7f94c0900aa8997ffe1447bb6cafb71350fbe906e05c7a9dfd8bb731',
   'tableD|table-d-user|1': 'ad287084f4934bfee8a5e1285ee5f3cd3283b2564cff9faa91653fbc25b80359',
@@ -80,11 +81,37 @@ describe('built-in versions', () => {
 
   it('builtinRulePreset returns undefined for an unknown id or version, never a fallback', () => {
     expect(builtinRulePreset('nsisc', 1)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc')?.preset);
-    expect(builtinRulePreset('nsisc', 2)).toBeUndefined();
+    expect(builtinRulePreset('nsisc', 2)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc' && b.version === 2)?.preset);
+    expect(builtinRulePreset('nsisc', 3)).toBeUndefined();
     expect(builtinRulePreset('nsisc', 0)).toBeUndefined();
     expect(builtinRulePreset('ncaa', 1)).toBeUndefined();
     expect(builtinRulePreset('', 1)).toBeUndefined();
     expect(builtinRulePreset('NSISC', 1)).toBeUndefined();
+  });
+
+  it('NSISC v2 sets only the three confirmed points tables and preserves v1', () => {
+    const v1 = builtinRulePreset('nsisc', 1)!;
+    const v2 = builtinRulePreset('nsisc', 2)!;
+    const individual = [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1];
+    const relay = [40, 34, 32, 30, 28, 26, 24, 22, 18, 14, 12, 10, 8, 6, 4, 2];
+    expect(v1.scoring.individualPoints.state).toBe('pending');
+    expect(v1.scoring.divingPoints.state).toBe('pending');
+    expect(v1.scoring.relayPoints.state).toBe('pending');
+    expect(v2.scoring.individualPoints).toMatchObject({ state: 'set', value: individual });
+    expect(v2.scoring.divingPoints).toMatchObject({ state: 'set', value: { kind: 'table', points: individual } });
+    expect(v2.scoring.relayPoints).toMatchObject({ state: 'set', value: { kind: 'table', points: relay } });
+    const withoutPoints = (preset: typeof v1) => {
+      const { individualPoints: _individual, divingPoints: _diving, relayPoints: _relay, ...scoring } = preset.scoring;
+      return { ...preset, scoring };
+    };
+    expect(withoutPoints(v2)).toStrictEqual(withoutPoints(v1));
+    const source = linesOf('plans/2026-10-25/README.md')[68] as string;
+    expect(source.startsWith('| R45 |')).toBe(true);
+    for (const s of [v2.scoring.individualPoints, v2.scoring.divingPoints, v2.scoring.relayPoints]) {
+      expect(s.state).toBe('set');
+      if (s.state !== 'set') throw new Error('expected v2 points to be set');
+      expect(s.provenance).toMatchObject({ kind: 'user-stated', statedOn: '2026-10-26', where: 'plans/2026-10-25/README.md:69' });
+    }
   });
 
   it('no built-in carries the legacy provenance kind', () => {

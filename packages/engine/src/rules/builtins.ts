@@ -209,13 +209,40 @@ function buildNsisc(): RulePreset {
   };
 }
 
+/**
+ * NSISC v2 records the user's confirmed points while inheriting every other v1 setting.
+ *
+ * Source: the user's statement (plans/2026-10-25/README.md R45). Cross-check, not a source: the
+ * 2026 NSISC results PDF in data/meets.json (workspace 1) shows relay-leg quarter credits of
+ * 10, 8.5, 8 and 7.5 (40, 34, 32, 30 divided by 4), and a 12th-place tie in the men's 200 IM that
+ * split 5 and 4 as 4.5 each. SwimCloud's "16 place scoring" preset is a parity reference only.
+ */
+function buildNsiscV2(): RulePreset {
+  const v1 = buildNsisc();
+  const provenance = recorded(
+    '2026-10-26',
+    'plans/2026-10-25/README.md:69',
+    'Individual and diving: 20-17-16-15-14-13-12-11-9-7-6-5-4-3-2-1. Relays: double (40-34-32-30-28-26-24-22-18-14-12-10-8-6-4-2). Ties split.'
+  );
+  return {
+    ...v1,
+    scoring: {
+      ...v1.scoring,
+      individualPoints: setting([20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1], provenance),
+      divingPoints: setting({ kind: 'table', points: [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1] }, provenance),
+      relayPoints: setting({ kind: 'table', points: [40, 34, 32, 30, 28, 26, 24, 22, 18, 14, 12, 10, 8, 6, 4, 2] }, provenance),
+    },
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Registry                                                                   */
 /* -------------------------------------------------------------------------- */
 
-/** `'nsisc'` v1 and `'generic'` v1. */
+/** `'nsisc'` v1 and v2, plus `'generic'` v1. */
 export const BUILTIN_RULE_PRESETS: readonly Builtin<RulePreset>[] = [
   { id: 'nsisc', version: 1, label: 'NSISC', preset: buildNsisc() },
+  { id: 'nsisc', version: 2, label: 'NSISC', preset: buildNsiscV2() },
   { id: 'generic', version: 1, label: 'Generic NCAA championship', preset: buildGeneric() },
 ];
 

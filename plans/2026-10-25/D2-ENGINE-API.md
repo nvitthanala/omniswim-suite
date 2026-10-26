@@ -1019,3 +1019,8 @@ The orchestrator accepted each of these. The state file holds the evidence
 9. **NSISC v1 points stay pending.** Recon Q17 found SwimCloud has no NSISC
    preset. The user is asked (state file `Q-NSISC-points`), and a yes ships
    as `nsisc` v2.
+10. **nsisc v2 (2026-10-26): points set from the user's answer; v1 unchanged.**
+    The source is README R45. `RulePreset` has no tie setting. "Ties split"
+    holds because `legacyBridge.ts` hands the points to the legacy scorer,
+    which splits the place ladder across a tie group
+    (`lib/individualScoring.ts:683`, `scoreIndividualsInEvent`).
