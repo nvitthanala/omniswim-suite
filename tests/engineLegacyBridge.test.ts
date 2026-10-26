@@ -106,8 +106,9 @@ function genPreset(rng: Rng): CompleteRulePreset {
 
   const base = builtinPreset('nsisc');
   const preset: RulePreset = {
-    payloadVersion: 1,
+    payloadVersion: 2,
     scoring: {
+      ties: set('split' as const),
       individualPoints: set(genPoints(rng)),
       relayPoints: set(relay),
       divingPoints: set(diving),

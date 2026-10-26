@@ -490,3 +490,31 @@ same URL used the browser cache.
   file (`Q-history-depth`).
 - Raw responses stayed in the page. Nothing was written to the repo but
   this summary.
+
+## P2: how the simulator ranks ties (2026-10-26)
+
+Read from the simulator bundle the page had already loaded
+(`media/webpack/simulator/index.1793017582.js`, served from the browser
+cache; the P0 recon read `index.1792676876.js`, so the bundle changed
+since 2026-10-26 03:32 UTC).
+
+- The event ranking function sorts an event's splashes with lodash
+  `orderBy` on these keys, in order: diving or not; a timecode key; the
+  exhibition flag; "has no time"; then the time (diving scores
+  negated, so higher is better).
+- lodash `orderBy` is a stable sort. Two splashes equal on every key keep
+  their input order.
+- Places come from position. Nothing in that function splits a tie or
+  averages points.
+- Consequence for parity: a recorded fixture lists the page's sorted
+  output. For tied splashes, a stable sort keeps the input order, so the
+  output order among tied splashes equals their input order. Breaking a
+  tie by the recorded order therefore reproduces SwimCloud's rule. It is
+  not a fit to the totals.
+- The archived bundle (`data/swimcloud-captures/simulator/simulator.1792676876.js`,
+  sha256 93f6be65...c6da, gitignored with the other raw captures) has the
+  same ranking function `Ra` at offset 381954. Its sort is webpack module
+  2877, whose signature `(collection, iteratees, orders, guard)` is lodash
+  `orderBy`; lodash breaks a full tie by input index.
+- Unverified: that the points step reads places from this sort with no
+  later tie step. The P2 parity tests on configs B to D cover it.

@@ -7,8 +7,9 @@
  * Not here, on purpose:
  * - The legacy bridge. `@omniswim/engine/rules/legacyBridge` carries the legacy `ScoringSettings`
  *   type, and the root stays free of it (D2 decision 0.4).
- * - Results (3.8), the rest of the sourcing functions (3.10: flyover, SourcingSettings) and the planner
- *   functions (3.11). They arrive in P2 to P5. Cut tags (3.9) and the conversion (3.10, 3.13) are here.
+ * - The rest of the sourcing functions (3.10: flyover, SourcingSettings) and the planner functions
+ *   (3.11). They arrive in P4 and P5. Cut tags (3.9), the conversion (3.10, 3.13), `validateMeetModel`
+ *   (3.6) and `scoreMeet` (3.8, P2) are here.
  * The moved modules stay reachable by their own subpaths (`@omniswim/engine/lib/*`).
  */
 
@@ -36,11 +37,13 @@ export type {
   PlaceTreatment,
   RelayPointRule,
   RulePreset,
+  RulePresetV1,
   ScorerAutoRules,
+  TieRule,
 } from './rules/rulePreset';
-export { editSetting, parseRulePreset, pendingPaths, requireComplete } from './rules/rulePreset';
+export { editSetting, migrateRulePresetV1, parseRulePreset, parseRulePresetV1, pendingPaths, requireComplete } from './rules/rulePreset';
 
-// 3.6 MeetModel (types only in P1)
+// 3.6 MeetModel (types in P1, `validateMeetModel` in P2)
 export type {
   ConversionBasis,
   DateWindow,
@@ -58,6 +61,9 @@ export type {
   SwimOrigin,
 } from './model/meet';
 
+export type { MeetModelErrorCode } from './model/validate';
+export { MeetModelError, validateMeetModel } from './model/validate';
+
 // 3.7 Lineup
 export type {
   IndividualEntry,
@@ -71,6 +77,10 @@ export type {
   ScorerTag,
 } from './model/lineup';
 export { entryKey, stripSwimCloudData } from './model/lineup';
+
+// 3.8 Results and scoring (P2)
+export type { NotScoredReason, ResultRow, Results, ScoreMeetErrorCode, Violation } from './model/results';
+export { ScoreMeetError, scoreMeet, stripResultsDisplay } from './model/results';
 
 // 3.10 Table D types. Retired from use (R58): no function reads them.
 export type { TableDPreset, TableDRow } from './sourcing/tableD';
@@ -96,7 +106,7 @@ export { closeThresholdFromPercent, cutTagForSwim, cutTagFromLegacy, foldEventCu
 export type { EventFormat, LoadPreference, ScheduledEvent, SessionPreset, SessionRef, SessionSlot } from './planner/types';
 
 // 3.12 Built-ins
-export type { Builtin } from './rules/builtins';
+export type { Builtin, RuleBuiltin } from './rules/builtins';
 export { BUILTIN_RULE_PRESETS, builtinRulePreset } from './rules/builtins';
 export { BUILTIN_SESSION_PRESETS } from './planner/builtins';
 export { BUILTIN_LCM_TO_SCY, BUILTIN_TABLE_D, builtinLcmToScy } from './sourcing/builtins';

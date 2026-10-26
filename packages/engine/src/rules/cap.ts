@@ -12,7 +12,7 @@
 /** `'unlimited'`, or an integer from 0 to 998. */
 export type Cap = number | 'unlimited';
 
-export type RulePresetErrorCode = 'missing' | 'invalid' | 'legacy_sentinel' | 'pending' | 'legacy_provenance';
+export type RulePresetErrorCode = 'missing' | 'invalid' | 'legacy_sentinel' | 'pending' | 'legacy_provenance' | 'unsupported_version';
 
 export class RulePresetError extends Error {
   /** Dotted path of the field, e.g. `entries.maxTotalPerSwimmer`. */

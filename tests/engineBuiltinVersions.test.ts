@@ -23,7 +23,9 @@ import {
   BUILTIN_TABLE_D,
   builtinRulePreset,
   parseRulePreset,
+  parseRulePresetV1,
   pendingPaths,
+  requireComplete,
 } from '@omniswim/engine';
 import type { Provenance, ScheduledEvent, Setting } from '@omniswim/engine';
 import { normalizeEventForCutline } from '@omniswim/engine/lib/cutlineEventNames';
@@ -44,6 +46,11 @@ const sha = (value: unknown): string => createHash('sha256').update(JSON.stringi
 
 /** kind|id|version to the sha256 of the sorted-key JSON of the preset. */
 const PINNED: Readonly<Record<string, string>> = {
+  // `rule|` pins the frozen payload version 1 of each rule preset: these three hashes were set before
+  // the ties setting and did not change. `rule2|` pins what the same (id, version) resolves to now.
+  'rule2|nsisc|1': '7670e51fcdb704b0dce2ff899fa2a0d13d443d5bb66bf02936e1cadb73213358',
+  'rule2|nsisc|2': '2b72f5a6bc2982aceef0342e3566e42e5cf23ef0cd610f21b6fbc8e2947e638d',
+  'rule2|generic|1': '23847dfed79cb372043ff2d0afa24a8561fffa4ce38156c2cd343164e1c855b4',
   'rule|nsisc|1': 'd753a42865adf2450528464be02b6cf69697558d1e08dbf3f046a6a1edd72348',
   'rule|nsisc|2': '6000b59d78e33663ff6f4a485dd3a75a5d20c060eb4ad70fc65a34fb2e7dd2c2',
   'rule|generic|1': '56d58f3ed13b00de5732039b3f40da7f5117c9562fdce0df3bfb7f0829668ac4',
@@ -53,7 +60,8 @@ const PINNED: Readonly<Record<string, string>> = {
 };
 
 const SHIPPED: readonly { key: string; preset: unknown }[] = [
-  ...BUILTIN_RULE_PRESETS.map(b => ({ key: `rule|${b.id}|${b.version}`, preset: b.preset })),
+  ...BUILTIN_RULE_PRESETS.map(b => ({ key: `rule|${b.id}|${b.version}`, preset: b.frozen })),
+  ...BUILTIN_RULE_PRESETS.map(b => ({ key: `rule2|${b.id}|${b.version}`, preset: b.preset })),
   ...BUILTIN_SESSION_PRESETS.map(b => ({ key: `session|${b.id}|${b.version}`, preset: b.preset })),
   ...BUILTIN_TABLE_D.map(b => ({ key: `tableD|${b.id}|${b.version}`, preset: b.preset })),
   ...BUILTIN_LCM_TO_SCY.map(b => ({ key: `lcmToScy|${b.id}|${b.version}`, preset: b.preset })),
@@ -79,7 +87,30 @@ describe('built-in versions', () => {
   it('rule presets pass parseRulePreset unchanged', () => {
     for (const b of BUILTIN_RULE_PRESETS) {
       expect(parseRulePreset(JSON.parse(JSON.stringify(b.preset))), b.id).toStrictEqual(b.preset);
+      expect(parseRulePresetV1(JSON.parse(JSON.stringify(b.frozen))), b.id).toStrictEqual(b.frozen);
     }
+  });
+
+  it('a saved reference keeps resolving to the same values: the view is the frozen payload plus scoring.ties', () => {
+    for (const b of BUILTIN_RULE_PRESETS) {
+      const { ties: _ties, ...scoring } = b.preset.scoring;
+      expect({ ...b.preset, payloadVersion: 1, scoring }, `${b.id} v${b.version}`).toStrictEqual(b.frozen);
+      expect(b.frozen.payloadVersion).toBe(1);
+      expect(b.preset.payloadVersion).toBe(2);
+    }
+  });
+
+  it('scoring.ties: nsisc v2 splits (R45), nsisc v1 and generic v1 stay pending, nobody gets a default', () => {
+    const ties = (id: string, version: number) => builtinRulePreset(id, version)!.scoring.ties;
+    expect(ties('nsisc', 2)).toMatchObject({
+      state: 'set',
+      value: 'split',
+      provenance: { kind: 'user-stated', statedOn: '2026-10-26', where: 'plans/2026-10-25/README.md:69', verbatim: false },
+    });
+    expect(linesOf('plans/2026-10-25/README.md')[68]).toContain('Ties split.');
+    expect(ties('nsisc', 1).state).toBe('pending');
+    expect(ties('generic', 1).state).toBe('pending');
+    expect(() => requireComplete(builtinRulePreset('generic', 1)!)).toThrow(/scoring.ties/);
   });
 
   it('builtinRulePreset returns undefined for an unknown id or version, never a fallback', () => {
@@ -104,7 +135,8 @@ describe('built-in versions', () => {
     expect(v2.scoring.divingPoints).toMatchObject({ state: 'set', value: { kind: 'table', points: individual } });
     expect(v2.scoring.relayPoints).toMatchObject({ state: 'set', value: { kind: 'table', points: relay } });
     const withoutPoints = (preset: typeof v1) => {
-      const { individualPoints: _individual, divingPoints: _diving, relayPoints: _relay, ...scoring } = preset.scoring;
+      // `ties` differs by design: v1 is pending, v2 states R45's "Ties split" (its own test below).
+      const { individualPoints: _individual, divingPoints: _diving, relayPoints: _relay, ties: _ties, ...scoring } = preset.scoring;
       return { ...preset, scoring };
     };
     expect(withoutPoints(v2)).toStrictEqual(withoutPoints(v1));
@@ -268,6 +300,7 @@ describe('generic v1', () => {
       'scoring.divingPoints',
       'scoring.halfRateRelaySwimmer',
       'scoring.nonScorerPlacement',
+      'scoring.ties',
     ]);
   });
 });
@@ -280,7 +313,7 @@ describe('nsisc v1', () => {
   const nsisc = BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc')!.preset;
 
   it('leaves the three points settings pending: no source is archived for them', () => {
-    expect(pendingPaths(nsisc)).toStrictEqual(['scoring.divingPoints', 'scoring.individualPoints', 'scoring.relayPoints']);
+    expect(pendingPaths(nsisc)).toStrictEqual(['scoring.divingPoints', 'scoring.individualPoints', 'scoring.relayPoints', 'scoring.ties']);
     for (const s of [nsisc.scoring.individualPoints, nsisc.scoring.relayPoints, nsisc.scoring.divingPoints]) {
       expect(s.state).toBe('pending');
       expect('value' in s).toBe(false);

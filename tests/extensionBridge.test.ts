@@ -19,90 +19,19 @@
  * so a swimmer's name here is that code.
  */
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { Window as HappyWindow } from 'happy-dom';
 import { installBridge } from '../apps/extension/src/bridge/install';
 import { LOG_PREFIX, mountShadowHost, startOverlay, type OverlayLog } from '../apps/extension/src/overlay/overlay';
 import * as z from 'zod/mini';
 import { parseBridgeMessage } from '../apps/extension/src/shared/bridgeSchema';
+import { fixture, inflateRoster, inflateSplashes, type Obj } from './helpers/simulatorFixtures';
 
-type Obj = Record<string, unknown>;
 type Win = Window & typeof globalThis;
 
 const URL_BASE = 'https://www.swimcloud.com/meetsimulator/?teams=48,58';
 const SIM_PATH = '/api/teams/58/simulator/?start_date=2025-09-01&end_date=2026-08-31&eventgender=M&eventcourse=Y&divecourse=6&time_to_use=fastest';
-const FIXTURES = path.join(__dirname, 'fixtures', 'swimcloud', 'simulator');
-const fixture = (name: string): Obj => JSON.parse(readFileSync(path.join(FIXTURES, name), 'utf8')) as Obj;
 
 // ---- store, shaped from the fixtures -------------------------------------------------------
-
-type Row = [string, number, string, string, string | null, boolean | null];
-let rowCounter = 0;
-/** Recon Q5: every row carries id, eventstroke, eventdistance, eventcourse, eventgender, numlegs, eventtime, flystart, pointvalue. */
-const rowToObject = (r: Row): Obj => ({
-  id: `row-${(rowCounter += 1)}`, // the fixtures strip ids; this is a test-only stand-in
-  numlegs: r[0] === '6' || r[0] === '7' ? 4 : 1,
-  eventstroke: r[0],
-  eventdistance: r[1],
-  eventcourse: r[2],
-  eventtime: r[3],
-  pointvalue: r[4],
-  flystart: r[5],
-  eventgender: 'M',
-});
-
-/** One roster as the page holds it: swim rows carry `swimmer` and `team` back-references (a cyclic graph). */
-function inflateRoster(file: string, team: Obj): Obj {
-  const raw = fixture(file) as { swimmers: Obj[]; relays: Row[] };
-  const swimmers = raw.swimmers.map((s) => {
-    const swimmer: Obj = { id: s.sid, name: s.sid, gender: s.gender, gradcollege: s.gradcollege };
-    const wrap = (rows: Row[]) => rows.map((r) => ({ ...rowToObject(r), swimmer, team }));
-    swimmer.indrecords = wrap(s.indrecords as Row[]);
-    swimmer.relaysplits = wrap(s.relaysplits as Row[]);
-    swimmer.relayleadoffs = wrap(s.relayleadoffs as Row[]);
-    return swimmer;
-  });
-  // Live store, 2026-10-26 (teams 48 and 58): a relay row has no `flystart` key at all. The fixture's
-  // positional null is only the array format, so drop the key here to match the page.
-  const relays = raw.relays.map((r) => {
-    const { flystart: _absent, ...row } = rowToObject(r);
-    return { ...row, team };
-  });
-  return { swimmers, relays };
-}
-
-/**
- * The page's `gf` sets `points` to a table lookup, which is `undefined` past the last place. JSON shows
- * that as `null` in the fixture. Leg splashes never go through `gf`, so they have no `points` key at all.
- */
-const pointsOf = (fixturePoints: unknown): unknown => fixturePoints ?? undefined;
-
-/** The page's chosen entries (config `results`), as splash objects. Relay legs get a `relay_id`. */
-function inflateSplashes(config: { results: Record<string, unknown[][]> }, teams: Map<number, Obj>): Obj[] {
-  const splashes: Obj[] = [];
-  for (const [key, entries] of Object.entries(config.results)) {
-    const parts = key.split('|');
-    const dive = parts[0] === 'H';
-    const event = dive
-      ? { eventstroke: 'H', eventdistance: Number(parts[1]), eventcourse: '' }
-      : { eventstroke: parts[0], eventdistance: Number(parts[1]), eventcourse: parts[2] };
-    for (const entry of entries) {
-      const team = teams.get(entry[0] as number);
-      const who = entry[1] as string;
-      if (who.startsWith('relay:')) {
-        const relayId = `${key}#${entry[0]}#${who}`;
-        splashes.push({ ...event, id: relayId, team, points: pointsOf(entry[3]), eventtime: entry[2] });
-        (entry[4] as string[]).forEach((sid, i) =>
-          splashes.push({ ...event, id: `${relayId}#${i + 1}`, team, swimmer: { id: sid }, relay_id: relayId, legposition: i + 1, eventtime: null }), // the fixture has no per-leg times
-        );
-      } else {
-        splashes.push({ ...event, id: `${key}#${entry[0]}#${who}`, team, swimmer: { id: who }, points: pointsOf(entry[3]), eventtime: entry[2] });
-      }
-    }
-  }
-  return splashes;
-}
 
 function buildState(): Obj {
   const config = fixture('config-A.json') as { teams: Obj[]; settings: Obj; results: Record<string, unknown[][]>; totalScores: Obj };

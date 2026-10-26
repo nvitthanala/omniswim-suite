@@ -5,8 +5,11 @@
  * Provenance and settings (plans/2026-10-25/D2-ENGINE-API.md, 3.2).
  *
  * Every value a rule preset holds carries where it came from, or it is `pending`. A pending
- * setting has no `value` field, so no code can read a guess. The parser accepts four provenance
+ * setting has no `value` field, so no code can read a guess. The parser accepts five provenance
  * kinds only. `'legacy'` is banned (CLAUDE.md, data provenance).
+ *
+ * `'engine-neutral'` (P2, 2026-10-26) is for a value no source states: a neutral value a preset must
+ * hold so it is complete, for a setting the preset's mode never reads. It is not a claim about any rule.
  *
  * `'tool-derived'` (R58, 2026-10-26) is for a value fitted to the outputs of a third-party tool that
  * publishes no source. It is never `published`: no code may render it, count it or store it as one.
@@ -39,6 +42,11 @@ export type Provenance =
       readonly verbatim: boolean;
     }
   | { readonly kind: 'user-edited'; readonly editedAt: IsoTime; readonly previous: Provenance | null }
+  | {
+      readonly kind: 'engine-neutral';
+      /** Why the setting exists and why the value does not matter here. Not a source. */
+      readonly reason: string;
+    }
   | {
       readonly kind: 'tool-derived';
       /** The tool whose outputs the value was fitted to. */
@@ -102,7 +110,7 @@ export function expectIsoTime(raw: unknown, path: string): IsoTime {
   return text;
 }
 
-/** Parse a provenance record. Any `kind` outside the four throws; `'legacy'` throws `legacy_provenance`. */
+/** Parse a provenance record. Any `kind` outside the five throws; `'legacy'` throws `legacy_provenance`. */
 export function parseProvenance(raw: unknown, path: string): Provenance {
   if (!isRecord(raw)) throw new RulePresetError(path, 'invalid', `${path}: expected an object`);
   const kind = raw.kind;
@@ -148,6 +156,10 @@ export function parseProvenance(raw: unknown, path: string): Provenance {
       editedAt: expectIsoTime(obj.editedAt, `${path}.editedAt`),
       previous: obj.previous === null ? null : parseProvenance(obj.previous, `${path}.previous`),
     };
+  }
+  if (kind === 'engine-neutral') {
+    const obj = expectKeys(raw, path, ['kind', 'reason']);
+    return { kind: 'engine-neutral', reason: expectString(obj.reason, `${path}.reason`) };
   }
   if (kind === 'tool-derived') {
     const obj = expectKeys(raw, path, ['kind', 'tool', 'archive', 'capturedOn', 'basis']);

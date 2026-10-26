@@ -20,6 +20,13 @@
  * applies and an NSISC-shaped preset may set a total of 8.
  *
  * No key is ever written with the value `undefined`: an absent field is an absent key.
+ *
+ * ## Ties
+ * The legacy scorer always splits a tie across the rows that share a rank. `scoring.ties: 'split'` is
+ * that behavior, so the bridge writes nothing for it. `'ordered'` is not a legacy setting: it is
+ * realized by the caller giving the scorer rows with distinct ranks (`scoreMeet` does). A caller that
+ * does not say so (`ranksAreDistinct`) gets an error, because the legacy scorer would split the ties and
+ * the preset says it must not.
  */
 import type { ScoringSettings } from '../types';
 import type { Setting } from '../model/provenance';
@@ -44,9 +51,18 @@ function valueOf<T>(setting: Setting<T>, path: string): T {
 /**
  * Map a complete preset to legacy settings. Throws `RulePresetError` `invalid` for a preset the
  * legacy settings cannot express: a swimming cap and a diving cap that are both numeric with
- * different over-cap behavior (legacy has one `overCapPlaceBehavior`).
+ * different over-cap behavior (legacy has one `overCapPlaceBehavior`), and `scoring.ties: 'ordered'`
+ * without `ranksAreDistinct`.
  */
-export function toLegacyScoringSettings(p: CompleteRulePreset): ScoringSettings {
+export function toLegacyScoringSettings(p: CompleteRulePreset, opts: { readonly ranksAreDistinct?: true } = {}): ScoringSettings {
+  const ties = valueOf(p.scoring.ties, 'scoring.ties');
+  if (ties === 'ordered' && opts.ranksAreDistinct !== true) {
+    throw new RulePresetError(
+      'scoring.ties',
+      'invalid',
+      'scoring.ties: "ordered" is not a legacy setting; the legacy scorer splits ties. Give it rows with distinct ranks and pass { ranksAreDistinct: true }'
+    );
+  }
   const individualPoints = valueOf(p.scoring.individualPoints, 'scoring.individualPoints');
   const relayRule = valueOf(p.scoring.relayPoints, 'scoring.relayPoints');
   const divingRule = valueOf(p.scoring.divingPoints, 'scoring.divingPoints');

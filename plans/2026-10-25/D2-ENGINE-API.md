@@ -335,6 +335,7 @@ export type Provenance =
       readonly where: string;        // path:line of the record
       readonly verbatim: boolean }   // false: a paraphrase (README decision rows)
   | { readonly kind: 'user-edited'; readonly editedAt: IsoTime; readonly previous: Provenance | null }
+  | { readonly kind: 'engine-neutral'; readonly reason: string }   // P2: a neutral value no source states (8.16)
   | { readonly kind: 'tool-derived';             // R58, 2026-10-26: inferred from a tool's outputs, never published
       readonly tool: { readonly name: string; readonly url: string };
       readonly archive: { readonly path: string; readonly sha256: string };   // sha256 of the file at path
@@ -345,7 +346,7 @@ export type Setting<T> =
   | { readonly state: 'pending'; readonly question: string; readonly blocks: readonly string[] };
 ```
 
-Invariants (each has a test): a parser accepts these four kinds and rejects any
+Invariants (each has a test): a parser accepts these five kinds and rejects any
 other `kind`, including `'legacy'`; `tool-derived` is never `published` (it has
 no `source`, and nothing may count or render it as published); editing gives `user-edited` with `previous`, and provenance is never
 upgraded; a `pending` setting has no value field, so no code can read a guess;
@@ -398,9 +399,12 @@ export type EngineScorerAutoRules = ScorerAutoRules & { readonly splitTimedFinal
 export type PlaceTreatment = 'holds-place' | 'removed-from-consideration';      // same terms as overCap
 export type CFinalRule = { readonly kind: 'none' } | { readonly kind: 'non-scorers'; readonly size: number };
 
+export type TieRule = 'split' | 'ordered';   // P2, 8.16: split = tied entries share a rank and the points; ordered = own place, tie by entry order
+// RulePresetV1 is this interface with payloadVersion 1 and no `ties`. RulePreset below is payload version 2.
 export interface RulePreset {
-  readonly payloadVersion: 1;
+  readonly payloadVersion: 2;
   readonly scoring: {
+    readonly ties: Setting<TieRule>;                          // P2
     readonly individualPoints: Setting<readonly number[]>;    // scoringPoints :263; places = length
     readonly relayPoints: Setting<RelayPointRule>;
     readonly divingPoints: Setting<DivingPointRule>;
@@ -526,11 +530,11 @@ export type SwimOrigin =
   | { readonly kind: 'simulator'; readonly snapshotId: string }
   | { readonly kind: 'history-fetch'; readonly fetchedAt: IsoTime; readonly url: string };
 export interface MeetSwim { readonly swimId: string; readonly swimmerId: SwimmerId; readonly eventKey: EventKey;
-  readonly recordedCourse: Course; readonly recordedTime: TimeValue | null;   // null = NT
+  readonly recordedCourse: Course; readonly recordedTime: TimeValue | null;   // null = NT; a dive holds its SCORE here (hundredths of a point), 8.11
   readonly date: IsoDate | null; readonly seasonId: string | null;
   readonly flags: SwimFlags; readonly scy: ScyStatement; readonly origin: SwimOrigin }
 export interface RelaySplit {                     // RelayLegCredit, types.ts:659
-  readonly splitId: string; readonly swimmerId: SwimmerId; readonly relayEventKey: EventKey;
+  readonly splitId: string; readonly swimmerId: SwimmerId; readonly relayEventKey: EventKey | null;  // null: the source names the leg only, 8.11
   readonly legPosition: 1 | 2 | 3 | 4 | null;    // null = not stated: stored, never used (types.ts:657)
   readonly start: 'flat' | 'flying' | 'unknown';  // leg 1 flat, legs 2-4 flying (relayLegCredits.ts:160-197)
   readonly legEventKey: EventKey | null; readonly split: TimeValue; readonly course: Course | null;
@@ -549,13 +553,35 @@ export interface MeetModel {
   readonly observedScores: readonly { readonly teamId: TeamId; readonly points: number }[] | null;  // null = not read
   readonly display?: MeetDisplay;
 }
-export function validateMeetModel(m: unknown): MeetModel;
+export type MeetModelErrorCode = 'missing' | 'invalid' | 'duplicate' | 'unresolved' | 'gender_mismatch' | 'inconsistent';
+export class MeetModelError extends Error { readonly path: string; readonly code: MeetModelErrorCode }
+export function validateMeetModel(m: unknown): MeetModel;   // P2: returns the model, or throws MeetModelError
 ```
 
 `validateMeetModel` checks: unique IDs; every reference resolves; an
 individual swim's swimmer gender equals the event gender; a `converted`
 statement never sits on a recorded SCY swim or a null time; a swim with
 `altitudeAdjustedBySource` is never adjusted again (invariant 9).
+
+P2 notes (built, `packages/engine/src/model/validate.ts`):
+- It reads untrusted JSON and never repairs: a missing key, an unknown key,
+  a `null` where a value belongs, or text that does not read back to its
+  hundredths all throw, with the path in `MeetModelError.path`.
+- A swim's event is never a relay (a relay is a lineup entry).
+  `recorded-scy` sits on an SCY swim only.
+- Invariant 9 is vacuous in this shape: `MeetSwim` has no altitude field, so
+  nothing can be adjusted twice. The flag is checked as the literal `true`.
+  A later field that carries an adjustment needs the check added.
+- The text of a dive score is not read back as a time (8.11).
+
+**The simulator adapter (P2) lives in `packages/swimcloud/src/browser`**, not in
+the engine: it reads the page's shapes (`@omniswim/swimcloud/browser`).
+`adaptSimulatorSnapshot(snapshot, {meetKey, snapshotId})` returns
+`{kind: 'not_loaded', missing}` or `{kind: 'ready', adapted: {model, lineup,
+preset, observedEntries, ignored}}`. The model passes `validateMeetModel`.
+Teams get division `unknown/unmapped_team`, swimmers `classYear: null` and
+`roster: 'member'`. The preset comes from the snapshot's own settings
+(`simulatorRulePreset`): what the page states is tool-derived, and the settings it never reads are `engine-neutral` (8.16).
 
 ### 3.7 Lineup (`model/lineup.ts`), P1
 
@@ -618,7 +644,7 @@ export type Violation =
   | { readonly kind: 'session_load'; readonly swimmerId: SwimmerId; readonly session: SessionRef;
       readonly races: number; readonly limit: number }
   | { readonly kind: 'relay_leg'; readonly entryKey: string; readonly leg: 1 | 2 | 3 | 4;
-      readonly reason: 'wrong_gender' | 'duplicate_swimmer' | 'event_mismatch' }
+      readonly reason: 'wrong_gender' | 'duplicate_swimmer' | 'event_mismatch' | 'basis_position' }   // basis_position: 8.12
   | { readonly kind: 'unscheduled_event'; readonly eventKey: EventKey; readonly gender: Gender }
   | { readonly kind: 'pending_setting'; readonly eventKey: EventKey; readonly gender: Gender;
       readonly setting: 'fastHeatSize' | 'smallFieldSession' | 'cFinal' };   // R35, R44
@@ -631,8 +657,13 @@ export interface Results {
   readonly display?: LineupDisplay;   // names and times, removable
 }
 export function scoreMeet(model: MeetModel, lineup: Lineup, tags: readonly ScorerTag[],
-  rules: CompleteRulePreset, sourcing: SourcingSettings): Results;
+  rules: CompleteRulePreset, sourcing: ConversionSettings): Results;   // P2 reads nothing from `sourcing`; 8.12
 export function stripResultsDisplay(r: Results): Results;
+export type ScoreMeetErrorCode = 'meet_key_mismatch' | 'roster_mode_unsupported' | 'tags_need_roster_mode'
+  | 'placement_unsupported' | 'name_collision' | 'unresolved_team' | 'unresolved_swimmer' | 'unresolved_event'
+  | 'unresolved_swim' | 'unresolved_split' | 'team_mismatch' | 'gender_mismatch' | 'event_kind_mismatch'
+  | 'roster_not_member' | 'duplicate_entry' | 'seed_mismatch' | 'leg_basis_unsupported' | 'leg_missing' | 'split_not_scy';
+export class ScoreMeetError extends Error { readonly code: ScoreMeetErrorCode; readonly subject: string | null }
 ```
 
 Rules:
@@ -646,7 +677,24 @@ Rules:
   One whose membership is `unknown` scores and is listed in `rosterUnknown`;
   the AutoBuilder (P6) never adds an `unknown` swimmer on its own.
 - P2 parity: with a preset built from SwimCloud's settings, `teams[].points`
-  equals `model.observedScores` exactly.
+  equals `model.observedScores` exactly. **Result (2026-10-26): config A
+  matches; B, C and D differ by 0.5 on two tied events. Cause and options:
+  8.12.** The exit needed 3 of 4.
+- P2 built (`packages/engine/src/model/results.ts`): ranking is standard
+  competition ranking (equal hundredths share a rank; a dive ranks by score,
+  highest first). Each row goes to the legacy `calculatePoints` as a
+  one-gender call, round `'A Final'`, name `sw:<id>`, team `tm:<id>`.
+  `scoreMeet` throws `name_collision` when two ids normalize to one key.
+- `scoreMeet` throws (never scores around) for: `scorers.eligibility:
+  'roster'`; any tag under `'points_pool'`; an over-cap rule of
+  `'removed-from-consideration'`; a `flyover-estimate` leg; a split that is
+  not SCY; a swimmer who is `not_member`. P3 and P5 lift the first three.
+- `notScoredReason` is derived only for `no_time`, `outside_point_table`,
+  `event_scorer_cap` and `relay_scorer_cap`. Other zero rows carry none.
+- `entry_cap` violations count distinct events per swimmer. The row still scores.
+- `teams` lists every model team, including one with no entry.
+- Overlay data: `parityReport(adapted, results)` and `rescoreSimulator(snapshot,
+  opts)` in `@omniswim/swimcloud/browser`.
 
 ### 3.9 Cut tags (`sourcing/cutTag.ts`), P4
 
@@ -1146,3 +1194,86 @@ The orchestrator accepted each of these. The state file holds the evidence
     holds because `legacyBridge.ts` hands the points to the legacy scorer,
     which splits the place ladder across a tie group
     (`lib/individualScoring.ts:683`, `scoreIndividualsInEvent`).
+
+Items 11 and later are P2.engine deviations and gaps (2026-10-26). The orchestrator
+and `architect` have not accepted them yet. Item 12 decides nothing.
+
+11. **P2 type changes to `model/meet.ts`. `RelaySplit.relayEventKey` widens an
+    existing field, so it is not purely additive.**
+    - `RelaySplit.relayEventKey` is `EventKey | null`. A SwimCloud split row
+      names its leg ("50 Freestyle") and not its relay, so a 50 free split is
+      ambiguous between a free relay and a medley relay. The adapter sets
+      `null` instead of guessing one.
+    - A dive's `recordedTime` holds the dive SCORE in hundredths of a point
+      (451.28 is `45128`; higher is better). The type is reused, not
+      widened. Nothing may format or parse a dive score as a time. A dive's
+      `recordedCourse` is `'SCY'`.
+    - A SwimCloud `leadoff` row becomes a `MeetSwim` flagged
+      `extractedSplit`, because 42 entries across the recorded configs are
+      seeded only by a leadoff. The engine never picks an extracted split on
+      its own, but `scoreMeet` honors a pinned `seedSwimId` on one (the
+      lineup, not the engine, chose it).
+12. **P2 gaps for `architect`. None is decided here.**
+    - **Tie policy: decided, see 8.16.** Measured before the decision: B, C
+      and D differed from SwimCloud by 0.5 points between teams 48 and 412 on
+      100 Breaststroke and 100 Freestyle, and a stable no-split rank matched
+      all four configs.
+    - **Inert-field provenance: decided, see 8.16.** The eight settings with
+      no SwimCloud meaning (plus `scorers.autoRules`) now carry `engine-neutral`.
+    - **`basis_position` violation.** SwimCloud's aggregate free relay
+      reorders the legs after it picks them ("traditional" order), so a
+      flat-start time can sit on leg 2 to 4. The points stay SwimCloud's. The
+      violation flags it, because a real relay has a flat start on leg 1 only.
+    - **`sourcing` is unread in P2.** The parameter is there so P4 adds none.
+    - **Per-team entry limits have no preset field.** `maxIndrecordsPerTeam`
+      and `maxRelaysPerTeam` are reported in `SimulatorPresetBuild.unmapped`,
+      never dropped.
+13. **Unsupported in P2, and loud.** SCM and LCM simulators, actual
+    (non-aggregate) relays, an exhibition entry, a coach-edited entry time
+    (it matches no swim: `time_not_in_swims`), an entry with no time, an
+    unknown `pointSystem` (`scoring32` is named by one SwimCloud preset and
+    defined nowhere in the bundle: the preset stays `pending` and
+    `rescoreSimulator` returns `preset_incomplete`).
+14. **Unverified shape.** The per-leg splash fields (leg stroke, distance,
+    `flystart`, `eventtime`) are decoded from the archived bundle's `kf`, not
+    seen on a live page. The fixture builder (`tests/helpers/simulatorFixtures.ts`,
+    `pageLegs`) rebuilds them by that rule and requires exactly one position
+    to explain each recorded relay time (11 of 11 do). A live capture of one
+    relay splash would confirm it.
+15. **Point tables** (`packages/swimcloud/src/browser/pointTables.ts`) are
+    read from a third-party bundle, so their provenance is `tool-derived`,
+    never `published`. A test compares every table to the verbatim bundle
+    text. The archive under `data/swimcloud-captures/` is gitignored; the
+    hash test runs only where it exists.
+
+16. **Lead decision (2026-10-26): `scoring.ties`, payload version 2, `engine-neutral`.**
+    - **Setting.** `scoring.ties: Setting<TieRule>`, `TieRule = 'split' | 'ordered'`.
+      `'split'` is today's legacy behavior: tied entries share a rank and the
+      points of the places they cover. `'ordered'`: every entry takes its own
+      place; a tie is broken by entry order (the lineup order, a stable sort).
+      `scoreMeet` hands the legacy scorer the ranks chosen by the rule, so
+      `'split'` is byte-identical to before (the golden file is unchanged).
+    - **Versions.** `RulePreset` is payload version 2; `RulePresetV1` is the old
+      shape. `parseRulePreset` reads version 2, and reads version 1 by explicit
+      migration (`migrateRulePresetV1`): every setting kept, `ties` pending, no
+      rule assumed. `parseRulePresetV1` reads version 1 as version 1.
+      `requireComplete` and `pendingPaths` throw `unsupported_version` for an
+      object that still says version 1, so a stored payload read without a parse
+      cannot look complete. `toLegacyScoringSettings(p, { ranksAreDistinct: true })`:
+      `'ordered'` throws without the flag, because the legacy scorer would split.
+    - **Built-ins.** Frozen payloads keep their pinned hashes (nsisc 1, nsisc 2,
+      generic 1). A reference to `{nsisc, 2}` resolves to the same values plus
+      `ties: 'split'` (README R45, line 69, "Ties split."), which the legacy scorer
+      already applied. nsisc v1 and generic v1: `ties` pending (no source). The
+      registry entry carries `frozen` (version 1) and `preset` (version 2); the
+      version 2 view has its own pin.
+    - **Simulator.** `ties: 'ordered'`, tool-derived from the archived bundle (`gf`).
+      The stable `orderBy` is read from a later bundle that was not archived, so it
+      has no hash here; `02-SIMULATOR-RECON.md` records it.
+    - **`engine-neutral`.** `{kind: 'engine-neutral', reason}`: a neutral value no
+      source or tool states, held only so the preset is complete. The simulator
+      preset uses it for the nine paths in `SimulatorPresetBuild.inert`.
+    - **Not done, for the storage owner.** `apps/extension` storage still records
+      `PAYLOAD_VERSION = 1` and stores a rule preset payload as given. A stored
+      version 1 payload validates (it migrates in `parseRulePreset`) but the stored
+      value stays version 1, so storage must migrate on read before scoring.

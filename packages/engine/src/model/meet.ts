@@ -2,8 +2,9 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Meet model types (plans/2026-10-25/D2-ENGINE-API.md, 3.6). Types only in P1.
- * `validateMeetModel` and the adapter that builds a `MeetModel` from SwimCloud data arrive in P2.
+ * Meet model types (plans/2026-10-25/D2-ENGINE-API.md, 3.6). `validateMeetModel` is in `validate.ts`.
+ * The adapter that builds a `MeetModel` from SwimCloud simulator data is in
+ * `packages/swimcloud/src/browser` (P2).
  */
 import type { NcaaDivision } from '../types';
 import type { NcaaScmConversionTableId } from '../constants';
@@ -97,7 +98,11 @@ export interface MeetSwim {
   readonly swimmerId: SwimmerId;
   readonly eventKey: EventKey;
   readonly recordedCourse: Course;
-  /** `null` is NT. */
+  /**
+   * `null` is NT. On a diving event (`MeetEvent.kind` `'diving'`) this holds the dive SCORE in
+   * hundredths of a point (451.28 is 45128, text `'451.28'`), and higher is better. The type is
+   * reused, not widened (D2 8.11). Nothing may format or parse a dive score as a time.
+   */
   readonly recordedTime: TimeValue | null;
   readonly date: IsoDate | null;
   readonly seasonId: string | null;
@@ -109,7 +114,12 @@ export interface MeetSwim {
 export interface RelaySplit {
   readonly splitId: string;
   readonly swimmerId: SwimmerId;
-  readonly relayEventKey: EventKey;
+  /**
+   * The relay the split came from. `null`: the source does not say. A SwimCloud simulator split row
+   * names only the leg's stroke and distance, so a 50 Freestyle split could come from a 200 Freestyle
+   * Relay or a 200 Medley Relay. P2 loosened this from `EventKey` rather than guess one (D2 8.11).
+   */
+  readonly relayEventKey: EventKey | null;
   /** `null`: not stated. Stored, never used. */
   readonly legPosition: 1 | 2 | 3 | 4 | null;
   readonly start: 'flat' | 'flying' | 'unknown';

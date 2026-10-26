@@ -62,6 +62,11 @@ const COMPARATORS: Readonly<Record<string, Comparator>> = {
     bridged: (p.scoring.nonScorerPlacement as Extract<Setting<string>, { state: 'set' }>).value,
     legacy: LEGACY_NON_SCORER_PLACEMENT,
   }),
+  // The legacy scorer has no tie field: it always splits a tie. `'split'` is that behavior.
+  'scoring.ties': (_b, _l, p) => ({
+    bridged: (p.scoring.ties as Extract<Setting<string>, { state: 'set' }>).value,
+    legacy: 'split',
+  }),
   'scorers.eligibility': same('scorerEligibilityMode'),
   'scorers.autoRules.abFinalTiers': (b, l) => ({ bridged: b.scorerAutoRules?.abFinalTiers, legacy: l.scorerAutoRules?.abFinalTiers }),
   'scorers.autoRules.includeRelayLegsInFinals': (b, l) => ({

@@ -8,6 +8,16 @@
  * record. Each value is a `Setting`: `set` with its provenance, or `pending`. There is no
  * default: a value nobody stated stays pending, and `requireComplete` refuses a preset that still
  * has one, naming every pending path.
+ *
+ * ## Versions
+ * `RulePreset` is payload version 2. It adds `scoring.ties` (how tied times place). Payload version 1
+ * (`RulePresetV1`) had no such setting: the legacy scorer split ties and nothing recorded that.
+ * - `parseRulePreset` reads version 2. It also reads version 1, by an explicit migration:
+ *   `migrateRulePresetV1` keeps every setting and leaves `ties` pending. The result says
+ *   `payloadVersion: 2`, and nothing assumes a tie rule.
+ * - `parseRulePresetV1` reads version 1 as version 1 (a frozen built-in, a stored payload).
+ * - `requireComplete` and `pendingPaths` refuse an object that says version 1. A stored payload read
+ *   without a parse would otherwise look complete, and `scoreMeet` would read a tie rule that is not there.
  */
 import type { ScorerAutoRules } from '../types';
 import { editedProvenance, expectKeys, isRecord, parseSetting } from '../model/provenance';
@@ -40,7 +50,16 @@ export type EngineScorerAutoRules = ScorerAutoRules & { readonly splitTimedFinal
 export type PlaceTreatment = 'holds-place' | 'removed-from-consideration';
 export type CFinalRule = { readonly kind: 'none' } | { readonly kind: 'non-scorers'; readonly size: number };
 
-export interface RulePreset {
+/**
+ * How tied times place.
+ * - `'split'`: tied entries share a rank and split the points of the places they cover.
+ * - `'ordered'`: every entry takes its own place, and a tie is broken by entry order (the lineup's
+ *   order). No points are split.
+ */
+export type TieRule = 'split' | 'ordered';
+
+/** Payload version 1: no `scoring.ties`. Stored payloads and frozen built-ins keep this shape. */
+export interface RulePresetV1 {
   readonly payloadVersion: 1;
   readonly scoring: {
     readonly individualPoints: Setting<readonly number[]>;
@@ -74,6 +93,14 @@ export interface RulePreset {
     readonly exhibitionCounts: Setting<boolean>;
     readonly relayLegsAllowTimeTrials: Setting<boolean>;
   };
+}
+
+/** Payload version 2: version 1 plus `scoring.ties`. */
+export interface RulePreset {
+  readonly payloadVersion: 2;
+  readonly scoring: RulePresetV1['scoring'] & { readonly ties: Setting<TieRule> };
+  readonly scorers: RulePresetV1['scorers'];
+  readonly entries: RulePresetV1['entries'];
 }
 
 /** A preset with no pending setting that applies to its eligibility mode. Only `requireComplete` makes one. */
@@ -237,24 +264,70 @@ function parseAutoRules(raw: unknown, path: string): EngineScorerAutoRules | nul
 
 /**
  * Read a stored or imported preset. Throws `RulePresetError` on: a missing key; an unknown key or
- * `null`; a provenance kind outside the four (`'legacy'` gives `legacy_provenance`); a numeric cap
+ * `null`; a provenance kind outside the five (`'legacy'` gives `legacy_provenance`); a numeric cap
  * of 999 or more; `eligibility: 'roster'` with `autoRules: null`; a bad `DiverWeight`; a negative
- * or non-finite point.
+ * or non-finite point. A payload version 1 reads as version 2 with `ties` pending (see the header).
  */
 export function parseRulePreset(json: unknown): RulePreset {
   const root = expectKeys(json, 'preset', ['payloadVersion', 'scoring', 'scorers', 'entries']);
-  if (root.payloadVersion !== 1) throw invalid('payloadVersion', 'expected 1');
+  if (root.payloadVersion === 1) return migrateRulePresetV1(parseRulePresetV1(json));
+  if (root.payloadVersion !== 2) throw invalid('payloadVersion', 'expected 1 or 2');
+  const sc = expectKeys(root.scoring, 'scoring', [...SCORING_KEYS, 'ties']);
+  const { ties, ...v1Scoring } = sc;
+  const body = parseBody({ ...root, payloadVersion: 1, scoring: v1Scoring });
+  return {
+    payloadVersion: 2,
+    scoring: { ...body.scoring, ties: parseSetting(ties, 'scoring.ties', (v, p) => parseOneOf(v, p, ['split', 'ordered'] as const)) },
+    scorers: body.scorers,
+    entries: body.entries,
+  };
+}
 
-  const sc = expectKeys(root.scoring, 'scoring', [
-    'individualPoints',
-    'relayPoints',
-    'divingPoints',
-    'halfRateRelaySwimmer',
-    'aFinalBracketSize',
-    'nonScorerPlacement',
-    'abFinalsScorersOnly',
-    'cFinal',
-  ]);
+/**
+ * Read a payload version 1 preset (a stored one, or a frozen built-in). It has no `scoring.ties`, and a
+ * `ties` key is an unknown key. Same checks as `parseRulePreset`.
+ */
+export function parseRulePresetV1(json: unknown): RulePresetV1 {
+  const root = expectKeys(json, 'preset', ['payloadVersion', 'scoring', 'scorers', 'entries']);
+  if (root.payloadVersion !== 1) throw invalid('payloadVersion', 'expected 1');
+  return parseBody(root);
+}
+
+/**
+ * Move a version 1 preset to version 2. Every setting is kept as it is. `ties` is what the caller
+ * states, or `pending` when the caller states none: the old payload never recorded a tie rule, and no
+ * rule is assumed. A pending `ties` stops `requireComplete`, so nothing scores until someone sets it.
+ */
+export function migrateRulePresetV1(old: RulePresetV1, ties?: Setting<TieRule>): RulePreset {
+  return {
+    payloadVersion: 2,
+    scoring: {
+      ...old.scoring,
+      ties:
+        ties ?? {
+          state: 'pending',
+          question: 'This preset was saved before the ties setting existed. How do tied times score: "split" or "ordered"?',
+          blocks: ['requireComplete', 'scoreMeet'],
+        },
+    },
+    scorers: old.scorers,
+    entries: old.entries,
+  };
+}
+
+const SCORING_KEYS = [
+  'individualPoints',
+  'relayPoints',
+  'divingPoints',
+  'halfRateRelaySwimmer',
+  'aFinalBracketSize',
+  'nonScorerPlacement',
+  'abFinalsScorersOnly',
+  'cFinal',
+] as const;
+
+function parseBody(root: Record<string, unknown>): RulePresetV1 {
+  const sc = expectKeys(root.scoring, 'scoring', SCORING_KEYS);
   const so = expectKeys(root.scorers, 'scorers', [
     'eligibility',
     'autoRules',
@@ -276,7 +349,7 @@ export function parseRulePreset(json: unknown): RulePreset {
     'relayLegsAllowTimeTrials',
   ]);
 
-  const preset: RulePreset = {
+  const preset: RulePresetV1 = {
     payloadVersion: 1,
     scoring: {
       individualPoints: parseSetting(sc.individualPoints, 'scoring.individualPoints', parsePointList),
@@ -324,6 +397,17 @@ export function parseRulePreset(json: unknown): RulePreset {
 /* Pending paths, completeness, editing                                       */
 /* -------------------------------------------------------------------------- */
 
+/** Throws `unsupported_version` for an object that is not a version 2 preset. */
+function requireVersion2(p: { readonly payloadVersion: number }): void {
+  if (p.payloadVersion !== 2) {
+    throw new RulePresetError(
+      'payloadVersion',
+      'unsupported_version',
+      `payloadVersion: expected 2, got ${String(p.payloadVersion)}. A version 1 preset has no ties setting: migrate it with migrateRulePresetV1`
+    );
+  }
+}
+
 /** The path of the one scorer field that does not apply to the preset's eligibility mode, or null. */
 function notApplicablePath(p: RulePreset): string | null {
   const { eligibility } = p.scorers;
@@ -337,6 +421,7 @@ function notApplicablePath(p: RulePreset): string | null {
  * eligibility mode is itself pending, neither is skipped.
  */
 export function pendingPaths(p: RulePreset): string[] {
+  requireVersion2(p);
   const skip = notApplicablePath(p);
   const out: string[] = [];
   for (const section of ['scoring', 'scorers', 'entries'] as const) {
