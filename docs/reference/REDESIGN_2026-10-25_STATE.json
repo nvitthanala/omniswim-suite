@@ -19,14 +19,59 @@
     {
       "id": "P0",
       "name": "Simulator recon",
-      "status": "blocked",
-      "blocker": "User ran /chrome on 2026-10-25; tools not yet confirmed in session",
-      "doc": "plans/2026-10-25/02-SIMULATOR-RECON.md"
+      "status": "done",
+      "doc": "plans/2026-10-25/02-SIMULATOR-RECON.md",
+      "log": [
+        "2026-10-25 lead (Opus 5.5) started recon; Claude in Chrome connected (Browser 1). User asleep; work continues unattended. Raw captures go to session scratchpad only.",
+        "Q1-Q6 answered and written to 02-SIMULATOR-RECON.md Findings. Store reachable from page (S1 yes). Bundle copy in session scratchpad recon/bundle/.",
+        "S2 sent once: 200, accepted; honored-vs-clamped unsettled (no pre-2023 data for roster). Q8-Q13, Q17-Q21 written. NSISC men 2026 = teams 58, 48, 412 (repo capture meet-356467).",
+        "Fixtures A-D captured from the store, sanitized in page, moved in checksummed 1000-char chunks, all 7 files verified (length + djb2). Offline re-score with SwimCloud rule: 0 mismatches, totals equal. Copied to tests/fixtures/swimcloud/simulator/ with README.",
+        "Swimmer-profile check for S2 hit a Cloudflare challenge; stopped per posture, tab closed."
+      ],
+      "resumePoint": "P0 done. Next in resumeOrder: P1.engine.",
+      "route": "Claude in Chrome, normal start (plan section 12), signed out",
+      "open": [
+        "S2 extent: server accepts a 7-year span (200) but honored-vs-clamped unsettled; user can open swimmer T58-S04 profile by hand (see recon Findings S1/S2 summary)",
+        "Q16: 1280 px and 390 px views not captured (window maximized; resize had no effect); recheck in P1 harness"
+      ],
+      "keyFindings": [
+        "No sign-in needed (signed out works)",
+        "Data: GET /api/teams/{id}/simulator/ per team, JSON, no swim dates, team-scoped swims, no conversion, no cuts",
+        "Scoring in browser (gf); points by index in full list; capped entries 0 and keep index (opposite of R41); no tie splitting",
+        "SwimCloud scoring16 == code TOP16, relay x2; no NSISC preset; no A-final or relays-scoring rule",
+        "Redux store reachable from MAIN world (S1 yes)",
+        "No CSP/XFO on /meetsimulator/; swimcloud.com 301 -> www; no service worker",
+        "3-year window = date-picker minDate only; Season mode reaches 10 seasons"
+      ],
+      "uncommitted": [
+        "plans/2026-10-25/02-SIMULATOR-RECON.md",
+        "docs/reference/REDESIGN_2026-10-25_STATE.json",
+        "tests/fixtures/swimcloud/simulator/ (7 JSON + README)",
+        "data/swimcloud-captures/simulator/ (gitignored raw evidence + manifest.json; never commit)"
+      ],
+      "reconImpacts": {
+        "P2": [
+          "Placement policy must be a setting: SwimCloud and legacy keep the place and award 0 to an over-cap/non-scorer entry; NSISC (R41) removes it and moves scorers up. SwimCloud and legacy share the place-kept shape, so P2 may reuse that path.",
+          "Tie policy must be a setting: the SwimCloud simulator does not split ties (results pages share a rank).",
+          "Per-event per-team scorer cap (maxScorersPerTeam) is separate from the meet-wide scoring-team size (18).",
+          "Add the page chosen entries (simulatedMeet.splashes) to SimSnapshot; otherwise parity needs SwimCloud auto-entry logic (not decoded).",
+          "Diving: take the highest score across eventcourse \"6\" and \"\" rows."
+        ],
+        "P3": [
+          "NSISC points = SwimCloud scoring16 = code TOP16 (no change). maxRelaysScoringPerTeam has no SwimCloud source; R25 stays the source.",
+          "Results pages mark non-scorers with an X exhibition label in the rank cell (no place); matches R41."
+        ],
+        "D1": [
+          "No CSP/XFO on /meetsimulator/: docked iframe allowed (recheck in harness).",
+          "matches: https://www.swimcloud.com/* only (bare host 301s to www).",
+          "Content script needs MAIN world to reach the Redux store; no service worker, page-thread XHR hook works."
+        ]
+      }
     },
     {
       "id": "P1",
       "name": "Foundation: merge, reorg, engine extraction, extension skeleton",
-      "status": "in-progress",
+      "status": "done (uncommitted); awaiting user checks",
       "items": [
         {
           "id": "P1.merge",
@@ -62,10 +107,11 @@
         },
         {
           "id": "D1",
-          "status": "designed-pre-recon",
+          "status": "done-uncommitted",
           "owner": "architect",
           "what": "build tooling and extension layout",
-          "note": "esbuild per entry; manifest skeleton; recon decision table in D3 spec 2.7"
+          "note": "esbuild per entry; manifest skeleton; recon decision table in D3 spec 2.7",
+          "recon": "D3 2.7 \"Recon outcome\" table filled 2026-10-25 from recon Q5, S1, Q19-Q21: JSON via XHR + Redux store; MAIN world at document_start, one script hooks XHR/fetch (path ^/api/teams/d+/simulator/$) and reads the store on mount; matches www only; no host_permissions/DNR; iframe not blocked (recheck in P1 harness); R7 wider window deferred until S2 extent settles."
         },
         {
           "id": "D2",
@@ -87,9 +133,10 @@
         },
         {
           "id": "S3",
-          "status": "designed",
+          "status": "verified",
           "what": "content-script worker strategy",
-          "note": "Primary: worker in extension page (tab or docked iframe). Settled by harness tests/extension-harness/s3-workers.spec.ts in P1.skeleton."
+          "note": "Primary: worker in extension page (tab or docked iframe). Settled by harness tests/extension-harness/s3-workers.spec.ts in P1.skeleton. Harness dispatched 2026-10-26 as P1.harness.",
+          "result": "Option D confirmed by harness (both CSP variants); runtime.connect reaches the iframe directly"
         },
         {
           "id": "S4",
@@ -104,14 +151,389 @@
         },
         {
           "id": "P1.engine",
-          "status": "pending",
+          "status": "verified-uncommitted",
           "owner": "executor",
-          "note": "Spec: D2-ENGINE-API.md sections 2 (steps 0/A/B/C) and 2.5 (E1-E7). Base on the reorg commit."
+          "note": "Spec: D2-ENGINE-API.md sections 2 (steps 0/A/B/C) and 2.5 (E1-E7). Base on the reorg commit.",
+          "workspace": "main clone (has the full local data: same meets.json sha as oyster, 625 capture files vs 367). No worktree, no commits (user has not asked).",
+          "identityCheck": "No commits, so E2 R100 is replaced by: each engine file sha256 == sha256 of git show HEAD:packages/core/src/<p>; each shim is exactly the 2 lines of D2 2.2. Orchestrator runs it.",
+          "steps": {
+            "step0": {
+              "status": "done items 1-4; item 5 (E1 fingerprint) in executor dispatch A",
+              "baseline": "docs/reference/P1_ENGINE_BASELINE.json (per-file vitest pass/skip, per-script PASS/SKIP)",
+              "results": [
+                "npm ci 0",
+                "npm run lint 0",
+                "vitest active 2047/0 + legacy 2885/25 = 4932/25 (D2 expected 4932/25)",
+                "scripts active 65/0 + legacy 24/1 = 89/1 (expected 89/1)",
+                "skip budget local 25/25",
+                "golden harness: golden-after-F1.json byte-identical (git diff --exit-code 0)"
+              ],
+              "ranBy": "lead, 2026-10-25",
+              "e1": {
+                "status": "built, frozen",
+                "files": [
+                  "tests/engineExtractionFingerprint.test.ts",
+                  "tests/fixtures/engineExtractionFingerprint.json (106 hashes)"
+                ],
+                "deviations": [
+                  "theoretical-meet fixture dir is a capture store, not workspaces: decision (b), generator legacy/scripts/gen_engine_fingerprint_workspace.ts with theoreticalMeetGolden.test.ts:99-100 params -> tests/fixtures/engineExtractionFingerprintTheoretical.workspace.json, separate test tests/engineExtractionFingerprintTheoretical.test.ts",
+                  "optimizer activeEntryIds are uuids: projected to plan positions (accepted)",
+                  "non-discriminating cases kept, labelled in header: optimize-undo-workspace has no women rows; applyWhatIf on/off identical; NSISC vs GENERIC_TOP16 calculatePoints identical",
+                  "buildCutlineTag on swim rows only (diving rows carry points, not clock standards)"
+                ],
+                "verifiedByExecutor": "109 passed; hashes identical across processes; 7 planted core mutations each failed the test, restored byte for byte"
+              }
+            },
+            "A": {
+              "status": "verified-uncommitted",
+              "agent": "executor a6132e4936c50409d (resume with SendMessage; B and C go to the same agent after A is verified)",
+              "executorReport": {
+                "vitestActive": "2172/0 (2047+125)",
+                "vitestLegacy": "2885/25",
+                "scripts": "65/0 + 24/1",
+                "engineLint": "pass",
+                "stryker_ncaaScoringRules": "693 mutants: 472 killed, 6 timeout, 214 survived, 1 no coverage (no comparable baseline)",
+                "canary": "react+fetch in course.ts fails enginePurity, engine tsc, eslint; does NOT fail raceAnalysisPurity"
+              },
+              "orchestratorChecks": [
+                "identity.cjs: 17 moved, 0 problems (byte-identical to HEAD, shims exact)",
+                "golden-after-F1.json unchanged after executor harness run",
+                "config diffs read: eslint engine+extension blocks, tsconfig paths, core dep, lock, stryker 1 path, 2 JSON readers repointed",
+                "full gates rerun by lead: lint 0, engine lint 0, vitest active 2172/0, legacy 2885/25, scripts 65/0 + 24/1, golden byte-identical; per-file identical to baseline + 3 new files (fingerprint 109, theoretical 9, enginePurity 7)"
+              ],
+              "frozen": {
+                "tests/engineExtractionFingerprint.test.ts": "1e2feac9 (header edited after hashing; hash JSON 64f41b1e unchanged)",
+                "tests/fixtures/engineExtractionFingerprintTheoretical.json": "3db114bb",
+                "workspace fixture": "f7c3289e"
+              },
+              "followUpsForB": [
+                "vacuity test in engineExtractionFingerprint.test.ts depends on counters filled by other tests (fails alone; Stryker perTest risk): make it self-contained, hashes untouched",
+                "raceAnalysisPurity has no import ban: add react/node import patterns so E5 row 4 fires",
+                "wire npm run lint -w @omniswim/engine into root lint:types",
+                "stale header line asking orchestrator to confirm id projection"
+              ]
+            },
+            "B": {
+              "status": "verified-uncommitted",
+              "agent": "same executor",
+              "executorReport": {
+                "moved": "62 (61 ts + team_colors.json); engine 79 files; 61 shims; core JSON removed",
+                "repoints": "altitudeAdjustment, theoreticalMeetShellNits, relayLegCredits, optimizeStepOwnership (import+mock), test_cutlines (engine+core walk), test_cutline_tags, stryker 9 paths; each source scan guarded >1KB + named export",
+                "newTests": "tests/engineSingleInstance.test.ts (E4, 4 tests; replacing a shim with a copy fails all 4)",
+                "followUpsDone": "vacuity test self-contained; raceAnalysisPurity import ban; lint:types runs engine lint",
+                "E6": "relayScoring 161 mutants: 144 killed, 0 timeout, 11 survived, 6 no coverage (expected 145/0/10/6); extra survivor L185 rosterLookup && usesScorerRoster -> ||"
+              },
+              "frozenSha8": {
+                "tests/engineExtractionFingerprint.test.ts": "cd8e9a47",
+                "tests/engineExtractionFingerprintTheoretical.test.ts": "b9dbece2",
+                "tests/fixtures/engineExtractionFingerprint.json": "64f41b1e",
+                "tests/fixtures/engineExtractionFingerprintTheoretical.json": "3db114bb",
+                "tests/fixtures/engineExtractionFingerprintTheoretical.workspace.json": "f7c3289e"
+              },
+              "orchestratorChecks": [
+                "identity.cjs: 79 moved, 0 problems",
+                "golden-after-F1.json unchanged",
+                "full gates: lint 0 (incl engine tsc), vitest active 2176/0, legacy 2885/25, scripts 65/0 + 24/1; per-file identical to baseline + 4 new files",
+                "E5 canaries (run via node --import tsx): cutlines.ts -> test_cutlines FAIL; cutlineTags.ts and teamDivisions.ts -> test_cutline_tags FAIL; NCAA_ALTITUDE_ADJUSTMENT_TABLE in engine utils.ts -> altitude test FAIL; import react in course.ts -> enginePurity FAIL, raceAnalysisPurity FAIL, eslint FAIL, engine tsc PASSES (tsc resolves react; tsc half guards DOM globals only). All restored, cmp clean."
+              ],
+              "e6Check": "HEAD-copy Stryker was killed by Claude Code for low system memory at 144/161 (partial, inconclusive); not restarted per harness rule. ~12 node.exe processes (~6 GB) remain; command lines unreadable (no wmic, no PowerShell) so none killed. Replacement check: L185 mutant applied by hand in HEAD copy, full active+legacy vitest with --maxWorkers=2 (running). If no test fails at HEAD either, the 144/11 delta predates the move. RESULT: at HEAD with the L185 mutant, active 2046 pass / 1 fail (demoSeed git-tracked check; archive copy has no git, unrelated), legacy 2885/0. No test kills L185 pre-move either: 144/0/11/6 drift predates the move (MUTATION_RESULTS_2026-10-14 ran on the pre-reorg tree). E6 accepted.",
+              "mockGrep": "vi.mock/vi.spyOn on moved paths: none left (two core mocks target optimizeClient and scenarioDiffClient, which stay in core)"
+            },
+            "C": {
+              "status": "verified-uncommitted",
+              "advisor": "NSISC points stay pending (Q-NSISC-points); E5 row 4 fix = engine lint runs eslint; determinism ban in new dirs; P1 items only; table C/D rows from 00-USER-PLAN cited lines; full generic sha from manifest",
+              "executorReport": {
+                "vitestActive": "2261/0 (+85)",
+                "engineFiles": "93 (79 moved + 14 new)",
+                "newTests": [
+                  "engineModel",
+                  "engineLegacyBridge",
+                  "engineNsiscDrift",
+                  "engineBuiltinVersions",
+                  "engineTestPresets.ts helper",
+                  "enginePurity scanDeterminism"
+                ],
+                "rootExports": "17 values + types (see executor report); bridge only at @omniswim/engine/rules/legacyBridge (LEGACY_UNLIMITED, toLegacyScoringSettings)",
+                "pending": {
+                  "nsisc": "individual/relay/diving points (+ relayEligibleFromScorerPool n/a)",
+                  "generic": "21 paths",
+                  "tableC": "smallFieldSession on 1000/1650",
+                  "tableD": "U:85-87 rows (R29)"
+                },
+                "openChoices": [
+                  "divingPerEventScorerCap same-as-swimming (D2 printed {cap:unlimited}, not a valid type value)",
+                  "bridge throws when swim/dive numeric caps differ in overCap",
+                  "D9 cites scoringDefaults.ts:122, statedOn 2026-10-10",
+                  "Table C 23 rows; dive keys 1-Meter/3-Meter Diving",
+                  "bridge not exported from root"
+                ]
+              },
+              "leadChecks": [
+                "golden unchanged",
+                "identity 79/0",
+                "frozen fingerprint hashes intact",
+                "engineBuiltinVersions reads plans/2026-10-25/00-USER-PLAN.md + README.md: both tracked and unmodified",
+                "full gates rerun by lead (--maxWorkers=4): lint 0 (engine tsc+eslint), vitest active 2261/0, legacy 2885/25, scripts 65/0 + 24/1, golden byte-identical; per-file = baseline + 8 new engine test files (builtinVersions 26, fingerprint 109, theoretical 9, legacyBridge 15, model 34, nsiscDrift 5, purity 12, singleInstance 4)",
+                "after fixes, lead reran: identity 79/0; frozen hashes intact; lint 0; vitest active 2268/0, legacy 2885/25; scripts 65/0 + 24/1; golden byte-identical; per-file baseline + 8 engine files (builtinVersions 28, fingerprint 109, theoretical 9, legacyBridge 20, model 34, nsiscDrift 5, purity 12, singleInstance 4)"
+              ],
+              "audit": {
+                "by": "architect (Opus), read-only, 2026-10-26",
+                "verdict": "accept with fixes",
+                "blocking": [
+                  "F1 D9 provenance: statedOn 2026-10-12, source IMPROVEMENT_PLAN_2026-10-10_STATE.json:154 (lead verified)",
+                  "F2 Table D pending text misstates R29 (lead verified README:46)",
+                  "F3 bridge emits settings legacy scorer throws on: own/unlimited dive -> 999 with meet pool; per-event cap 0; numeric per-event cap with meet pool (individualScoring.ts:258-281)"
+                ],
+                "nonBlocking": [
+                  "F4 BUILTIN_TABLE_D is an array (D2 prints single) - deviation, amend D2",
+                  "F5 extra exports parseProvenance, parseSetting, RulePresetErrorCode, RulePresetError.paths - additive, amend D2",
+                  "F6 exhibitionCounts wording"
+                ],
+                "openChoices": {
+                  "a": "right (amend D2 s4)",
+                  "b": "right but incomplete (F3)",
+                  "c": "wrong (F1)",
+                  "d": "right",
+                  "e": "right"
+                },
+                "clean": "scope, parseCap, no ?? fallbacks, no conference, TimeValue|null, stripSwimCloudData, pins, drift 4 exceptions, Table C 23 rows, Table D 19 set rows, generic sha"
+              },
+              "fixes": {
+                "done": "F1 D9 provenance (2026-10-12, IMPROVEMENT_PLAN_2026-10-10_STATE.json:154); F2 Table D pending text quotes R29 (+test vs README:46); F3 bridge refuses cap<1 and per-event cap with meet pool, own/unlimited dive writes nothing beside unlimited swimming (4 tests failed before, pass after; 200 generated presets each score a swim and a dive); F6 exhibitionCounts cites scoringDefaults.ts:85-86",
+                "hashes": {
+                  "nsisc_v1": "d753a428...72348",
+                  "tableD_v1": "ad287084...80359"
+                }
+              }
+            }
+          },
+          "resumePoint": "P1.engine done (uncommitted). Next: P1.skeleton.",
+          "docDebt": [
+            "stale core paths in comments: legacy/backend/pdf_parser.py:40,:1238; README.md:243,:259; data/*/manifest.json descriptions; some test comments"
+          ],
+          "d2Amendments": [
+            "3.12 BUILTIN_TABLE_D is readonly Builtin<TableDPreset>[]",
+            "s4 divingPerEventScorerCap = {kind:same-as-swimming} (R27); {cap:unlimited} is not a valid union value",
+            "3 public API adds parseProvenance, parseSetting, RulePresetErrorCode, RulePresetError.paths",
+            "E5 row 4: engine lint = tsc + eslint (tsc cannot catch a resolvable import)",
+            "E2: content-hash identity vs HEAD instead of R100 (no commits)",
+            "E6 relayScoring 161: 144/0/11/6 (L185 survives pre-move too)",
+            "recorded in D2 section 8 (2026-10-26)"
+          ],
+          "apiSurface": "root @omniswim/engine: values BUILTIN_RULE_PRESETS, BUILTIN_SESSION_PRESETS, BUILTIN_TABLE_D (array), RulePresetError, builtinRulePreset, capAllows, editSetting, entryKey, formatHundredths, parseCap, parseProvenance, parseRulePreset, parseSetting, parseTimeText, pendingPaths, requireComplete, stripSwimCloudData; types per D2 3.1-3.4, 3.6, 3.7, 3.11, 3.12. Subpath ./rules/legacyBridge: LEGACY_UNLIMITED, toLegacyScoringSettings. Extension imports the root only (eslint rule).",
+          "notCommitted": "All P0, D1 and P1.engine work is uncommitted in the main clone; user has not asked for commits.",
+          "crossProviderReview": {
+            "status": "done",
+            "provider": "codex via Orca",
+            "run": "run_7bb00e2eebad",
+            "task": "task_b09d09dbbdbf",
+            "dispatch": "ctx_17225310ce2d",
+            "terminal": "term_0732e751-f61e-4066-97f0-f4794e377f49",
+            "output": "docs/reference/P1_ENGINE_CODEX_REVIEW.md (only file it may write)",
+            "note": "launch quirk again: brief left as unsent draft; sent Enter; now running. Codex quota ~67% remaining (usedPct 33).",
+            "verdict": "accept, no findings",
+            "file": "docs/reference/P1_ENGINE_CODEX_REVIEW.md",
+            "leadNote": "shallow: ~2.5 min, no counterexamples or line citations; counts as the cross-provider sign-off, the Opus architect audit (3 blocking findings, fixed) is the substantive review",
+            "released": true
+          }
         },
         {
           "id": "P1.skeleton",
-          "status": "pending",
-          "owner": "codex or worker"
+          "status": "verified-uncommitted (live unpacked load pending: user)",
+          "owner": "worker (Sonnet)",
+          "agent": "worker ad3bb516c860372bd (resume via SendMessage)",
+          "scope": "D3 section 6 item 1 only: build skeleton, 5 entries, manifest+key, T-B1..T-B9, bridge per D3 2.7 recon outcome (XHR/fetch hook + store read, SimSnapshot incl. simulatedMeet.splashes), overlay validates+logs, optimizer.worker placeholder error, jsdom bridge test. IndexedDB schema v1 (item 2) is a separate later dispatch.",
+          "decisions": [
+            "build:extension -> apps/extension/build.mjs; legacy -> build:extension:legacy; CI build step moves before Test and vitest (T-B3 fails under CI without dist)",
+            "esbuild pinned exactly 0.28.2 (lock version)",
+            "private key at C:/Users/nihar/.omniswim/extension-key.pem, *.pem gitignored",
+            "loads-unpacked check is the user (developer mode is a browser settings change); jsdom test is the automated stand-in"
+          ],
+          "advisor": "plan reviewed 2026-10-26",
+          "workerReport": {
+            "snapshot": "teams[], swimmers|null, swims|null (kind ind/split/leadoff/relay), settings (SETTINGS_KEYS in src/shared/protocol.ts + inactiveSwimmers ids), splashes|null (simulatedMeet.splashes), totalScores|null; null = not loaded yet, never empty",
+            "deviations": [
+              "sim-bridge built with minifyWhitespace+minifySyntax (4906 B vs 5000 cap; 7.1 KB unminified) against D3 2.2 minify:false - ratified by lead (no identifier mangling)",
+              "dist has dashboard.css byproduct (9 files)",
+              "happy-dom instead of jsdom (jsdom not installed)",
+              "schema: points optional; unverified isRelay/isDiving/exhibition dropped; splash id/legposition/relay_id from archived bundle not live capture"
+            ],
+            "found": [
+              "sim-overlay.js ~800 KB, mostly zod: consider zod/mini",
+              "zod new F() probe disabled by z.config({jitless:true}), asserted by a test; T-B7 regex cannot see aliased Function"
+            ]
+          },
+          "leadChecks": [
+            "identity 79/0 and frozen fingerprint hashes intact",
+            "only 17 apps/extension files untracked under apps/; private key at C:/Users/nihar/.omniswim/extension-key.pem, not in repo; *.pem ignored; dist ignored",
+            "ci.yml: new build before Test; legacy build renamed step",
+            "fresh build 0: 5 entries + manifest, dashboard.html, light.css, dashboard.css; bridge 4906 B",
+            "lint 0; vitest active 2301/0 (2268 + extensionBridge 22, freshness 4, boundaries 7), legacy 2885/25; scripts 65/0 + 24/1; legacy build byte-identical bundles; golden byte-identical",
+            "after fixes: identity 79/0; build 0, bridge 4975 B; lint 0; vitest active 2312/0 (extensionBridge 33, freshness 4, boundaries 7), legacy 2885/25; scripts 65/0 + 24/1; golden unchanged"
+          ],
+          "userCheck": "Load unpacked from apps/extension/dist (chrome://extensions, Developer mode). Open https://www.swimcloud.com/meetsimulator/?teams=48,58 with console: expect [OmniSwim] SimSnapshot {...}; [OmniSwim] bridge error = store path changed; dropped a malformed bridge message (reason) = schema mismatch. Toolbar icon opens dashboard tab (host: tab).",
+          "audit": {
+            "by": "architect (Opus), read-only, 2026-10-26",
+            "verdict": "accept with fixes",
+            "findings": [
+              "1 XHR reuse: listeners accumulate, wrong URL label, reads other bodies (reproduced)",
+              "2 schema accepts rows missing Q5 keys; idOf null on missing team/swimmer (reproduced)",
+              "3 fetch(null/undefined) throws synchronously in wrapper; fetch path no status check (reproduced)",
+              "4 overlay no-write test vacuous (happy-dom lacks indexedDB; no chrome spies); Function-block part of jitless test vacuous",
+              "5 .osx-root rule dead (no stylesheet in shadow root); reset deferred to item 4",
+              "6 SimSnapshot lacks meetChanges, rosters, exhibition for P2 parity",
+              "7 legacy/docs string edits outside D3 6 scope list: ratified by lead"
+            ],
+            "clean": "manifest least privilege, CSP, WAR, public key only, T-B1..T-B9 non-vacuous, T-B3 CI order, rename callers, placeholder honest, no invented values"
+          },
+          "ratified": [
+            "bridge minifyWhitespace+minifySyntax (5 KB cap)",
+            "legacy/docs string edits for build:extension:legacy",
+            "sim-bridge also minifyIdentifiers (4975 B; 5768 B without) - cap kept, source readable in repo"
+          ],
+          "fixes": "audit 1-6 done: XHR per-send token + once + responseURL check; required Q5 row keys, missing team/swimmer posts error; fetch URL read in try, native promise unchanged, non-200 -> http-status; no-write test spies chrome.storage/runtime + indexedDB.open; dead .osx-root removed; SimSnapshot adds rosters {swimmers,swims}|null, settings.meetChanges, splash exhibition. 12 bridge tests failed before, pass after.",
+          "risks": [
+            "required splash keys are guesses from the archived bundle (id, eventtime nullable, relay_id/legposition optional): the live load may post a bridge error naming the path - fix the schema from that path, never loosen to optional silently",
+            "sim-overlay.js ~800 KB (zod); consider zod/mini later"
+          ]
+        },
+        {
+          "id": "P1.storage",
+          "status": "verified-uncommitted",
+          "owner": "executor (Sonnet)",
+          "agent": "executor a2afde234ad7aa36e (resume via SendMessage)",
+          "spec": "D3 section 5 + 6 item 2; D2 section 3 type names via @omniswim/engine root",
+          "phases": "a types+schema, b open+migrations (T-M), c repository+change bus, d export/import (T-E), e T-P1",
+          "baseline": "lint 0; active 2312/0; legacy 2885/25; scripts 65/0 + 24/1",
+          "usageNote": "dispatched with Claude 5h window at 77% (resets 2026-10-26T12:20Z = 7:20am Central); if limit hits: log, check tree, resume this agent via SendMessage after reset",
+          "executorReport": {
+            "files": "apps/extension/src/storage/{schema,errors,migrations,open,repo,changeBus,validate,sourceManifests,exportImport,presets,index}.ts",
+            "tests": "extensionStorage{Migrations,Export,Presets,Repo,Validate,Boundary} (+67), fixtures tests/fixtures/extension-db/{v1,v1.expected-current,FROZEN}.json, helpers tests/helpers/extensionDb.ts + extensionRecords.ts (ratified by lead)",
+            "stores": "meta(key), settings(key), rulePresets(id; byName), sessionPresets(id; byName), meets(meetKey; byUpdatedAt), tags([meetKey,teamId,swimmerId]; byMeet), lineups(lineupId; byMeet, byUpdatedAt), swimmerHistory(swimmerId; byFetchedAt), rosters([teamId,seasonId,gender]; byFetchedAt)",
+            "api": "openOmniDb, createStorageRepo (get/list/put/delete/putCache with expectedRev), change bus (memory + chrome.storage), exportData/importData, presets resolve/list/newerBuiltinVersion, validateRecord/assertValidRecord, toSwimCloudId",
+            "gates": "build 0; lint 0; active 2379/0; legacy 2885/25; scripts 65/0 + 24/1",
+            "plants": "16, all caught",
+            "deviationsForArchitect": "a-h (see audit brief)",
+            "found": [
+              "T-B6 storage regex in extensionBundleBoundaries matches nothing (covered by extensionStorageBoundary)",
+              "idb@8 openDB ignores injected factory; async upgrade reject does not abort tx (handled)"
+            ],
+            "notBuilt": "SW osx/storage dispatcher (sw/), settings-read helper"
+          },
+          "audit": {
+            "by": "architect (Opus), read-only",
+            "verdict": "accept with fixes",
+            "blocking": [
+              "open.ts: async migration failure still opens DB at new version (reproduced)",
+              "changeBus: out-of-order/lost notice never recovered (reproduced)"
+            ],
+            "low": [
+              "validateRecord(meta) TypeError",
+              "exportedAt not strict ISO",
+              "export not single transaction",
+              "lineup ids accept 0123",
+              "T-B6 storage regex vacuous"
+            ],
+            "deviationsRuled": "a-h all accepted",
+            "openDecisions": [
+              "P4: rosters memberIds:[] rejected merges verified-empty with never-fetched (CLAUDE.md rule 4) - decide in P4",
+              "P3: teamIds non-empty may reject a draft meet before teams are picked"
+            ],
+            "tracked": [
+              "cache delete (5.7 clear cache) - later phase",
+              "SW osx/storage dispatcher - later phase"
+            ]
+          },
+          "fixes": "audit 1-7 done (8 of 9 new tests failed before, 9/9 after): open awaits migration chain + meta.db.schemaVersion===db.version (new DatabaseInconsistentError); change bus reports MissedChange unknown on rev gap; validateRecord guards store name; strict ISO exportedAt (isStrictIsoInstant); StorageRepo.listMany single-transaction export; lineup ids use SwimCloud id rule; T-B6 storage regex fixed + plant proof",
+          "leadChecks": [
+            "after fixes: identity 79/0; frozen hashes intact; build 0 (bridge 4975 B); lint 0; vitest active 2388/0, legacy 2885/25; scripts 65/0 + 24/1; golden unchanged; per-file baseline unchanged"
+          ]
+        },
+        {
+          "id": "P1.harness",
+          "status": "verified-uncommitted",
+          "owner": "worker (Sonnet)",
+          "agent": "worker a3edf15cdb3f6177d (resume via SendMessage)",
+          "scope": "D3 3 + 6 item 3: HiGHS 1.15.4 in optimizer.worker (2-var fixture solve), docked iframe with nonce + runtime.connect port (SW relay if needed), tests/extension-harness/s3-workers.spec.ts via scripts/run-extension-harness.mjs, synthetic fixture page, all other requests aborted; CSP variants none and default-src self; assertions 1-5 per variant",
+          "baseline": "lint 0; active 2388/0; legacy 2885/25; scripts 65/0 + 24/1",
+          "results": {
+            "variants": {
+              "1 no CSP": "1-6 PASS",
+              "2 default-src self; script-src self": "1-6 PASS"
+            },
+            "port": "chrome.runtime.connect reached the iframe directly on attempt 1; no SW relay needed; foreign nonce rejected",
+            "csp": "docked iframe loads under default-src self: D3 CSP table -> keep docked iframe, no side panel",
+            "timing": "wasm load ~30 ms; LP solve ~25 ms (incl warm-up); MIP ~6.6 ms",
+            "sizes": "highs.wasm 3,531,401; optimizer.worker.js 265,329; dashboard.js 721,959; sim-overlay.js 804,945; sim-bridge.js 4,975; service-worker.js 596"
+          },
+          "leadChecks": [
+            "clean npm ci with hand-edited lock: integrity verified",
+            "fresh build: dist incl highs.wasm",
+            "harness run by lead: both variants all PASS, 0 aborted",
+            "gates: lint 0; active 2398/0; legacy 2885/25; scripts 65/0 + 24/1; golden unchanged; identity 79/0",
+            "cleanup round (2026-10-26) rerun by lead: identity 79/0; fresh build; grep osxHarness over dist/ = no match, present only in dist-harness/dashboard.js; harness 2/2 PASS; lint 0; active 2399/0 (+1 T-B10); legacy 2885/25; scripts 65/0 + 24/1; golden unchanged"
+          ]
+        },
+        {
+          "id": "P1.shadow",
+          "status": "verified-uncommitted",
+          "owner": "worker (Sonnet)",
+          "agent": "worker a2831f9f5adc0bd3d (resume via SendMessage)",
+          "scope": "D3 4 traps 1-8 + tokens; light values only from recon Q15; dark and unrecorded tokens via CSS system colors; accent #rrggbb validated; tests a-f",
+          "resumePoint": "if interrupted: check apps/extension tree, rerun gates, SendMessage the agent",
+          "report": {
+            "files": [
+              "apps/extension/src/shared/theme.ts (new)",
+              "apps/extension/src/overlay/shadowStyle.ts (new)",
+              "overlay/overlay.ts",
+              "overlay/dockedPanel.ts",
+              "dashboard/main.tsx",
+              "static/dashboard.html",
+              "static dashboard.css (tokenCss(:root) output)",
+              "tests/extensionTheme.test.ts (new, a-f + css drift)",
+              "tests/extension-harness/s3-workers.spec.ts step 5"
+            ],
+            "api": "theme.ts: ThemePreference, ResolvedTheme, THEME_ATTRIBUTE, TOKEN_NAMES, LIGHT_TOKENS, DARK_TOKENS, tokenCss(scope), DARK_QUERY, isHexColor, applyAccent(el,hex):boolean, clearAccent(el), bindTheme(el,opts?):ThemeController{preference,resolved,setPreference,dispose}. shadowStyle.ts: ROOT_CLASS, SHADOW_CSS. overlay.ts: mountShadowHost(doc,opts?{theme,matchMedia}), themeOf(host), STOPPED_KEY_EVENTS, ShadowHostOptions.",
+            "deviations": [
+              "extra token --osx-accent-soft (color-mix of accent and surface)",
+              "applyAccent picks accent-fg black/white by WCAG luminance, not color-mix",
+              "an accent override also overrides the dark theme accent",
+              "dark accent = color-mix(#1565C0 65%, CanvasText)",
+              "--osx-good/warn/bad = CanvasText (neutral placeholder): Q15 records none and no system color means them"
+            ],
+            "gaps": [
+              "trap 8: iframe dashboard binds its own theme (always light); no preference crosses the boundary yet. Safe only while both are pinned light. P2/P3 must pass the theme to the iframe (URL param or port message).",
+              "keyboard guard is at the wrapper; a page capture-phase listener on window/document still runs first (inherent)."
+            ],
+            "workerGates": "lint 0; active 2427/0 (2399 + 27 theme + 1 lead bridge test); scripts 65/0; harness 2/2 variants PASS"
+          },
+          "leadReview": "read theme.ts, shadowStyle.ts, overlay.ts, dockedPanel.ts: light values match Q15 exactly; nonce/port code unchanged; files coherent despite reported backup slip",
+          "leadChecks": [
+            "final gate run 2026-10-26 (scratchpad/final/gate.sh): identity 79/0; build 0; probe not in dist; sim-bridge 4,993 B; harness 2/2 PASS; lint 0; vitest active 2427/0; legacy 2885/25; npm test 65/0; per-file compare vs P1_ENGINE_BASELINE OK; legacy scripts 25 entries match baseline",
+            "run was killed by the harness for low memory during test:legacy vitest tail / before golden; NOT restarted (rule). golden-after-F1.json unchanged on disk; no engine change this round"
+          ],
+          "crossReview": "Codex read-only (dispatch ctx_9eecacfbdd8e, no tests run): shadow traps, theme, accent validation, Q15 tokens and tests clean. One minor claim (empty final URL resolves against the page URL) is unreachable: content scripts match only /meetsimulator/*, which never matches ^/api/teams/d+/simulator/$, so an empty URL is refused. No change.",
+          "advisorAudit": "Opus advisor 2026-10-26: no code blocker; asked for scope check (done: only apps/extension, tests/extension*, state; golden byte-identical), D3 section 12 (done), cross-provider review (done), vault (done)."
+        },
+        {
+          "id": "P1.extReview",
+          "status": "done 2026-10-26; findings triaged",
+          "owner": "Codex via Orca (read-only, worktree current)",
+          "run": "run_028800fc49b9",
+          "dispatch": "ctx_4a93ee175805",
+          "terminal": "term_c8fdd10a-92f5-4b6c-aa3f-e2399487c1ad",
+          "brief": "scratchpad codex-ext-review.txt: bridge, shared protocol/schema, storage, optimizer worker/client/port, manifest; overlay excluded (P1.shadow editing)",
+          "resumePoint": "orca orchestration check --json; orca terminal read the terminal; triage findings, reproduce each before fixing",
+          "findings": [
+            "C1 minor, FIXED by lead: XHR response-url error posted the raw final (non-simulator) URL. Now posts the requested simulator URL. Test asserts the final URL never appears in posted messages.",
+            "C2 minor, DEFERRED to P2: optimizer worker accepts unbounded LP text and arbitrary HiGHS options. Only extension pages reach the worker (trusted code). P2 optimizer must cap model size and pin time_limit; recorded in notes.",
+            "Lead found (missed by Codex): fetch path had no final-URL check, so a redirected simulator fetch posted a non-simulator body. FIXED: fetch now fails response-url when sim(r.url) !== u, reads no body. New test; confirmed red without the check."
+          ],
+          "leadChecks": [
+            "tests/extensionBridge 34/34; new fetch test red with check removed, green restored",
+            "sim-bridge.js 4,993 B (budget 5,000; 7 B headroom - next bridge change must shrink something)"
+          ],
+          "note": "Codex review took ~2 min and was shallow (second time). Weight it accordingly."
         }
       ]
     },
@@ -158,22 +580,128 @@
   ],
   "openQuestions": [
     "Q3 New South ISC sources: search the web next session (R32)",
-    "Q4 does the simulator work on a Free account (R30, recon)",
+    "Q4 answered by recon: simulator works signed out (Free plan inferred to work)",
     "Q6 approve extra fetches after recon (R31)",
-    "Q-D1 rest: points per place (recon Q17)",
-    "Q-D2 rest: archive SwimSwam factors for 400-500, 800-1000, 1500-1650 if SwimCloud has no conversion (R29)"
+    "Q-D1 rest: SwimCloud 16-place table equals code TOP16 (recon Q17); SwimCloud has no relays-scoring or A-final rule; R25/R26 stay the sources",
+    "Q-D2 rest: archive SwimSwam factors for 400-500, 800-1000, 1500-1650 if SwimCloud has no conversion (R29)",
+    "Q-NSISC-points (for the user, 2026-10-26): Is NSISC scoring exactly 20-17-16-15-14-13-12-11-9-7-6-5-4-3-2-1 individual and diving, relays x2 (40-34-32-...), ties split? R15 said SwimCloud holds the NSISC table; recon Q17 found SwimCloud has no NSISC preset (its scoring16 has these values, but a JS bundle is parity reference, not a source). Observed evidence: data/meets.json workspace 1, loadedMeet 2026_NSISC_Championships_Final_Results.pdf, parsed points per place match that table in every individual and diving event, relay rows carry quarter credits 10/8.5/8/7.5 (= 40/34/32/30 / 4), and ties split (200 IM M 12th 4.5/4.5). Until answered, engine nsisc v1 keeps individual/relay/diving points pending; a yes becomes nsisc v2 (builtin version pin).",
+    {
+      "id": "Q-semantic-colors",
+      "asked": "2026-10-26",
+      "question": "Q15 records no good/warn/bad color and SwimCloud has none to copy. Pick a source for --osx-good/--osx-warn/--osx-bad (or approve a named palette). Until then they are CanvasText and no UI may use them to tell states apart.",
+      "blocks": "any P2+ UI that colors cut tags or warnings"
+    }
   ],
   "resumeOrder": [
-    "P0 (Claude in Chrome now connects; recon first)",
-    "P1.engine (D2 steps 0/A/B/C; needs no recon)",
-    "D1 (finish after recon Q19-21)",
-    "P1.skeleton (after recon)"
+    "user: live unpacked load check (instructions given 2026-10-26); lead fixes findings",
+    "lead: apply answers (nsisc v2, Material 800 colors, verified-empty rosters, draft meets, zod/mini, class-year override field, SwimSwam archive, width measurement)",
+    "P2 per plan, with history-fetch and recruit answers folded into the P2+ design"
   ],
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
     "oyster has an uncommitted PROVIDER_ROUTING.json change and untracked .opencode/ files; not part of PR #7.",
     "PR #8 CI run 40259528508 passed (2026-10-26T02:44Z, 13m07s): every step green. Active vitest 2031 passed / 16 skipped, ci budget 16. Legacy vitest 2881 / 29, ci budget 29. Active scripts 63 / 2 skipped; legacy scripts 25 / 0 (the local skip runs in CI, Postgres service healthy). pytest 63 passed. Extension harness 7 passed. Build and extension build green.",
-    "P3 legacy behavior changes from R37/R41/R42, each with a failing test first and a golden update: non-scorers removed from places (D2 F18), relay legs checked against the roster (F19), no hardcoded relay limit (F17). Drift-test exceptions listed in D2 section 4."
+    "P3 legacy behavior changes from R37/R41/R42, each with a failing test first and a golden update: non-scorers removed from places (D2 F18), relay legs checked against the roster (F19), no hardcoded relay limit (F17). Drift-test exceptions listed in D2 section 4.",
+    "2026-10-25: D2 Step 0 says commit E1 hashes; no commits this session, so the E1 test and hashes stay uncommitted and frozen after dispatch A.",
+    "P2 optimizer requirement (from Codex review C2, 2026-10-26): bound LP size and pin a HiGHS time_limit in the worker; do not let callers override output_flag or time_limit without a cap."
   ],
-  "decisionsAdded": "R14-R19 recorded 2026-10-25 (second user message): flyover user number; NSISC SwimCloud table, no per-event scorer cap; event order editable on simulator page; sessions advisory, prelims AM/finals later, timed finals; OpenCode added; Chrome fallback in plan section 12; R20-R33 recorded 2026-10-25 (third user message): split timed finals for 1000/1650, auto scorers with tag overrides, diving excluded from load, Table D truncate, team size 18, 2 scoring relays, A final 8, diving cap unlimited, relay swimmer takes a full scoring-team spot (not the halfRateRelaySwimmer flag), Table D distance rows dropped for SwimCloud then SwimSwam, Free SwimCloud account, Q6 after recon, search NSISC docs, keep omniswim-suite/data and all worktrees; R34-R44 recorded 2026-10-25 (fourth user message): relay share 1/4, fast heat top 8 seeds (small field per meet), relays evening timed finals, relay scores only with all four legs on the scoring team, auto scorers from A/B finals plus relay legs plus any split-timed-final heat (roster wins), non-scorers removed from places (legacy differs, D2 F18), relay limit is a setting (F17), A/B finals scorers only, C final 8 fastest non-scorers"
+  "decisionsAdded": "R14-R19 recorded 2026-10-25 (second user message): flyover user number; NSISC SwimCloud table, no per-event scorer cap; event order editable on simulator page; sessions advisory, prelims AM/finals later, timed finals; OpenCode added; Chrome fallback in plan section 12; R20-R33 recorded 2026-10-25 (third user message): split timed finals for 1000/1650, auto scorers with tag overrides, diving excluded from load, Table D truncate, team size 18, 2 scoring relays, A final 8, diving cap unlimited, relay swimmer takes a full scoring-team spot (not the halfRateRelaySwimmer flag), Table D distance rows dropped for SwimCloud then SwimSwam, Free SwimCloud account, Q6 after recon, search NSISC docs, keep omniswim-suite/data and all worktrees; R34-R44 recorded 2026-10-25 (fourth user message): relay share 1/4, fast heat top 8 seeds (small field per meet), relays evening timed finals, relay scores only with all four legs on the scoring team, auto scorers from A/B finals plus relay legs plus any split-timed-final heat (roster wins), non-scorers removed from places (legacy differs, D2 F18), relay limit is a setting (F17), A/B finals scorers only, C final 8 fastest non-scorers",
+  "userAnswers": [
+    {
+      "id": "Q-NSISC-points",
+      "answered": "2026-10-26",
+      "answer": "User: yes, exactly 20-17-16-15-14-13-12-11-9-7-6-5-4-3-2-1 individual and diving, relays x2, ties split. User adds: SwimCloud 16-place scoring preset matches it.",
+      "action": "engine nsisc v2 with provenance user-stated (2026-10-26) + 2026 NSISC results PDF evidence; SwimCloud scoring16 as parity reference"
+    },
+    {
+      "id": "Q-semantic-colors",
+      "answered": "2026-10-26",
+      "answer": "Material 800: good #2E7D32, warn #EF6C00, bad #C62828",
+      "action": "theme.ts light tokens; provenance user-chosen, not Q15; dark derives via color-mix"
+    },
+    {
+      "id": "Q6",
+      "answered": "2026-10-26",
+      "answer": "Extra SwimCloud requests only on a user click: one at a time, no background fetches, stop on any Cloudflare challenge"
+    },
+    {
+      "id": "Q-D2",
+      "answered": "2026-10-26",
+      "answer": "Approved: archive SwimSwam conversion factors for 400-500, 800-1000, 1500-1650 once, with manifest {url, sha256, retrievedAt}"
+    },
+    {
+      "id": "S2-intent",
+      "answered": "2026-10-26",
+      "answer": "User (verbatim intent): apply the date range so you can search an athlete's history in the selected event and project performance against the simulator field. The wide range also pulls in former swimmers not on the current roster; the expanded range is meant to pull historical swims only for athletes on the CURRENT season roster. Transitive to recruits: add a swimmer, project from their history, with conversions, historical swims, and rebuild the scoring roster if a recruit presents an edge. Swimmer 1130590 transferred into Henderson State, is a senior this year (SwimCloud lists otherwise); their 2022-23 swims were at a different school.",
+      "implication": "Team-scoped swims (recon Q8) mean a transfer's prior-school swims never arrive in a team simulator request. Full history needs per-swimmer requests (Q6: user click only). The 1130590 profile check cannot settle the 3-year clamp. Filter any wide team window to current-season roster members. SwimCloud class year can be wrong: needs a user override."
+    },
+    {
+      "id": "Q16",
+      "answered": "2026-10-26",
+      "answer": "Lead may un-maximize the user Chrome window, measure SwimCloud at 1280 and 390 px read-only, then restore it"
+    },
+    {
+      "id": "P4-empty-roster",
+      "answered": "2026-10-26",
+      "answer": "Allow memberIds:[] marked verified-empty with fetchedAt and source, distinct from not loaded"
+    },
+    {
+      "id": "P3-draft-meets",
+      "answered": "2026-10-26",
+      "answer": "Allow teamIds:[] as status draft; scoring and optimizer refuse a draft"
+    },
+    {
+      "id": "history-fetch",
+      "answered": "2026-10-26",
+      "answer": "One click per roster: Load history fetches each current-roster swimmer history sequentially, slow, with progress, cached (never refetch), stop on any Cloudflare challenge"
+    },
+    {
+      "id": "class-year",
+      "answered": "2026-10-26",
+      "answer": "Source class year from SwimCloud automatically; user may select and change it; the user value is stored, marked user-set, and wins"
+    },
+    {
+      "id": "recruit-id",
+      "answered": "2026-10-26",
+      "answer": "Recruits are added by SwimCloud swimmer link/ID only (not manual times, not legacy import)"
+    },
+    {
+      "id": "recruit-rebuild",
+      "answered": "2026-10-26",
+      "answer": "Rerun the optimizer with the recruit added; show point change and event moves; nothing changes until the user accepts"
+    },
+    {
+      "id": "zod-size",
+      "answered": "2026-10-26",
+      "answer": "Switch sim-overlay validation to zod/mini"
+    },
+    {
+      "id": "commit",
+      "answered": "2026-10-26",
+      "answer": "One commit per P0/P1 item on nvitthanala/extension-redesign"
+    },
+    {
+      "id": "push",
+      "answered": "2026-10-26",
+      "answer": "Push to draft PR #8 after committing"
+    },
+    {
+      "id": "next",
+      "answered": "2026-10-26",
+      "answer": "User does the live load check first and reports back; lead fixes what it finds; then move forward"
+    }
+  ],
+  "commits": [
+    {
+      "date": "2026-10-26",
+      "approvedBy": "user (area commits, push to PR #8)",
+      "shas": {
+        "docs+recon fixtures": "cfe894e7",
+        "engine extraction": "3eb39255",
+        "extension app": "d301d4e4",
+        "state file": "this commit"
+      },
+      "note": "Only the tip is verified green; intermediate commits share package.json/lock/eslint and are not tested alone (user accepted)."
+    }
+  ]
 }
