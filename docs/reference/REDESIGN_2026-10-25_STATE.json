@@ -891,7 +891,7 @@
     "review": "Codex ctx_0c99fe7da53e: one defect (fixed gender), fixed with red test; rest clean",
     "gates": "lint ok; vitest 2577; npm test 65/0; golden clean",
     "followUps": [
-      "docs/INVARIANTS.md #10 and #11 wording check against R61",
+      "CLOSED: docs/INVARIANTS.md #10 and #11 note the engine LCM truncation and the R61 estimated-achieved tag",
       "CLOSED: storage validate.ts checks tool-derived archive path and sha against the archives the engine built-ins cite",
       "pickers must hide built-ins with retired set (presets.ts latestBuiltins)",
       "nothing in the extension calls the new conversion/cut functions yet (P4)"
