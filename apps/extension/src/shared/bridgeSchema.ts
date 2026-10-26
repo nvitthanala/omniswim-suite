@@ -45,21 +45,26 @@ const swimmer = z.object({
  * eventgender, numlegs, eventtime, flystart and pointvalue. A key is required here, so a row with a
  * hole is dropped. `null` is accepted only for `flystart` and `pointvalue`, which recon saw as null
  * on relay splits and relay rows.
+ *
+ * Exception, from the live store (2026-10-26, teams 48 and 58): a relay row (`kind: 'relay'`) has no
+ * `flystart` key at all. Only a relay row may omit it; every other kind must carry it.
  */
-const swim = z.object({
-  kind: z.enum(['ind', 'split', 'leadoff', 'relay']),
-  teamId: z.number(),
-  swimmerId: id.nullable(),
-  id,
-  eventstroke: z.string(),
-  eventdistance: num,
-  eventcourse: z.string(),
-  eventgender: z.string(),
-  numlegs: num,
-  eventtime: num,
-  flystart: z.boolean().nullable(),
-  pointvalue: num.nullable(),
-});
+const swim = z
+  .object({
+    kind: z.enum(['ind', 'split', 'leadoff', 'relay']),
+    teamId: z.number(),
+    swimmerId: id.nullable(),
+    id,
+    eventstroke: z.string(),
+    eventdistance: num,
+    eventcourse: z.string(),
+    eventgender: z.string(),
+    numlegs: num,
+    eventtime: num,
+    flystart: z.boolean().nullable().optional(),
+    pointvalue: num.nullable(),
+  })
+  .refine((s) => s.kind === 'relay' || s.flystart !== undefined, { message: 'flystart is required unless kind is relay', path: ['flystart'] });
 
 /**
  * One entry the page chose, from `simulatedMeet.splashes` (recon Q14). Recon saw the entry summaries,

@@ -152,7 +152,15 @@ no fallback needed. Evidence names:
    `id, eventstroke, eventdistance, eventcourse, eventgender, numlegs,
    eventtime (string seconds, "108.13"), flystart (bool), pointvalue
    (string, SwimCloud power points)`. **No swim date and no meet id.** A
-   relay row has the same fields and no legs. Henderson State men, season
+   relay row has the same fields and no legs.
+   **Correction (live store, 2026-10-26, teams 48 and 58):** a relay row
+   has **no `flystart` key**. It carries the other eight fields plus a
+   `team` reference. `flystart` was never null on any row: `true` on 94
+   relay splits, `false` on 256 individual rows and 44 leadoffs.
+   `pointvalue` was null on all 94 splits and on 6 individual rows. The
+   live load check found this: the bridge required nine keys on relay
+   rows and posted `store-shape: missing store path:
+   origRosters.48.relays.flystart`. Henderson State men, season
    2026-27 (2026-10-25): 42 swimmers, 166 individual rows, 54 relay splits,
    26 leadoffs, 5 relays, 63,605 B. Other requests: `GET
    /api/seasonchoices/?count=10&from_next=false` (10 seasons, 2017-18 to

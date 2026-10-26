@@ -63,7 +63,12 @@ function inflateRoster(file: string, team: Obj): Obj {
     swimmer.relayleadoffs = wrap(s.relayleadoffs as Row[]);
     return swimmer;
   });
-  const relays = raw.relays.map((r) => ({ ...rowToObject(r), team }));
+  // Live store, 2026-10-26 (teams 48 and 58): a relay row has no `flystart` key at all. The fixture's
+  // positional null is only the array format, so drop the key here to match the page.
+  const relays = raw.relays.map((r) => {
+    const { flystart: _absent, ...row } = rowToObject(r);
+    return { ...row, team };
+  });
   return { swimmers, relays };
 }
 
@@ -494,14 +499,47 @@ describe('sim-bridge: Redux store (D3 2.7)', () => {
     }
   });
 
-  it('keeps null where the live data is null (pointvalue and flystart)', async () => {
+  it('accepts a relay row with no flystart key, as the live store has it, and posts it without one', async () => {
+    const h = makeWindow();
+    installBridge(h.win, { debounceMs: 5, deadlineMs: 5_000 });
+    const state = buildState();
+    const relays = ((state.origRosters as Obj)[48] as { relays: Obj[] }).relays;
+    expect(relays.length).toBeGreaterThan(0);
+    expect(relays.every((r) => !('flystart' in r)), 'the fixture must match the live relay shape').toBe(true);
+    mountSimulator(h.win, fakeStore(state));
+    await sleep(25);
+    expect(ofKind(h, 'error')).toHaveLength(0);
+    const [message] = ofKind(h, 'snapshot') as Array<{ snapshot: { swims: Obj[] } }>;
+    const relayRows = message!.snapshot.swims.filter((s) => s.kind === 'relay');
+    expect(relayRows.length).toBeGreaterThan(0);
+    expect(relayRows.every((s) => !('flystart' in s)), 'a relay row gained a flystart the page never had').toBe(true);
+  });
+
+  it('still posts an error when a relay row lacks any of its eight keys', async () => {
+    for (const key of ['id', 'eventstroke', 'eventdistance', 'eventcourse', 'eventgender', 'numlegs', 'eventtime', 'pointvalue']) {
+      const h = makeWindow();
+      installBridge(h.win, { debounceMs: 5, deadlineMs: 5_000 });
+      const broken = buildState();
+      delete ((broken.origRosters as Obj)[58] as { relays: Obj[] }).relays[0]![key];
+      mountSimulator(h.win, fakeStore(broken));
+      await sleep(25);
+      expect(ofKind(h, 'snapshot'), `a relay row without ${key} was posted`).toHaveLength(0);
+      expect(ofKind(h, 'error')).toMatchObject([{ code: 'store-shape', detail: expect.stringContaining(`relays.${key}`) }]);
+    }
+  });
+
+  // Live store, 2026-10-26 (teams 48 and 58): pointvalue is null on relay splits and some individual
+  // rows; flystart is never null (true on splits, false on individual and leadoff rows).
+  it('keeps null where the live data is null (pointvalue), and flystart as the page holds it', async () => {
     const h = makeWindow();
     installBridge(h.win, { debounceMs: 5, deadlineMs: 5_000 });
     mountSimulator(h.win, fakeStore(buildState()));
     await sleep(25);
     const [message] = ofKind(h, 'snapshot') as Array<{ snapshot: { swims: Obj[] } }>;
-    expect(message?.snapshot.swims.some((s) => s.pointvalue === null)).toBe(true);
-    expect(message?.snapshot.swims.some((s) => s.flystart === null)).toBe(true);
+    const swims = message!.snapshot.swims;
+    expect(swims.some((s) => s.pointvalue === null)).toBe(true);
+    expect(swims.filter((s) => s.kind === 'split').every((s) => s.flystart === true)).toBe(true);
+    expect(swims.filter((s) => s.kind === 'ind' || s.kind === 'leadoff').every((s) => s.flystart === false)).toBe(true);
   });
 
   it('posts an error when a splash lacks its team, id or time, or an individual or leg splash lacks its swimmer', async () => {
@@ -628,7 +666,7 @@ describe('sim-bridge: Redux store (D3 2.7)', () => {
     installBridge(h.win, { deadlineMs: 40 });
     mountSimulator(h.win, { notAStore: true });
     await sleep(80);
-    expect(ofKind(h, 'error')).toMatchObject([{ code: 'store-not-found', detail: expect.stringContaining('no react-redux Provider store') }]);
+    expect(ofKind(h, 'error')).toMatchObject([{ code: 'store-not-found', detail: expect.stringContaining('no Provider store') }]);
   });
 
   it('says so when #simulator never mounts', async () => {
@@ -742,6 +780,9 @@ describe('sim-overlay: validates every bridge message (bridge trust rule)', () =
       ['swim id', { swims: strip(good.snapshot.swims, 'id', individual) }],
       ['swim eventcourse', { swims: strip(good.snapshot.swims, 'eventcourse', individual) }],
       ['swim numlegs', { swims: strip(good.snapshot.swims, 'numlegs', individual) }],
+      // Only a relay row may omit flystart (live store, 2026-10-26).
+      ['individual swim flystart', { swims: strip(good.snapshot.swims, 'flystart', individual) }],
+      ['split swim flystart', { swims: strip(good.snapshot.swims, 'flystart', (r) => r.kind === 'split') }],
       ['rosters swim eventgender', { rosters: { swimmers: [], swims: strip(good.snapshot.rosters.swims, 'eventgender', individual) } }],
       ['splash eventtime', { splashes: strip(good.snapshot.splashes, 'eventtime', splash) }],
       ['splash eventcourse', { splashes: strip(good.snapshot.splashes, 'eventcourse', splash) }],

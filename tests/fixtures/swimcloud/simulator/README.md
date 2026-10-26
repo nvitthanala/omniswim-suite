@@ -15,7 +15,7 @@ men's field.
 
 | File | What it holds |
 | --- | --- |
-| `team-58.json`, `team-48.json`, `team-412.json` | One `GET /api/teams/{id}/simulator/` response per team, sanitized. Rows are `[eventstroke, eventdistance, eventcourse, eventtime, pointvalue, flystart]`. |
+| `team-58.json`, `team-48.json`, `team-412.json` | One `GET /api/teams/{id}/simulator/` response per team, sanitized. Rows are `[eventstroke, eventdistance, eventcourse, eventtime, pointvalue, flystart]`. A relay row's `flystart` column is `null` only because of this array format: the live row has no `flystart` key (checked 2026-10-26). Tests drop the key when they rebuild relay rows. |
 | `config-A.json` | Dual meet 58 v 48, page defaults (16 Event Order: College points 9-4-3-2-1 / 11-4-2, 3 scorers per team, 3 per athlete, 3 per team). SwimCloud total 58: 186, 48: 102. |
 | `config-B.json` | 58 + 48 + 412, page defaults. Totals 58: 138, 412: 92, 48: 70. |
 | `config-C.json` | B with 16 Place Scoring, 4 scorers per team, individual 4 per team. Totals 58: 849, 412: 777, 48: 575. |

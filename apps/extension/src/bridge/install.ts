@@ -37,8 +37,10 @@ export interface BridgeOptions {
   deadlineMs?: number;
 }
 
-// Recon Q5: every swim row carries all nine. null is allowed only where live data is null (pointvalue, flystart).
-const ROW = 'id eventstroke eventdistance eventcourse eventgender numlegs eventtime flystart pointvalue'.split(' ');
+// Recon Q5: every swimmer row (ind, split, leadoff) carries all nine. null is allowed only where live
+// data is null (pointvalue, flystart). A relay row has no `flystart` key at all (live store, 2026-10-26),
+// so it must carry the first eight: flystart stays last for that slice.
+const ROW = 'id eventstroke eventdistance eventcourse eventgender numlegs eventtime pointvalue flystart'.split(' ');
 // Splashes are page-made copies (aggregate relays are built client-side) and recon saw only their entry
 // summaries. Require what the Q13 sort needs. The rest is unverified on splashes, so it stays optional:
 // points (missing past the table and on legs), relay_id, legposition, exhibition.
@@ -81,7 +83,7 @@ function flat(m: unknown, n: string): { swimmers: O[]; swims: O[] } | null {
         for (const w of arr(s[key], p + key)) swims.push({ ...pick(w, ROW, p + key), kind, teamId, swimmerId: s.id });
       }
     }
-    for (const w of arr((r as O).relays, p + 'relays')) swims.push({ ...pick(w, ROW, p + 'relays'), kind: 'relay', teamId, swimmerId: null });
+    for (const w of arr((r as O).relays, p + 'relays')) swims.push({ ...pick(w, ROW.slice(0, 8), p + 'relays'), kind: 'relay', teamId, swimmerId: null });
   }
   return { swimmers, swims };
 }
@@ -228,7 +230,7 @@ export function installBridge(win: Window & typeof globalThis, opts: BridgeOptio
       const s = f.memoizedProps?.store;
       if (s && typeof s.getState === 'function' && typeof s.subscribe === 'function') return s;
     }
-    why = 'no react-redux Provider store within 8 fibers of #simulator';
+    why = 'no Provider store in 8 fibers';
     return undefined;
   };
   let timer: ReturnType<typeof setTimeout> | undefined;
