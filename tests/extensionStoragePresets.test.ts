@@ -12,6 +12,7 @@ import { BUILTIN_RULE_PRESETS, BUILTIN_SESSION_PRESETS, builtinRulePreset } from
 import { createStorageRepo } from '../apps/extension/src/storage/repo';
 import { openOmniDb } from '../apps/extension/src/storage/open';
 import {
+  latestBuiltins,
   listRulePresetChoices,
   listSessionPresetChoices,
   newerBuiltinVersion,
@@ -35,7 +36,8 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
 
     const choices = await listRulePresetChoices(repo);
     expect(choices.map(c => c.label)).toEqual(['NSISC', 'Generic NCAA championship']);
-    expect(choices[0]).toEqual({ source: 'builtin', ref: { kind: 'builtin', id: 'nsisc', version: 1 }, label: 'NSISC' });
+    // The picker offers the newest version of each built-in only (nsisc v2, R45); v1 stays resolvable by ref.
+    expect(choices[0]).toEqual({ source: 'builtin', ref: { kind: 'builtin', id: 'nsisc', version: 2 }, label: 'NSISC' });
     expect(choices.every(c => c.source === 'builtin')).toBe(true);
     const sessions = await listSessionPresetChoices(repo);
     expect(sessions.map(c => c.ref)).toEqual([{ kind: 'builtin', id: 'nsisc-table-c', version: 1 }]);
@@ -63,7 +65,9 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
 
   it('an unknown ref resolves to {found:false}: no fallback version, no empty preset', async () => {
     const { db, repo } = await fresh();
-    expect(await resolveRulePreset(repo, { kind: 'builtin', id: 'nsisc', version: 2 })).toEqual({ found: false });
+    expect(await resolveRulePreset(repo, { kind: 'builtin', id: 'nsisc', version: 99 })).toEqual({ found: false });
+    // An older version is not offered by the picker but still resolves to itself, never to v2.
+    expect(await resolveRulePreset(repo, { kind: 'builtin', id: 'nsisc', version: 1 })).toEqual({ found: true, value: builtinRulePreset('nsisc', 1) });
     expect(await resolveRulePreset(repo, { kind: 'builtin', id: 'nope', version: 1 })).toEqual({ found: false });
     expect(await resolveRulePreset(repo, { kind: 'user', id: 'gone' })).toEqual({ found: false });
     expect(await resolveSessionPreset(repo, { kind: 'builtin', id: 'nsisc-table-c', version: 1 })).toMatchObject({ found: true });
@@ -82,9 +86,22 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
     expect(newerBuiltinVersion('rule', { builtinId: 'generic', builtinVersion: 1 }, registry)).toBeNull();
     expect(newerBuiltinVersion('rule', { builtinId: 'removed', builtinVersion: 1 }, registry)).toBeNull();
     expect(newerBuiltinVersion('rule', undefined, registry)).toBeNull();
-    // Against the engine's own registry today: every built-in is at v1, so nothing is newer.
-    for (const b of BUILTIN_RULE_PRESETS) expect(newerBuiltinVersion('rule', { builtinId: b.id, builtinVersion: b.version })).toBeNull();
-    for (const b of BUILTIN_SESSION_PRESETS) expect(newerBuiltinVersion('session', { builtinId: b.id, builtinVersion: b.version })).toBeNull();
+    // Against the engine's own registry: a copy of the newest version of each built-in is current.
+    for (const b of latestBuiltins(BUILTIN_RULE_PRESETS)) expect(newerBuiltinVersion('rule', { builtinId: b.id, builtinVersion: b.version })).toBeNull();
+    for (const b of latestBuiltins(BUILTIN_SESSION_PRESETS)) expect(newerBuiltinVersion('session', { builtinId: b.id, builtinVersion: b.version })).toBeNull();
+    // A copy of nsisc v1 (points pending) is told that v2 exists.
+    expect(newerBuiltinVersion('rule', { builtinId: 'nsisc', builtinVersion: 1 })).toBe(2);
+  });
+
+  it('latestBuiltins keeps the newest version of each id, in registry order', () => {
+    const registry = [
+      { id: 'a', version: 1 },
+      { id: 'b', version: 1 },
+      { id: 'a', version: 3 },
+      { id: 'a', version: 2 },
+    ];
+    expect(latestBuiltins(registry)).toEqual([{ id: 'b', version: 1 }, { id: 'a', version: 3 }]);
+    expect(latestBuiltins(BUILTIN_RULE_PRESETS).map(b => `${b.id}@${b.version}`)).toEqual(['nsisc@2', 'generic@1']);
   });
 
   it('no storage code seeds a built-in: only presets.ts reads the registries, and it never writes', () => {

@@ -19,15 +19,24 @@ export type PresetChoice =
   | { readonly source: 'builtin'; readonly ref: Extract<PresetRef, { kind: 'builtin' }>; readonly label: string }
   | { readonly source: 'user'; readonly ref: Extract<PresetRef, { kind: 'user' }>; readonly label: string; readonly rev: number };
 
-/** Every built-in rule preset, then every stored user rule preset. A fresh install lists only built-ins. */
+/**
+ * The newest version of each built-in id, in registry order. A picker offers only these: an older
+ * version (nsisc v1, whose points are pending) stays resolvable by its ref for anything saved
+ * against it, and a user copy of it shows "v2 available" (D3 5.8).
+ */
+export function latestBuiltins<B extends { readonly id: string; readonly version: number }>(registry: readonly B[]): B[] {
+  return registry.filter(b => !registry.some(o => o.id === b.id && o.version > b.version));
+}
+
+/** The newest version of every built-in rule preset, then every stored user rule preset. A fresh install lists only built-ins. */
 export async function listRulePresetChoices(repo: StorageRepo): Promise<PresetChoice[]> {
-  const builtins = BUILTIN_RULE_PRESETS.map((b): PresetChoice => ({ source: 'builtin', ref: { kind: 'builtin', id: b.id, version: b.version }, label: b.label }));
+  const builtins = latestBuiltins(BUILTIN_RULE_PRESETS).map((b): PresetChoice => ({ source: 'builtin', ref: { kind: 'builtin', id: b.id, version: b.version }, label: b.label }));
   const users = (await repo.list('rulePresets', undefined)) as RulePresetRecord[];
   return [...builtins, ...users.sort((a, b) => a.name.localeCompare(b.name)).map((u): PresetChoice => ({ source: 'user', ref: { kind: 'user', id: u.id }, label: u.name, rev: u.rev }))];
 }
 
 export async function listSessionPresetChoices(repo: StorageRepo): Promise<PresetChoice[]> {
-  const builtins = BUILTIN_SESSION_PRESETS.map((b): PresetChoice => ({ source: 'builtin', ref: { kind: 'builtin', id: b.id, version: b.version }, label: b.label }));
+  const builtins = latestBuiltins(BUILTIN_SESSION_PRESETS).map((b): PresetChoice => ({ source: 'builtin', ref: { kind: 'builtin', id: b.id, version: b.version }, label: b.label }));
   const users = (await repo.list('sessionPresets', undefined)) as SessionPresetRecord[];
   return [...builtins, ...users.sort((a, b) => a.name.localeCompare(b.name)).map((u): PresetChoice => ({ source: 'user', ref: { kind: 'user', id: u.id }, label: u.name, rev: u.rev }))];
 }

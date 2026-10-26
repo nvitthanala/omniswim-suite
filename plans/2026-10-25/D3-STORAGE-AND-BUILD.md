@@ -625,6 +625,11 @@ reach existing installs. A user copy records `derivedFrom`; when the built-in's
 T-P1: on a fresh DB, `list('rulePresets')` is empty and the picker still
 offers NSISC.
 
+The picker offers only the newest version of each built-in id
+(`latestBuiltins` in `apps/extension/src/storage/presets.ts`). Since
+2026-10-26 that is `nsisc` v2. An older version is not offered, but its ref
+still resolves to that exact version, never to a newer one.
+
 ---
 
 ## 6. Scope for the executor
