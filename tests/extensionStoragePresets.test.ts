@@ -63,6 +63,22 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
     db.close();
   });
 
+  it('a stored v1 user preset resolves as payload v2 with ties pending, never a guessed tie rule', async () => {
+    const { db, repo } = await fresh();
+    const base = withoutRev(fixtureRecord<RulePresetRecord>('rulePresets', 0));
+    expect((base.payload as { payloadVersion: number }).payloadVersion).toBe(1);
+    await repo.put('rulePresets', { ...base, id: 'u-v1' }, 'new');
+    const got = await resolveRulePreset(repo, { kind: 'user', id: 'u-v1' });
+    expect(got.found).toBe(true);
+    if (!got.found) throw new Error('expected the stored preset');
+    expect(got.value.payloadVersion).toBe(2);
+    expect(got.value.scoring.ties.state).toBe('pending');
+    // Every other setting is carried over unchanged.
+    const { ties: _ties, ...scoring } = got.value.scoring;
+    expect(scoring).toEqual((base.payload as unknown as RulePresetRecord['payload']).scoring);
+    db.close();
+  });
+
   it('an unknown ref resolves to {found:false}: no fallback version, no empty preset', async () => {
     const { db, repo } = await fresh();
     expect(await resolveRulePreset(repo, { kind: 'builtin', id: 'nsisc', version: 99 })).toEqual({ found: false });

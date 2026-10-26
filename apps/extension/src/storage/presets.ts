@@ -9,7 +9,7 @@
  * installs. A user copy records `derivedFrom`. This file only reads the engine's registry and
  * the repo; it writes nothing.
  */
-import { BUILTIN_RULE_PRESETS, BUILTIN_SESSION_PRESETS, builtinRulePreset } from '@omniswim/engine';
+import { BUILTIN_RULE_PRESETS, BUILTIN_SESSION_PRESETS, builtinRulePreset, parseRulePreset } from '@omniswim/engine';
 import type { RulePreset, SessionPreset } from '@omniswim/engine';
 import type { StorageRepo } from './repo';
 import type { PresetRef, RulePresetRecord, SessionPresetRecord } from './schema';
@@ -53,7 +53,9 @@ export async function resolveRulePreset(repo: StorageRepo, ref: PresetRef): Prom
     return value === undefined ? { found: false } : { found: true, value };
   }
   const got = await repo.get('rulePresets', ref.id);
-  return got.found ? { found: true, value: got.value.payload, rev: got.value.rev } : { found: false };
+  // A preset saved before payload v2 migrates on read, with `ties` pending: no tie rule is assumed, so
+  // it cannot score until someone sets one (D2 3.4). A payload the parser refuses throws.
+  return got.found ? { found: true, value: parseRulePreset(got.value.payload), rev: got.value.rev } : { found: false };
 }
 
 export async function resolveSessionPreset(repo: StorageRepo, ref: PresetRef): Promise<ResolvedPreset<SessionPreset>> {
