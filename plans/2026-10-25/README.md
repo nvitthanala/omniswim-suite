@@ -34,7 +34,7 @@ the SwimCloud meet simulator, plus a dashboard inside the extension.
 | R17 | Sessions and load | A session has no meet-imposed race limit. The load limit protects swimmers' performance; it is a coach preference. Prelims usually swim in the morning and finals later the same day. Timed-final events (usually the distance events) swim once. Each event's format (prelims/finals or timed final) is a setting. |
 | R18 | OpenCode | Add OpenCode to the provider pool for this work ("more resources to knock out the work"). This is the user approval the routing file's OpenCode `availableNote` asked for. |
 | R19 | Chrome | The user will start a new session with Claude in Chrome running. The plan carries a fallback for getting the extension connected. |
-| R20 | Distance events (Q-D3) | The 1000 and 1650 are **timed finals, split**: slower heats swim in the morning, the fastest heat swims in the evening. Each swimmer swims once, and the event scores as a timed final. The fastest-heat size (lane count) is a meet setting; it ships as pending. |
+| R20 | Distance events (Q-D3) | The 1000 and 1650 are **timed finals, split**: slower heats swim in the morning, the fastest heat swims in the evening. Each swimmer swims once, and the event scores as a timed final. The fastest-heat size is set by R35. |
 | R21 | Scorers (Q-D1) | Scorers are picked automatically. The coach's tags override the automatic pick. |
 | R22 | Diving and load (Q-D5) | Diving does not count toward the races-per-session preference. |
 | R23 | Table D rounding (Q-D4) | Truncate. |
@@ -42,12 +42,23 @@ the SwimCloud meet simulator, plus a dashboard inside the extension.
 | R25 | Scoring relays (Q-D1) | 2 per team per relay event (the A and B relays). |
 | R26 | A final (Q-D1) | 8 swimmers. |
 | R27 | Diving scorer cap (Q-D1) | Same rule as swimming: no limit on how many divers from one team score in an event. |
-| R28 | Relay swimmers and the scoring team | A relay swimmer takes a full scoring-team spot, not half of one. This answers a question framed around scoring-team spots. It does **not** answer the code's `halfRateRelaySwimmer` flag, which sets each relay leg's share of the relay's points (1/4). That flag stays pending (Q-D6). |
+| R28 | Relay swimmers and the scoring team | A relay swimmer takes a full scoring-team spot, not half of one. This answers a question framed around scoring-team spots. It does **not** answer the code's `halfRateRelaySwimmer` flag, which sets each relay leg's share of the relay's points (1/4). R34 answers the flag. |
 | R29 | Table D distance rows (Q-D2) | Do not use the 0.892 rows for 400→500, 800→1000 and 1500→1650. Use SwimCloud's own conversion first. Where SwimCloud has none, source the factors from SwimSwam's conversion tool (`https://swimswam.com/swimming-times-conversion-tool/`), archived with a manifest entry. The user's check value: a 4:00.00 400 m LCM is about 4:34.32 for a 500 yd (240.00 × 1.143). 1.143 is Table A's SCM factor, so the check value is a sanity range, not a conversion value. |
 | R30 | SwimCloud plan (Q4) | The user has a Free SwimCloud account. Recon records what the simulator shows on Free. |
 | R31 | Extra fetches (Q6) | Decide after recon. |
 | R32 | NSISC documents (Q3) | Search the web for the New South ISC rule documents in the next session. |
 | R33 | Housekeeping | Keep the untracked `omniswim-suite/data/` folder as it is (open item M3). Keep all git worktrees. |
+| R34 | Relay share (Q-D6) | Each relay swimmer gets 1/4 of the relay's points in their own point total (`halfRateRelaySwimmer: true`, the legacy value). |
+| R35 | Fast heat (Q-D7) | User: "usually, its 8, if the entries for the event are less than 16, itll be the bottom x number of swimmers in the entries, the fast heat in the evening will be a full heat." The top 8 seeds swim the evening heat; the rest swim in the morning. Editable per meet. With 8 or fewer entries, the meet decides: a per-meet setting with no default. |
+| R36 | Relay format (Q-D8) | Every relay is a timed final in the evening session. |
+| R37 | Relay legs | A relay scores only if all four legs are on the scoring team. |
+| R38 | Auto scorers: individual | A swimmer who made an A or B final is marked as a scorer. |
+| R39 | Auto scorers: relays | Swimming on a relay marks the swimmer as a scorer. |
+| R40 | Auto scorers: distance | A swim in any heat of a split timed final marks a scorer. User: "you can have non scorers in either. the 2026 meet had non scorers in the fast heat and scorers in the fast heat. its mildly complicated but the scoring roster has precedent over placement". |
+| R41 | Non-scorers and places | Only scoring-team swimmers are placed for points. A non-scorer is removed from the places, and the scorers behind move up, as with an exhibition swimmer. Example: a non-scorer wins the 100 Free; the 2nd finisher, a scorer, earns 1st-place points. The same rule applies to relays. The legacy scorer differs: a non-scorer keeps the place and earns 0. |
+| R42 | Relays per team | Do not hardcode the scoring relay limit; some conferences allow more than 2. NSISC has no non-scoring relays: a team enters only relays that score. For NSISC a 3rd relay is an entry violation. |
+| R43 | Finals placement | In NSISC, the A and B finals hold scorers only. Non-scorers never swim an A or B final. |
+| R44 | C final | The 8 fastest non-scorers from prelims swim a C final in the evening. The other non-scorers swim prelims only. |
 
 NSISC is the New South Intercollegiate Swim Conference. The repo's meet data
 labels its meet "New South Championships". It is not the Northern Sun

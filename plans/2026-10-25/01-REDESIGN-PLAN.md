@@ -322,8 +322,20 @@ many scoring-team swimmers in one event as the entry limits allow. So the
 NSISC preset is:
 
 - per-event scorer cap: `'unlimited'`
-- scoring-team size: **pending**. The code says 18, but no user statement or
-  source gives 18 (D2 finding F13, question Q-D1). Each diver counts 1/3 (R9).
+- scoring-team size: 18 (R24). Each diver counts 1/3 (R9). A relay swimmer
+  takes a full spot (R28).
+- only scoring-team swimmers are placed for points. A non-scorer leaves the
+  places and the scorers behind move up, for individuals and relays (R41).
+  The legacy scorer keeps the place and gives 0 (D2 F18); P3 changes it on
+  purpose, with a failing test first.
+- a relay scores only if all four legs are on the scoring team (R37; D2 F19).
+  Scoring relays per team per event: 2, a setting, never hardcoded (R25, R42;
+  D2 F17). NSISC enters no non-scoring relays.
+- finals: the A and B finals hold scorers only (R43). The 8 fastest
+  non-scorers swim a C final (R44).
+- auto scorers: an A or B final, a relay leg, or any heat of a split timed
+  final marks a scorer. The coach's tags win over every auto mark (R21,
+  R38 to R40).
 - per-swimmer total entries: 8 (R4). The legacy code says 7
   (`scoringDefaults.ts:58`, D2 finding F1); P3 changes it on purpose.
 - point table: read from SwimCloud's NSISC table in recon (P0, question 17)
@@ -663,10 +675,10 @@ Answered on 2026-10-25: Q1 (flyover is a user-set number, R14), Q2 (use
 SwimCloud's NSISC table; no per-event scorer cap, R15), Q5 (each round counts
 in its own session, R17).
 
-Answered later on 2026-10-25 (README rows R20 to R33): Q-D3 (distance events
-are split timed finals, R20), Q-D4 (truncate, R23), Q-D5 (diving excluded from
-load, R22), most of Q-D1 (R21, R24 to R27), Q-D2 (SwimCloud conversion, else
-SwimSwam factors, R29), Q4 (Free account, R30), Q6 (decide after recon, R31).
+Answered later on 2026-10-25 (README rows R20 to R44): Q-D2 (R29), Q-D3
+(R20), Q-D4 (R23), Q-D5 (R22), Q-D6 (R34), Q-D7 (R35), Q-D8 (R36), and in
+Q-D1 everything but the points (R21, R24 to R27, R37 to R44). Q4 and Q6 have
+answers that recon completes (R30, R31).
 
 Still open:
 - **Q3** New South ISC source documents for the 8-event cap, the 1/3 diver
@@ -679,19 +691,10 @@ Still open:
   fetches (F1 table): approve or not, once recon shows what the simulator
   already carries. Recon writes the request counts into
   `02-SIMULATOR-RECON.md` so the user can decide.
-- **Q-D1 (rest)** Individual, relay and diving points per place (recon Q17),
-  and `relayEligibleFromScorerPool`.
+- **Q-D1 (rest)** Individual, relay and diving points per place (recon Q17).
 - **Q-D2 (rest)** Archive SwimSwam's conversion factors for 400→500,
   800→1000 and 1500→1650 with a manifest entry, if recon shows SwimCloud has
   no conversion for an LCM swim.
-- **Q-D6** `halfRateRelaySwimmer`: does each relay leg earn 1/4 of the
-  relay's points for individual totals (the legacy value), or something else?
-  R28 answered a different question (scoring-team spots). Ask this one as
-  written.
-- **Q-D7** Fastest-heat size for the split timed finals (R20): the pool's
-  lane count. Per meet; ships as pending.
-- **Q-D8** Relays listed only under "(Finals)" in Table C are read as timed
-  finals in the evening. Confirm.
 
 ---
 

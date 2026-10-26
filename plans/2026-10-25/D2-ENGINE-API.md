@@ -385,6 +385,12 @@ export type DivingPerEventScorerCap =
   | { readonly kind: 'same-as-swimming' }
   | ({ readonly kind: 'own' } & PerEventScorerCap);                              // types.ts:421
 export type { ScorerAutoRules } from '../types';                                 // types.ts:473
+// R40: a swim in any heat of a split timed final marks a scorer. Legacy has no
+// such field (rowSuggestsScorer marks no scorer for an individual FIN swim), so
+// the bridge maps legacy to false.
+export type EngineScorerAutoRules = ScorerAutoRules & { readonly splitTimedFinalMarksScorer: boolean };
+export type PlaceTreatment = 'holds-place' | 'removed-from-consideration';      // same terms as overCap
+export type CFinalRule = { readonly kind: 'none' } | { readonly kind: 'non-scorers'; readonly size: number };
 
 export interface RulePreset {
   readonly payloadVersion: 1;
@@ -394,17 +400,21 @@ export interface RulePreset {
     readonly divingPoints: Setting<DivingPointRule>;
     readonly halfRateRelaySwimmer: Setting<boolean>;          // :265
     readonly aFinalBracketSize: Setting<number>;              // :270
+    readonly nonScorerPlacement: Setting<PlaceTreatment>;     // R41; individuals and relays
+    readonly abFinalsScorersOnly: Setting<boolean>;           // R43
+    readonly cFinal: Setting<CFinalRule>;                     // R44
   };
   readonly scorers: {
     readonly eligibility: Setting<'roster' | 'points_pool'>;  // scorerEligibilityMode :302
-    readonly autoRules: Setting<ScorerAutoRules | null>;      // :309
+    readonly autoRules: Setting<EngineScorerAutoRules | null>; // :309
     readonly scoringTeamSize: Setting<Cap>;                   // maxIndividualScorersPerTeam :266
     readonly scoringTeamScope: Setting<'meet' | 'event'>;     // scorerCapScope :291
     readonly diverWeight: Setting<DiverWeight>;               // diverScorerWeight :293
     readonly perEventScorerCap: Setting<PerEventScorerCap>;
     readonly divingPerEventScorerCap: Setting<DivingPerEventScorerCap>;
     readonly scoringRelaysPerTeamPerEvent: Setting<Cap>;      // maxRelaysScoringPerTeam :268
-    readonly relayEligibleFromScorerPool: Setting<boolean>;   // :297
+    readonly relayEligibleFromScorerPool: Setting<boolean>;   // :297; 'points_pool' only
+    readonly relayLegsMustBeScorers: Setting<boolean>;        // R37; 'roster' only
   };
   readonly entries: {
     readonly maxIndividualPerSwimmer: Setting<Cap>;           // :311
@@ -421,6 +431,12 @@ export function pendingPaths(p: RulePreset): string[];               // dotted p
 export function requireComplete(p: RulePreset): CompleteRulePreset;  // throws 'pending', naming every path
 export function editSetting<T>(s: Setting<T>, value: T, at: IsoTime): Setting<T>;   // gives user-edited
 ```
+
+`relayEligibleFromScorerPool` applies only under `eligibility: 'points_pool'`;
+the legacy code ignores it under `'roster'` (`calculatePoints.ts:410`,
+`relayScoring.ts:190`). `relayLegsMustBeScorers` is its roster-mode
+counterpart. `pendingPaths` and `requireComplete` skip the field that does not
+apply to the preset's `eligibility`.
 
 Left out on purpose: `diverEventPattern` (the model's event `kind` says which
 events are diving); `unscoredRounds` and `scoredEventNumberMax` (meet-scoped;
@@ -597,7 +613,7 @@ export type Violation =
       readonly reason: 'wrong_gender' | 'duplicate_swimmer' | 'event_mismatch' }
   | { readonly kind: 'unscheduled_event'; readonly eventKey: EventKey; readonly gender: Gender }
   | { readonly kind: 'pending_setting'; readonly eventKey: EventKey; readonly gender: Gender;
-      readonly setting: 'fastHeatSize' };   // R20, Q-D7
+      readonly setting: 'fastHeatSize' | 'smallFieldSession' | 'cFinal' };   // R35, R44
 export interface Results {
   readonly payloadVersion: 1;
   readonly teams: readonly { readonly teamId: TeamId; readonly points: number; readonly rank: number }[]; // TeamScore types.ts:231
@@ -726,7 +742,8 @@ export type EventFormat =
   | { readonly kind: 'timed-final'; readonly session: SessionRef }
   | { readonly kind: 'prelims-finals'; readonly prelims: SessionRef; readonly finals: SessionRef }
   | { readonly kind: 'timed-final-split'; readonly slowHeats: SessionRef; readonly fastHeat: SessionRef;
-      readonly fastHeatSize: Setting<number> };   // R20; lane count, no default (Q-D7)
+      readonly fastHeatSize: Setting<number>;             // R35: NSISC 8, editable per meet
+      readonly smallFieldSession: Setting<SessionRef> };  // R35: entries <= fastHeatSize; per meet, no default
 export interface ScheduledEvent { readonly eventKey: EventKey; readonly gender: Gender | 'both';
   readonly format: EventFormat }
 export interface SessionPreset { readonly payloadVersion: 1; readonly provenance: Provenance;
@@ -753,13 +770,21 @@ Rules:
 - A final comes strictly after its prelims, comparing (day, slot) with
   morning < afternoon < evening.
 - Race counting (R17): a timed final counts 1 race in its session. A
-  prelims-finals event counts 1 race in the prelims session and 1 more in the
-  finals session only when the swimmer's projected place is inside the point
-  table (place ≤ length of `individualPoints`). A split timed final (R20)
-  counts 1 race: in `fastHeat` when the swimmer's seed rank is within
-  `fastHeatSize`, else in `slowHeats`. While `fastHeatSize` is pending,
-  `sessionLoad` emits a `pending_setting` violation for that event and never
-  guesses a session. It scores as one timed final either way. Relay legs
+  prelims-finals event counts 1 race in the prelims session. It counts 1 more
+  in the finals session when the swimmer makes a final:
+  - with `abFinalsScorersOnly` (R43), a scorer ranked within the point table
+    (length of `individualPoints`) among scorers only swims the A or B final;
+  - without it, any swimmer ranked within the point table does;
+  - with `cFinal` `non-scorers` (R44), a non-scorer ranked within `size` among
+    non-scorers only swims the C final.
+- A split timed final (R20, R35) counts 1 race: in `fastHeat` when the
+  swimmer's seed rank among all entries, scorers and non-scorers alike, is
+  within `fastHeatSize`, else in `slowHeats`. Do not filter the fast heat by
+  scorer status (R40: the 2026 meet had both in it). When the entries number
+  `fastHeatSize` or fewer, the one heat swims in `smallFieldSession`. While a
+  needed setting is pending, `sessionLoad` emits a `pending_setting` violation
+  for that event and never guesses a session. It scores as one timed final
+  either way. Relay legs
   count. Diving counts per the `diving` setting; the NSISC preference is
   `'excluded'`, user-stated (paraphrase), R22.
 - An event in the lineup missing from the schedule gives an
@@ -800,17 +825,21 @@ Sources: **U** = `plans/2026-10-25/00-USER-PLAN.md` (verbatim, stated
 | `scoring.individualPoints` | pending: "SwimCloud's NSISC per-place values (recon Q17). R15 states 16 places." | — | `[20,17,16,15,14,13,12,11,9,7,6,5,4,3,2,1]`, constants.ts:317 |
 | `scoring.relayPoints` | pending (recon Q17) | — | multiplier 2, :39 |
 | `scoring.divingPoints` | pending (recon Q17) | — | same as individual |
-| `scoring.halfRateRelaySwimmer` | pending: "Does each relay leg earn 1/4 of the relay's points? (Q-D6)" | — | true, :40 |
+| `scoring.halfRateRelaySwimmer` | true | user-stated (paraphrase), R34 "1/4 each" | true, :40 |
 | `scoring.aFinalBracketSize` | 8 | user-stated (paraphrase), R26 | 8, :43 |
+| `scoring.nonScorerPlacement` | `'removed-from-consideration'` | user-stated (paraphrase), R41 | holds place, `individualScoring.ts:597-602`; F18 |
+| `scoring.abFinalsScorersOnly` | true | user-stated (paraphrase), R43 | absent |
+| `scoring.cFinal` | `{kind:'non-scorers', size:8}` | user-stated (paraphrase), R44 | absent |
 | `scorers.eligibility` | `'roster'` | user-stated, R15 "Only scoring-team swimmers score"; U:23 | roster, :47 |
-| `scorers.autoRules` | pending: "R21 says auto rules apply and coach tags override them, so the value is not `null`. Confirm the fields: tiers A and B, relay legs count, distance final required (what is the 'final' of a split timed final, R20?)." | — | :48-53 |
+| `scorers.autoRules` | `{abFinalTiers:['A','B'], includeRelayLegsInFinals:true, distanceFinalRequired:true, distanceEventPattern:['1000','1650','1500'], splitTimedFinalMarksScorer:true}` | user-stated (paraphrase), R21, R38, R39, R40. The roster wins over placement (R40: "the scoring roster has precedent over placement"), so coach tags override every auto mark. `distanceFinalRequired` blocks only a prelims swim, and a split timed final has none | :48-53; no `splitTimedFinalMarksScorer` |
 | `scorers.scoringTeamSize` | 18 | user-stated (paraphrase), R24; a relay swimmer takes a full spot, R28 | 18, :41 |
 | `scorers.scoringTeamScope` | `'meet'` | user-stated verbatim U:21 "Total roster scoring headcount limitation (total number of team members allowed on scoring team)" | meet, :44 |
 | `scorers.diverWeight` | `{1, 3}` | user-stated verbatim U:22 "divers are ⅓ of rull roster limit"; R9 | 1/3, :45 |
 | `scorers.perEventScorerCap` | `{cap:'unlimited'}` | user-stated, R15 "No limit on how many swimmers from one team score in an event" | absent |
 | `scorers.divingPerEventScorerCap` | `{cap:'unlimited'}` | user-stated (paraphrase), R27 | absent |
-| `scorers.scoringRelaysPerTeamPerEvent` | 2 | user-stated (paraphrase), R25 "2 (A and B)" | 2, :42 |
-| `scorers.relayEligibleFromScorerPool` | pending | — | false, :46 |
+| `scorers.scoringRelaysPerTeamPerEvent` | 2 | user-stated (paraphrase), R25 "2 (A and B)"; R42: a setting, never hardcoded. For NSISC a 3rd relay is an entry violation (no non-scoring relays) | 2, :42; `?? 2` fallback, F17 |
+| `scorers.relayEligibleFromScorerPool` | not applicable (roster mode) | — | false, :46 |
+| `scorers.relayLegsMustBeScorers` | true | user-stated (paraphrase), R37 | not checked for A/B/FIN relays, `scorerRoster.ts:322`; F19 |
 | `entries.maxIndividualPerSwimmer` | `'unlimited'` | user-stated verbatim U:24 "you can cut it any way you would like, usually 4I/4R, 3I/5R" | 999, :56 |
 | `entries.maxRelayPerSwimmer` | `'unlimited'` | same, U:24 | 999, :57 |
 | `entries.maxTotalPerSwimmer` | **8** | user-stated verbatim U:24 "nsisc caps at 8 total"; R4 | **7**, :58 |
@@ -823,9 +852,9 @@ control, not an NSISC rule.
 
 **`nsisc-table-c` v1.** Provenance user-stated verbatim, U:55-76, 2026-10-25.
 Swimming events use `'both'`; dives use the gender the table names. Rows
-listed only under "(Finals)" are read as timed finals (confirm, Q-D8). The 1000
+listed only under "(Finals)" are evening timed finals (R36). The 1000
 and 1650 are split timed finals (R20): slower heats in the morning, the fastest
-heat in the evening, one swim each.
+heat (the top 8 seeds, R35) in the evening, one swim each.
 
 | Day | Prelims-finals: prelims morning, finals evening, in this order | Timed final, evening | Dive: prelims afternoon, finals evening |
 | --- | --- | --- | --- |
@@ -846,8 +875,12 @@ user-stated (paraphrase), R23.
 
 **Drift test** (`tests/engineNsiscDrift.test.ts`): every `set` NSISC field,
 mapped through the bridge, equals `NSISC_PRESET_SETTINGS`, except
-`maxTotalPerSwimmer` (8 against 7) until P3 changes the legacy value on purpose
-and updates the goldens. When a pending field becomes `set`, the test covers it
+`maxTotalPerSwimmer` (8 against 7), `nonScorerPlacement`
+(`'removed-from-consideration'` against holds place), `relayLegsMustBeScorers`
+(true against not checked) and `autoRules.splitTimedFinalMarksScorer` (true
+against false), until P3 changes each legacy behavior on purpose, with a
+failing test first, and updates the goldens. `abFinalsScorersOnly` and `cFinal`
+have no legacy field and stay outside the test. When a pending field becomes `set`, the test covers it
 automatically.
 
 ## 5. Risks: cases a plausible build gets wrong
@@ -873,26 +906,21 @@ automatically.
 
 ## 6. Open questions this spec raised (none blocks Steps A to C)
 
-Answered 2026-10-25 (README rows R20 to R29): Q-D3 (R20), Q-D4 (R23),
-Q-D5 (R22), Q-D2 (R29), and in Q-D1 the scoring-team size (R24), scoring
-relays (R25), A-final size (R26), diving scorer cap (R27) and auto scorers
-with tag overrides (R21).
+Answered 2026-10-25 (README rows R20 to R44): Q-D2 (R29), Q-D3 (R20),
+Q-D4 (R23), Q-D5 (R22), Q-D6 (R34), Q-D7 (R35), Q-D8 (R36), and in Q-D1
+everything but the points: team size (R24), relays (R25, R42), A final (R26),
+diving cap (R27), auto scorers (R21, R38-R40), relay legs (R37).
 
-- **Q-D1 (rest).** Pending: individual, relay and diving points per place
-  (recon Q17); `relayEligibleFromScorerPool`; the `autoRules` field values
-  (section 4).
+- **Q-D1 (rest).** Individual, relay and diving points per place (recon Q17).
 - **Q-D2 (rest).** The 400→500, 800→1000 and 1500→1650 rows (U:85-87) gave
   impossible times [ran]: (240.00 − 6.40) × 0.892 = 208.37 s for a 500 yd
   from a 4:00.00 400 m. R29 drops them. Archive SwimSwam's factors with a
   manifest entry if recon shows an LCM swim with no SwimCloud conversion.
   The user's check value: 240.00 × 1.143 = 274.32 s (4:34.32). 1.143 is
   Table A's SCM factor, so this is a sanity range, not a conversion value.
-- **Q-D6 (`halfRateRelaySwimmer`).** Does each relay leg earn 1/4 of the
-  relay's points in a swimmer's individual total (`relayScoring.ts:205-209`)?
-  R28 answered a different question.
-- **Q-D7 (fast-heat size).** The lane count for split timed finals (R20).
-- **Q-D8 (relay format).** Confirm relays listed only under "(Finals)" are
-  evening timed finals.
+- **Not asked, not specified:** how a conference that allows non-scoring
+  relays places a relay over its cap. NSISC has none (R42). Add a setting
+  when a conference needs one; do not invent a default.
 
 ## 7. Findings about the existing code
 
@@ -937,6 +965,19 @@ with tag overrides (R21).
   **Fixed** in the reorg review fix-up after d9f5c894.
 - **F16.** `legacy/tests/theoreticalMeetGolden.test.ts` skips 5 tests in the main clone
   (`:411-413`) because the real captures are absent.
+- **F17.** `relayScoring.ts:177` falls back to `maxRelaysScoringPerTeam ?? 2`:
+  a hardcoded relay limit, which R42 rules out. The engine API has no
+  fallback; the value is a `Setting<Cap>`.
+- **F18.** A non-scorer keeps its place and earns 0 in the legacy scorer, for
+  individuals (`individualScoring.ts:597-602`) and relays (the roster and cap
+  branches in `relayScoring.ts:171-195`). R41 says non-scorers leave the places
+  and scorers move up. P3 changes it with a failing test first. Official
+  results that already mark non-scorers as exhibition are re-ranked by
+  `rankAsIfExhibitionAbsent` today; check how SwimCloud marks them in recon.
+- **F19.** `relayEntryRosterEligible` (`scorerRoster.ts:322`) lets every A, B
+  or timed-final relay score without checking its legs. With R39 (relay legs
+  are auto-marked) that matches R37 until a coach tag removes a leg; then the
+  relay still scores. P3 fixes it with a failing test.
 
 What the architect ran: an import-graph and impurity scan of
 `packages/core/src`; a no-DOM type-check of the move set; a tsx subpath

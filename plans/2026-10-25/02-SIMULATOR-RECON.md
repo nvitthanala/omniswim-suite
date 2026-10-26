@@ -72,7 +72,9 @@ Start URL from the user: `https://www.swimcloud.com/meetsimulator/?event=1|50|Y|
     team score in a relay event (the code's `maxRelaysScoringPerTeam: 2` has
     no source, D2 finding F8), diving points per place, and the A-final size.
     Archive the capture under `data/` with a manifest entry before any value
-    becomes `published` (D2 section 3.2).
+    becomes `published` (D2 section 3.2). Also record how SwimCloud marks a
+    non-scorer in a meet's results (exhibition flag, no place, or a place with
+    0 points). R41 removes non-scorers from the places (D2 finding F18).
 18. Does the simulator have any notion of event order, days or sessions? If
     not, where on the page does a "Meet schedule" panel fit (R16)?
 

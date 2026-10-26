@@ -160,11 +160,8 @@
     "Q3 New South ISC sources: search the web next session (R32)",
     "Q4 does the simulator work on a Free account (R30, recon)",
     "Q6 approve extra fetches after recon (R31)",
-    "Q-D1 rest: points per place (recon Q17), relayEligibleFromScorerPool, autoRules field values",
-    "Q-D2 rest: archive SwimSwam factors for 400-500, 800-1000, 1500-1650 if SwimCloud has no conversion (R29)",
-    "Q-D6 halfRateRelaySwimmer: does each relay leg earn 1/4 of relay points (R28 answered a different question)",
-    "Q-D7 fastest-heat size (lane count) for split timed finals (R20)",
-    "Q-D8 confirm relays listed only under (Finals) are evening timed finals"
+    "Q-D1 rest: points per place (recon Q17)",
+    "Q-D2 rest: archive SwimSwam factors for 400-500, 800-1000, 1500-1650 if SwimCloud has no conversion (R29)"
   ],
   "resumeOrder": [
     "P0 (Claude in Chrome now connects; recon first)",
@@ -175,7 +172,8 @@
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
     "oyster has an uncommitted PROVIDER_ROUTING.json change and untracked .opencode/ files; not part of PR #7.",
-    "PR #8 CI run 40259528508 passed (2026-10-26T02:44Z, 13m07s): every step green. Active vitest 2031 passed / 16 skipped, ci budget 16. Legacy vitest 2881 / 29, ci budget 29. Active scripts 63 / 2 skipped; legacy scripts 25 / 0 (the local skip runs in CI, Postgres service healthy). pytest 63 passed. Extension harness 7 passed. Build and extension build green."
+    "PR #8 CI run 40259528508 passed (2026-10-26T02:44Z, 13m07s): every step green. Active vitest 2031 passed / 16 skipped, ci budget 16. Legacy vitest 2881 / 29, ci budget 29. Active scripts 63 / 2 skipped; legacy scripts 25 / 0 (the local skip runs in CI, Postgres service healthy). pytest 63 passed. Extension harness 7 passed. Build and extension build green.",
+    "P3 legacy behavior changes from R37/R41/R42, each with a failing test first and a golden update: non-scorers removed from places (D2 F18), relay legs checked against the roster (F19), no hardcoded relay limit (F17). Drift-test exceptions listed in D2 section 4."
   ],
-  "decisionsAdded": "R14-R19 recorded 2026-10-25 (second user message): flyover user number; NSISC SwimCloud table, no per-event scorer cap; event order editable on simulator page; sessions advisory, prelims AM/finals later, timed finals; OpenCode added; Chrome fallback in plan section 12; R20-R33 recorded 2026-10-25 (third user message): split timed finals for 1000/1650, auto scorers with tag overrides, diving excluded from load, Table D truncate, team size 18, 2 scoring relays, A final 8, diving cap unlimited, relay swimmer takes a full scoring-team spot (not the halfRateRelaySwimmer flag), Table D distance rows dropped for SwimCloud then SwimSwam, Free SwimCloud account, Q6 after recon, search NSISC docs, keep omniswim-suite/data and all worktrees"
+  "decisionsAdded": "R14-R19 recorded 2026-10-25 (second user message): flyover user number; NSISC SwimCloud table, no per-event scorer cap; event order editable on simulator page; sessions advisory, prelims AM/finals later, timed finals; OpenCode added; Chrome fallback in plan section 12; R20-R33 recorded 2026-10-25 (third user message): split timed finals for 1000/1650, auto scorers with tag overrides, diving excluded from load, Table D truncate, team size 18, 2 scoring relays, A final 8, diving cap unlimited, relay swimmer takes a full scoring-team spot (not the halfRateRelaySwimmer flag), Table D distance rows dropped for SwimCloud then SwimSwam, Free SwimCloud account, Q6 after recon, search NSISC docs, keep omniswim-suite/data and all worktrees; R34-R44 recorded 2026-10-25 (fourth user message): relay share 1/4, fast heat top 8 seeds (small field per meet), relays evening timed finals, relay scores only with all four legs on the scoring team, auto scorers from A/B finals plus relay legs plus any split-timed-final heat (roster wins), non-scorers removed from places (legacy differs, D2 F18), relay limit is a setting (F17), A/B finals scorers only, C final 8 fastest non-scorers"
 }
