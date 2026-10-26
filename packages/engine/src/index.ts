@@ -7,8 +7,8 @@
  * Not here, on purpose:
  * - The legacy bridge. `@omniswim/engine/rules/legacyBridge` carries the legacy `ScoringSettings`
  *   type, and the root stays free of it (D2 decision 0.4).
- * - Results (3.8), cut tags (3.9), sourcing functions (3.10) and the planner functions (3.11).
- *   They arrive in P2 to P5.
+ * - Results (3.8), the rest of the sourcing functions (3.10: flyover, SourcingSettings) and the planner
+ *   functions (3.11). They arrive in P2 to P5. Cut tags (3.9) and the conversion (3.10, 3.13) are here.
  * The moved modules stay reachable by their own subpaths (`@omniswim/engine/lib/*`).
  */
 
@@ -72,8 +72,25 @@ export type {
 } from './model/lineup';
 export { entryKey, stripSwimCloudData } from './model/lineup';
 
-// 3.10 Table D types (the functions arrive in P4)
+// 3.10 Table D types. Retired from use (R58): no function reads them.
 export type { TableDPreset, TableDRow } from './sourcing/tableD';
+
+// 3.10 and 3.13 Conversion (the rest of 3.10, the flyover and SourcingSettings, arrives in P4)
+export type { ConversionSettings, ConvertedScy } from './sourcing/convert';
+export { scyEventKeyFor, scyStatementFor, scyStatementForSplit } from './sourcing/convert';
+export type {
+  LcmToScyAbsentReason,
+  LcmToScyAppliedTo,
+  LcmToScyBasis,
+  LcmToScyPreset,
+  LcmToScyResult,
+  LcmToScyRow,
+} from './sourcing/lcmToScy';
+export { convertLcmToScy, LCM_SCY_DIVISOR_SCALE } from './sourcing/lcmToScy';
+
+// 3.9 Cut tags
+export type { CloseThreshold, CutGap, CutTag, CutTier, CutUnknownReason } from './sourcing/cutTag';
+export { closeThresholdFromPercent, cutTagForSwim, cutTagFromLegacy, foldEventCutTags } from './sourcing/cutTag';
 
 // 3.11 Planner (types only in P1)
 export type { EventFormat, LoadPreference, ScheduledEvent, SessionPreset, SessionRef, SessionSlot } from './planner/types';
@@ -82,4 +99,4 @@ export type { EventFormat, LoadPreference, ScheduledEvent, SessionPreset, Sessio
 export type { Builtin } from './rules/builtins';
 export { BUILTIN_RULE_PRESETS, builtinRulePreset } from './rules/builtins';
 export { BUILTIN_SESSION_PRESETS } from './planner/builtins';
-export { BUILTIN_TABLE_D } from './sourcing/builtins';
+export { BUILTIN_LCM_TO_SCY, BUILTIN_TABLE_D, builtinLcmToScy } from './sourcing/builtins';

@@ -10,6 +10,7 @@ import type { NcaaScmConversionTableId } from '../constants';
 import type { ScmConversionTableReason } from '../lib/scyConversion';
 import type { Course, EventKey, Gender, Hundredths, IsoDate, IsoTime, SwimmerId, TeamId, TimeValue } from './primitives';
 import type { Provenance } from './provenance';
+import type { LcmToScyBasis } from '../sourcing/lcmToScy';
 
 export type DivisionRef =
   | { readonly state: 'known'; readonly division: NcaaDivision; readonly season: string }
@@ -60,7 +61,12 @@ export type ConversionBasis =
       readonly factor: number;
       readonly division: NcaaDivision | null;
       readonly reason: ScmConversionTableReason;
+      /** `'relay-split'`: the individual event's factor applied to a split (R60, R62). */
+      readonly appliedTo?: 'relay-split';
     }
+  /** LCM to SCY, fitted to tool outputs (R58). Its provenance is `tool-derived`, never `published`. */
+  | LcmToScyBasis
+  /** Retired (R58): no code produces it. The member stays so saved data still parses. */
   | {
       readonly method: 'table_d';
       readonly multiplierPermille: number;
@@ -70,7 +76,13 @@ export type ConversionBasis =
 
 export type ScyStatement =
   | { readonly kind: 'recorded-scy' }
-  | { readonly kind: 'converted'; readonly hundredths: Hundredths; readonly basis: ConversionBasis }
+  | {
+      readonly kind: 'converted';
+      readonly hundredths: Hundredths;
+      readonly basis: ConversionBasis;
+      /** Always `true`: a converted time is an estimate (shows the "est." badge), whatever its source (R58, R60). */
+      readonly estimated: true;
+    }
   | {
       readonly kind: 'not-convertible';
       readonly reason: 'event_not_swum_in_course' | 'no_conversion_available' | 'conversions_excluded';

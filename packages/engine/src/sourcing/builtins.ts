@@ -19,6 +19,8 @@
 import type { Builtin } from '../rules/builtinSupport';
 import { pending, readmeRow, setting, userPlan } from '../rules/builtinSupport';
 import type { EventKey } from '../model/primitives';
+import type { Provenance } from '../model/provenance';
+import type { LcmToScyPreset, LcmToScyRow } from './lcmToScy';
 import type { TableDPreset, TableDRow } from './tableD';
 
 /** The wording printed in the plan for this row, so a test can find it on the cited line. */
@@ -88,7 +90,102 @@ const TABLE_D_USER: TableDPreset = {
   rounding: setting('truncate', readmeRow('40', 'Truncate.')),
 };
 
-/** `'table-d-user'` v1. */
+/**
+ * `'table-d-user'` v1. **Retired from use** (README R58, 2026-10-26): the user ruled Table D incorrect
+ * for every event. Nothing in the engine reads it; `scyStatementFor` takes `lcmToScy` and has no Table D
+ * field. The v1 content stays unchanged and resolvable, so saved data that names it does not break.
+ * A picker must not offer it. Use `BUILTIN_LCM_TO_SCY`.
+ */
 export const BUILTIN_TABLE_D: readonly Builtin<TableDPreset>[] = [
-  { id: 'table-d-user', version: 1, label: 'LCM to SCY (Table D)', preset: TABLE_D_USER },
+  {
+    id: 'table-d-user',
+    version: 1,
+    label: 'LCM to SCY (Table D)',
+    preset: TABLE_D_USER,
+    retired: { on: '2026-10-26', reason: 'README R58: the user ruled Table D incorrect for every event', supersededBy: 'lcm-scy-swimswam' },
+  },
 ];
+
+/* -------------------------------------------------------------------------- */
+/* LCM to SCY, fitted to the SwimSwam converter (README R58 to R60)           */
+/* -------------------------------------------------------------------------- */
+
+/** The archive the values below are pinned to. `tests/engineLcmToScy.test.ts` replays all of it. */
+export const LCM_SCY_ARCHIVE_PATH = 'data/conversions/swimswam/lcm-to-scy-2026-10-26.json';
+/** sha256 of that file. `.gitattributes` pins LF, so the digest is stable across checkouts. */
+export const LCM_SCY_ARCHIVE_SHA256 = '2b9114cb7ceec28564bbbbdca9b90166e92813d059f65b10d9892b82046999f5';
+
+/**
+ * Inferred from tool outputs. The converter publishes no factors (archive README, "What the outputs
+ * fit"). Never `published`.
+ */
+const SWIMSWAM_PROVENANCE: Provenance = {
+  kind: 'tool-derived',
+  tool: { name: 'SwimSwam Swimming Time Conversion Tool', url: 'https://swimswam.com/swimming-times-conversion-tool/' },
+  archive: { path: LCM_SCY_ARCHIVE_PATH, sha256: LCM_SCY_ARCHIVE_SHA256 },
+  capturedOn: '2026-10-26',
+  basis: 'inferred-from-tool-outputs',
+};
+
+/** Divisor times 100000 (README table in the archive: 1.11, 1.09361, 0.8925, 1.02). */
+const DIVISOR_FREE_FLY_BREAST_IM = 111000;
+const DIVISOR_BACK = 109361;
+const DIVISOR_DISTANCE_FREE = 89250;
+const DIVISOR_1500 = 102000;
+
+function lcmRow(
+  lcmEventKey: EventKey,
+  scyEventKey: EventKey,
+  divisorScaled: number,
+  turnHundredths: number
+): LcmToScyRow {
+  return {
+    lcmEventKey,
+    scyEventKey,
+    divisorScaled: setting(divisorScaled, SWIMSWAM_PROVENANCE),
+    turnHundredths: setting(turnHundredths, SWIMSWAM_PROVENANCE),
+  };
+}
+
+/** The same event in both courses. */
+function lcmSame(eventKey: EventKey, divisorScaled: number, turnHundredths: number): LcmToScyRow {
+  return lcmRow(eventKey, eventKey, divisorScaled, turnHundredths);
+}
+
+/**
+ * `'lcm-scy-swimswam'` v1. 17 rows. The 800 Freestyle Relay has no row: the converter returns its
+ * input unchanged, which is no conversion and never factor 1.0.
+ */
+const LCM_TO_SCY_SWIMSWAM: LcmToScyPreset = {
+  payloadVersion: 1,
+  rows: [
+    lcmSame('50 Freestyle', DIVISOR_FREE_FLY_BREAST_IM, 80),
+    lcmSame('100 Freestyle', DIVISOR_FREE_FLY_BREAST_IM, 160),
+    lcmSame('200 Freestyle', DIVISOR_FREE_FLY_BREAST_IM, 320),
+    lcmSame('50 Butterfly', DIVISOR_FREE_FLY_BREAST_IM, 70),
+    lcmSame('100 Butterfly', DIVISOR_FREE_FLY_BREAST_IM, 140),
+    lcmSame('200 Butterfly', DIVISOR_FREE_FLY_BREAST_IM, 280),
+    lcmSame('50 Breaststroke', DIVISOR_FREE_FLY_BREAST_IM, 100),
+    lcmSame('100 Breaststroke', DIVISOR_FREE_FLY_BREAST_IM, 200),
+    lcmSame('200 Breaststroke', DIVISOR_FREE_FLY_BREAST_IM, 400),
+    lcmSame('50 Backstroke', DIVISOR_BACK, 250),
+    lcmSame('100 Backstroke', DIVISOR_BACK, 500),
+    lcmSame('200 Backstroke', DIVISOR_BACK, 1000),
+    lcmSame('200 Individual Medley', DIVISOR_FREE_FLY_BREAST_IM, 320),
+    lcmSame('400 Individual Medley', DIVISOR_FREE_FLY_BREAST_IM, 640),
+    lcmRow('400 Freestyle', '500 Freestyle', DIVISOR_DISTANCE_FREE, 0),
+    lcmRow('800 Freestyle', '1000 Freestyle', DIVISOR_DISTANCE_FREE, 0),
+    lcmRow('1500 Freestyle', '1650 Freestyle', DIVISOR_1500, 0),
+  ],
+  rounding: setting('truncate', SWIMSWAM_PROVENANCE),
+};
+
+/** `'lcm-scy-swimswam'` v1. The only LCM to SCY source in use. */
+export const BUILTIN_LCM_TO_SCY: readonly Builtin<LcmToScyPreset>[] = [
+  { id: 'lcm-scy-swimswam', version: 1, label: 'LCM to SCY (SwimSwam converter, inferred)', preset: LCM_TO_SCY_SWIMSWAM },
+];
+
+/** The built-in LCM to SCY preset for `{id, version}`, or `undefined`. Never a fallback. */
+export function builtinLcmToScy(id: string, version: number): LcmToScyPreset | undefined {
+  return BUILTIN_LCM_TO_SCY.find(b => b.id === id && b.version === version)?.preset;
+}

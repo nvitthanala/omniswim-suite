@@ -334,14 +334,20 @@ export type Provenance =
   | { readonly kind: 'user-stated'; readonly statedOn: IsoDate; readonly wording: string;
       readonly where: string;        // path:line of the record
       readonly verbatim: boolean }   // false: a paraphrase (README decision rows)
-  | { readonly kind: 'user-edited'; readonly editedAt: IsoTime; readonly previous: Provenance | null };
+  | { readonly kind: 'user-edited'; readonly editedAt: IsoTime; readonly previous: Provenance | null }
+  | { readonly kind: 'tool-derived';             // R58, 2026-10-26: inferred from a tool's outputs, never published
+      readonly tool: { readonly name: string; readonly url: string };
+      readonly archive: { readonly path: string; readonly sha256: string };   // sha256 of the file at path
+      readonly capturedOn: IsoDate;
+      readonly basis: 'inferred-from-tool-outputs' };
 export type Setting<T> =
   | { readonly state: 'set'; readonly value: T; readonly provenance: Provenance }
   | { readonly state: 'pending'; readonly question: string; readonly blocks: readonly string[] };
 ```
 
-Invariants (each has a test): a parser rejects any other `kind`, including
-`'legacy'`; editing gives `user-edited` with `previous`, and provenance is never
+Invariants (each has a test): a parser accepts these four kinds and rejects any
+other `kind`, including `'legacy'`; `tool-derived` is never `published` (it has
+no `source`, and nothing may count or render it as published); editing gives `user-edited` with `previous`, and provenance is never
 upgraded; a `pending` setting has no value field, so no code can read a guess;
 a SwimCloud observation (for example the NSISC table from recon) becomes
 `published` only after the capture is archived under `data/` with a manifest
@@ -507,11 +513,13 @@ export type ConversionBasis =
   | { readonly method: 'swimcloud'; readonly displayedText: string }                     // R10 first choice
   | { readonly method: 'ncaa_scm_table'; readonly tableId: NcaaScmConversionTableId; readonly factor: number;
       readonly division: NcaaDivision | null; readonly reason: ScmConversionTableReason } // scyConversion.ts:313
+  | LcmToScyBasis                                                                        // R58, "est.", 3.13
   | { readonly method: 'table_d'; readonly multiplierPermille: number;
-      readonly turnAdjustmentHundredths: number; readonly provenance: Provenance };     // R10 fallback, "est."
+      readonly turnAdjustmentHundredths: number; readonly provenance: Provenance };     // RETIRED (R58): nothing produces it; kept so saved data parses
 export type ScyStatement =
   | { readonly kind: 'recorded-scy' }
-  | { readonly kind: 'converted'; readonly hundredths: Hundredths; readonly basis: ConversionBasis }
+  | { readonly kind: 'converted'; readonly hundredths: Hundredths; readonly basis: ConversionBasis;
+      readonly estimated: true }                 // every converted time is an estimate (R58, R60)
   | { readonly kind: 'not-convertible';
       readonly reason: 'event_not_swum_in_course' | 'no_conversion_available' | 'conversions_excluded' };
 export type SwimOrigin =
@@ -649,16 +657,18 @@ export type CutGap = { readonly tier: CutlineTier; readonly standard: TimeValue;
   readonly gapBasisPoints: number;     // floor(gap * 10000 / standard)
   readonly source: CutlineSourceRef };
 export type CutUnknownReason = 'division_unknown' | 'program_discontinued' | 'gender_not_sponsored'
-  | 'no_table_for_division' | 'event_not_in_table' | 'no_time' | 'conversion_unavailable'
+  | 'sponsorship_unaudited' | 'no_table_for_division' | 'event_not_in_table' | 'no_time' | 'conversion_unavailable'
   | 'user_inputted' | 'extracted_split' | 'program_unconfirmed' | 'event_not_swum_in_course';
 export type CutTag =
   | { readonly kind: 'achieved'; readonly tier: CutlineTier;
       readonly slot: 'A' | 'B' | null;          // legacySlotForTier, cutlines.ts:560
       readonly marginHundredths: number; readonly source: CutlineSourceRef;
       readonly nextTier: CutGap | null }         // a B swimmer's gap to A (R11); null at the strictest tier
+  | { readonly kind: 'estimated-achieved'; /* AchievedFields, plus: */ readonly basis: ConversionBasis;
+      readonly convertedHundredths: Hundredths }  // R61: a converted time cleared a standard; not a cut
   | { readonly kind: 'close'; readonly nearest: CutGap; readonly thresholdBasisPoints: number }
   | { readonly kind: 'none'; readonly nearest: CutGap | null }
-  | { readonly kind: 'converted'; readonly indicative: CutlineIndicativeComparison | null }  // never a cut
+  | { readonly kind: 'converted'; readonly indicative: CutlineIndicativeComparison | null }  // clears nothing, or a legacy-factor comparison; never a cut, never estimated-achieved
   | { readonly kind: 'not-applicable'; readonly reason: 'diving' }
   | { readonly kind: 'unknown'; readonly reason: CutUnknownReason; readonly detail: string };
 export type CloseThreshold = { readonly basisPoints: number };   // 100 = 1.0%
@@ -669,11 +679,19 @@ export function cutTagFromLegacy(r: CutlineTagResult, t: CloseThreshold): CutTag
 
 - `closeThresholdFromPercent` throws unless `pct >= 0` and `pct * 100` is an
   integer to within 1e-9.
-- A swim with `scy.kind === 'converted'` returns `converted` before any lookup
-  (F1.2, invariants 10 and 11).
+- A swim with `scy.kind === 'converted'` is judged as an SCY swim on its SCY event
+  (the LCM 400 Freestyle against the 500 Freestyle): `estimated-achieved` when
+  its converted time clears a standard, `converted` (`indicative: null`) when it
+  clears none. It is never `achieved` (README R61, which replaces the earlier
+  rule that an estimate never tags; F1.2, invariants 10 and 11). A converted
+  time never goes through the legacy LCM factors (`constants.ts:11-29`, no
+  source). A swim whose division publishes the swim's own course (an NAIA SCM
+  swim) is judged there, as a real swim: `achieved`, never estimated.
 - `cutTagFromLegacy` is an exhaustive `switch` over `CutlineTagState`
   (`cutlineTags.ts:149`) with a `never` default: `tagged` → `achieved`;
-  `converted_estimate` → `converted`; `not_applicable` → `not-applicable`;
+  `converted_estimate` → `converted` (the legacy comparison used the unsourced
+  LCM factors, so it never earns an estimated tag); `not_applicable` →
+  `not-applicable`;
   `no_cut` → `close` or `none`; every other state → `unknown` with the same
   reason name. A test lists every member of `CutlineTagState`.
 - `close` is judged against `nextTier` on a `no_cut` result
@@ -694,15 +712,18 @@ export interface TableDRow { readonly lcmEventKey: EventKey; readonly scyEventKe
 export interface TableDPreset { readonly payloadVersion: 1; readonly rows: readonly TableDRow[];
   readonly rounding: Setting<'truncate' | 'round-half-up'> }
 export type FlyoverSetting = { readonly state: 'unset' } | { readonly state: 'set'; readonly hundredths: number };
-export interface SourcingSettings {
+// Table D is retired (R58): TableDRow and TableDPreset stay as types for saved data, and nothing reads them.
+export interface ConversionSettings {        // landed 2026-10-26; SourcingSettings extends it (P4)
   readonly includeConvertedSwims: boolean;   // per meet (F1.2)
-  readonly tableD: TableDPreset | null;      // null = no Table D fallback
+  readonly lcmToScy: LcmToScyPreset | null;  // null = no LCM conversion. There is no tableD field.
+}
+export interface SourcingSettings extends ConversionSettings {
   readonly splitWindow: DateWindow;          // the caller computes "current + previous season"
   readonly flyover: FlyoverSetting;
 }
 export function flyoverFromSeconds(sec: number | undefined): FlyoverSetting;
-export function scyStatementFor(swim: Omit<MeetSwim, 'scy'>, swimcloudScy: TimeValue | null,
-  division: DivisionRef, s: SourcingSettings): ScyStatement;
+export function scyStatementFor(swim: Pick<MeetSwim, 'eventKey' | 'recordedCourse' | 'recordedTime'>,
+  swimcloudScy: TimeValue | null, division: DivisionRef, gender: Gender, s: ConversionSettings): ScyStatement;
 export function estimateFlyingLeg(flat: MeetSwim, legEventKey: EventKey, flyover: FlyoverSetting):
   { readonly hundredths: number; readonly usedConverted: boolean } | null;
 ```
@@ -717,13 +738,17 @@ negative value, `NaN` or more than 2 decimals throws.
 4. SwimCloud shows a converted time → `swimcloud`.
 5. An SCM swim → the NCAA table chosen by division (`convertSwimToSCYDetailed`,
    truncating; invariant 10).
-6. An LCM swim with a complete matching Table D row → `table_d`.
-7. Otherwise → `no_conversion_available`.
+6. An LCM swim with a row in `s.lcmToScy` → `lcm_scy_tool_derived` (3.13).
+7. Otherwise → `no_conversion_available`. A relay, an NT swim, an LCM event with
+   no row and a missing preset all land here: absent, never factor 1.0.
+
+Every `converted` statement carries `estimated: true`, including SwimCloud's own
+and the NCAA SCM ones. The Table A factor is published; the converted time is
+still an estimate.
 
 The new API does not use the gendered LCM factors (`constants.ts:11-29`, no source).
 
-**Table D math** for `truncate`: `floor((lcmH − adjH) * permille / 1000)` in
-integers. Rounding is pending (Q-D4); until it is set no row is usable.
+**Table D math (retired, R58).** No code runs it. The LCM math is in 3.13.
 
 **Flyover:** `unset` → `null` (no estimate; the leg shows "no split"). `set`
 with 0 → the estimate equals the flat time and still carries "est.".
@@ -796,7 +821,8 @@ Rules:
 export interface Builtin<P> { readonly id: string; readonly version: number; readonly label: string; readonly preset: P }
 export const BUILTIN_RULE_PRESETS: readonly Builtin<RulePreset>[];        // 'nsisc' v1, 'generic' v1
 export const BUILTIN_SESSION_PRESETS: readonly Builtin<SessionPreset>[];  // 'nsisc-table-c' v1
-export const BUILTIN_TABLE_D: Builtin<TableDPreset>;                      // 'table-d-user' v1
+export const BUILTIN_TABLE_D: readonly Builtin<TableDPreset>[];           // 'table-d-user' v1, RETIRED (`retired` set)
+export const BUILTIN_LCM_TO_SCY: readonly Builtin<LcmToScyPreset>[];     // 'lcm-scy-swimswam' v1, 3.13
 export function builtinRulePreset(id: string, version: number): RulePreset | undefined;  // never a fallback
 ```
 
@@ -812,6 +838,97 @@ the version to show "v2 available".
 ruleset through `bracketForFinals` (`scoringDefaults.ts:196`), also published.
 Every other field `pending`: Rule 7 states no pool, diver weight or entry
 limits (`scoringDefaults.ts:208-212`), and a missing limit is not "unlimited".
+
+### 3.13 LCM to SCY and estimated cut tags (2026-10-26; README R58 to R61)
+
+Source of the values: `data/conversions/swimswam/lcm-to-scy-2026-10-26.json`
+(53 captures of the SwimSwam conversion tool, sha256 `2b9114cb…999f5`) and its
+README. The tool publishes no factors. The values are **inferred from its outputs**.
+
+```ts
+export const LCM_SCY_DIVISOR_SCALE = 100000;               // 1.11 is 111000
+export interface LcmToScyRow { readonly lcmEventKey: EventKey; readonly scyEventKey: EventKey;
+  readonly divisorScaled: Setting<number>; readonly turnHundredths: Setting<number> }
+export interface LcmToScyPreset { readonly payloadVersion: 1; readonly rows: readonly LcmToScyRow[];
+  readonly rounding: Setting<'truncate'> }
+export type LcmToScyAppliedTo = 'individual-swim' | 'relay-split';
+export type LcmToScyBasis = { readonly method: 'lcm_scy_tool_derived'; readonly lcmEventKey: EventKey;
+  readonly scyEventKey: EventKey; readonly divisorScaled: number; readonly turnHundredths: number;
+  readonly provenance: Provenance; readonly appliedTo: LcmToScyAppliedTo };
+export type LcmToScyResult =
+  | { readonly kind: 'converted'; readonly hundredths: Hundredths; readonly basis: LcmToScyBasis }
+  | { readonly kind: 'absent'; readonly reason: 'no_row_for_event' | 'setting_pending' | 'result_not_positive' };
+export function convertLcmToScy(p: LcmToScyPreset, lcmEventKey: EventKey, lcmHundredths: Hundredths,
+  appliedTo?: LcmToScyAppliedTo): LcmToScyResult;          // throws RangeError unless a positive integer
+export function builtinLcmToScy(id: string, version: number): LcmToScyPreset | undefined;
+export function scyStatementForSplit(split: Pick<RelaySplit, 'legEventKey' | 'course' | 'split'>,
+  division: DivisionRef, gender: Gender, s: ConversionSettings): ScyStatement;
+export function scyEventKeyFor(eventKey: EventKey, course: Course): EventKey;   // 400 → 500, 800 → 1000, 1500 → 1650
+export function foldEventCutTags(tags: readonly CutTag[]): readonly CutTag[];   // R61
+```
+
+`cutTagForSwim`, `cutTagFromLegacy` and `closeThresholdFromPercent` are as in 3.9.
+
+**Gender is a required argument** of `scyStatementFor` (the swimmer's `MeetSwimmer.gender`) and
+`scyStatementForSplit` (the relay's `MeetEvent.gender`). It reaches the legacy SCM converter as is. No
+code supplies a default (Codex review, 2026-10-26: a hardcoded men's value). Table A is keyed by
+division and row only, so men and women convert alike today; a test passes the gender through a spy
+so a default or a future gender-split table cannot go unseen. The LCM preset has no gender input: the
+archived requests name none. The cut-tag path reads `swimmer.gender` and has no gender default.
+
+**Math.** `SCY = truncate((LCM − turn) / divisor)` to the hundredth, in integers:
+`floor((lcmH − turnH) * 100000 / divisorScaled)`. Truncation replays all 51
+captures exactly (R59 permits rounding; it is not built). A result of 0 or less
+is absent. The 17 rows, with divisor and turn, are the table in the archive
+README. `'lcm-scy-swimswam'` v1 pins them, each with `tool-derived` provenance
+that names the converter URL, the archive path and its sha256, and says the
+values are inferred. The backstroke divisor is the least certain: any value from
+1.0936095 to 1.0936130 reproduces the nine captures.
+
+**No row, no conversion.** The 800 Freestyle Relay (the tool returns its input
+unchanged), an LCM 500, 1000 or 1650, an LCM 100 IM and every relay are absent:
+`not-convertible`, `no_conversion_available`. Never factor 1.0.
+
+**Why a new built-in id, not `table-d-user` v2.** Table D is wrong for every
+event (R58). A v2 of the same id would present a different table as a revision
+of one the user rejected, and "v2 available" would nudge users toward it. The
+model also differs: Table D multiplies by a permille, and this divides by a
+scaled divisor, so it cannot fit a `TableDRow`. So `lcm-scy-swimswam` v1 is a
+new id. `table-d-user` v1 keeps its bytes and gets `retired` on its wrapper.
+`ConversionSettings` has no Table D field, so a stale setting cannot be ignored
+in silence.
+
+**Relay splits (R60, confirmed in R62).** The converter has no split data.
+A split converts with the individual divisor and turn for its leg's stroke and
+distance (`appliedTo: 'relay-split'`; the SCM Table A basis carries the same
+marker). A split with no `legEventKey`, no `course`, or no row is absent. The
+course is never assumed SCY. The marker is in the basis, so a consumer that
+stores only the basis still knows. The full 800 free relay stays absent while
+its 200 free leg converts.
+
+**Flyover rule for P4 (R14, R62; not built here).** The flyover is a user-set
+number of seconds with no default: "to subtract a little bit of time due to the
+momentum gained and reaction on the exchange of the entering swimmer". A
+converted time that is itself a flying-start relay split (`start: 'flying'`)
+already includes the exchange, so the flyover must never be subtracted from it
+again. The flyover applies only when a flat-start time projects into legs 2 to
+4. `scyStatementForSplit` applies no flyover, and P4's `estimateFlyingLeg` needs
+a test for no double subtraction.
+
+**Estimated cut tag (R61).** A converted swim is judged as an SCY swim on its SCY
+event and can earn `estimated-achieved`. It is never `achieved`. `cutTagFromLegacy`
+still maps `converted_estimate` to `converted`, because the legacy comparison
+uses the unsourced LCM factors. `foldEventCutTags` is the replacement rule:
+a real `achieved` replaces an estimated tag at the same or a weaker standard.
+A real swim that missed does not remove the estimate. Strictness is the
+standard's time, not the tier name. **Not decided by R61:** a real tag at a
+weaker standard than an estimated one (real B against estimated A). The fold
+keeps both, real first, and chooses neither. This waits for the user's answer.
+
+**Not changed.** The legacy `buildCutlineTag`, `converted_estimate`, the legacy
+LCM factors and their tests stay as they were: they back the golden file and the
+NAIA tests. Nothing in `apps/extension` calls the new functions yet, so the
+live panel needs P4 wiring before users see any of this.
 
 ## 4. NSISC as data
 
@@ -866,7 +983,11 @@ heat (the top 8 seeds, R35) in the evening, one swim each.
 
 Evening order follows U:64, U:68, U:72, U:76: finals, then the relay, then the dive.
 
-**`table-d-user` v1.** Rows at U:82-84 and U:88-103 are user-stated verbatim
+**`table-d-user` v1 (retired 2026-10-26, R58: "completely disregard table d, its incorrect").**
+The content below is unchanged, so its pinned hash and any saved reference to
+`{table-d-user, 1}` still hold. Retirement is a flag on the `Builtin` wrapper
+(`retired`), outside the pinned preset. No function reads Table D (a test scans
+the engine sources). See 3.13 for the replacement. Rows at U:82-84 and U:88-103 are user-stated verbatim
 (`multiplierPermille: 892`, turn adjustments in hundredths). Rows at U:85-87
 (400→500, 800→1000, 1500→1650) are **not used** (R29): those events take
 SwimCloud's own conversion, else SwimSwam factors archived with a manifest
@@ -912,7 +1033,8 @@ everything but the points: team size (R24), relays (R25, R42), A final (R26),
 diving cap (R27), auto scorers (R21, R38-R40), relay legs (R37).
 
 - **Q-D1 (rest).** Individual, relay and diving points per place (recon Q17).
-- **Q-D2 (rest).** The 400→500, 800→1000 and 1500→1650 rows (U:85-87) gave
+- **Q-D2 (rest). Answered 2026-10-26 (R58): Table D is disregarded for every event, and the SwimSwam
+  archive replaces it (3.13).** The 400→500, 800→1000 and 1500→1650 rows (U:85-87) gave
   impossible times [ran]: (240.00 − 6.40) × 0.892 = 208.37 s for a 500 yd
   from a 4:00.00 400 m. R29 drops them. Archive SwimSwam's factors with a
   manifest entry if recon shows an LCM swim with no SwimCloud conversion.

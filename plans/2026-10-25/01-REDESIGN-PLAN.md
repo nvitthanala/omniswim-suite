@@ -230,14 +230,15 @@ an "est." badge.
 - Where SwimCloud shows no converted time, the engine's own SCM conversion
   applies. That conversion uses NCAA Table A, which matches the official NCAA
   D2 2026-27 standards PDF and `NCAA_SCM_CONVERSION_TABLES` (`constants.ts:145`)
-  exactly. An LCM swim with no SwimCloud conversion uses Table D:
-  `(LCM time − turn adjustment) × 0.892`, shown with an "est." badge. Table D
-  ships as an editable preset, not a constant. It truncates (R23). Its
-  400→500, 800→1000 and 1500→1650 rows are not used (R29): those events take
-  SwimCloud's conversion, else SwimSwam factors archived with a manifest
-  entry, else no estimate.
-- Converted times never count toward a cut (invariant #10 and #11: the cut
-  table must match the course, and NCAA D2 does not accept LCM times).
+  exactly. An LCM swim with no SwimCloud conversion uses the SwimSwam
+  capture (R58): `truncate((LCM time − turn) / divisor)` per event, from
+  `data/conversions/swimswam/`, labeled tool-derived and shown with an
+  "est." badge. Table D is disregarded for every event (R58). Relay splits
+  use the row for their stroke and distance (R62).
+- A converted time may earn an "estimated cut achieved" tag. A real swim of
+  the cut replaces it with the normal tag (R61). This is still never a direct
+  verdict: invariant #11 judges a metric swim against the yards table as an
+  estimate.
 - Altitude (Table B): `NCAA_ALTITUDE_ADJUSTMENT_TABLE` (`constants.ts:287`)
   matches the user's Table B and the NCAA PDF. A SwimCloud time already marked
   `A` is never adjusted again (invariant #9).

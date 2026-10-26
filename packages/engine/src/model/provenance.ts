@@ -5,8 +5,11 @@
  * Provenance and settings (plans/2026-10-25/D2-ENGINE-API.md, 3.2).
  *
  * Every value a rule preset holds carries where it came from, or it is `pending`. A pending
- * setting has no `value` field, so no code can read a guess. The parser accepts three provenance
+ * setting has no `value` field, so no code can read a guess. The parser accepts four provenance
  * kinds only. `'legacy'` is banned (CLAUDE.md, data provenance).
+ *
+ * `'tool-derived'` (R58, 2026-10-26) is for a value fitted to the outputs of a third-party tool that
+ * publishes no source. It is never `published`: no code may render it, count it or store it as one.
  */
 import { RulePresetError } from '../rules/cap';
 import type { IsoDate, IsoTime } from './primitives';
@@ -35,7 +38,17 @@ export type Provenance =
       /** `false`: a paraphrase (the README decision rows). */
       readonly verbatim: boolean;
     }
-  | { readonly kind: 'user-edited'; readonly editedAt: IsoTime; readonly previous: Provenance | null };
+  | { readonly kind: 'user-edited'; readonly editedAt: IsoTime; readonly previous: Provenance | null }
+  | {
+      readonly kind: 'tool-derived';
+      /** The tool whose outputs the value was fitted to. */
+      readonly tool: { readonly name: string; readonly url: string };
+      /** The archived record of those outputs. `sha256` is the sha256 of the file at `path`. */
+      readonly archive: { readonly path: string; readonly sha256: string };
+      readonly capturedOn: IsoDate;
+      /** Fixed text. The value is an inference from outputs: the tool publishes no factors. */
+      readonly basis: 'inferred-from-tool-outputs';
+    };
 
 export type Setting<T> =
   | { readonly state: 'set'; readonly value: T; readonly provenance: Provenance }
@@ -89,7 +102,7 @@ export function expectIsoTime(raw: unknown, path: string): IsoTime {
   return text;
 }
 
-/** Parse a provenance record. Any `kind` outside the three throws; `'legacy'` throws `legacy_provenance`. */
+/** Parse a provenance record. Any `kind` outside the four throws; `'legacy'` throws `legacy_provenance`. */
 export function parseProvenance(raw: unknown, path: string): Provenance {
   if (!isRecord(raw)) throw new RulePresetError(path, 'invalid', `${path}: expected an object`);
   const kind = raw.kind;
@@ -134,6 +147,25 @@ export function parseProvenance(raw: unknown, path: string): Provenance {
       kind: 'user-edited',
       editedAt: expectIsoTime(obj.editedAt, `${path}.editedAt`),
       previous: obj.previous === null ? null : parseProvenance(obj.previous, `${path}.previous`),
+    };
+  }
+  if (kind === 'tool-derived') {
+    const obj = expectKeys(raw, path, ['kind', 'tool', 'archive', 'capturedOn', 'basis']);
+    const tool = expectKeys(obj.tool, `${path}.tool`, ['name', 'url']);
+    const archive = expectKeys(obj.archive, `${path}.archive`, ['path', 'sha256']);
+    const sha256 = expectString(archive.sha256, `${path}.archive.sha256`);
+    if (!SHA256.test(sha256)) {
+      throw new RulePresetError(`${path}.archive.sha256`, 'invalid', `${path}.archive.sha256: not a lowercase sha256`);
+    }
+    if (obj.basis !== 'inferred-from-tool-outputs') {
+      throw new RulePresetError(`${path}.basis`, 'invalid', `${path}.basis: expected "inferred-from-tool-outputs"`);
+    }
+    return {
+      kind: 'tool-derived',
+      tool: { name: expectString(tool.name, `${path}.tool.name`), url: expectString(tool.url, `${path}.tool.url`) },
+      archive: { path: expectString(archive.path, `${path}.archive.path`), sha256 },
+      capturedOn: expectIsoDate(obj.capturedOn, `${path}.capturedOn`),
+      basis: 'inferred-from-tool-outputs',
     };
   }
   throw new RulePresetError(path, 'invalid', `${path}: unknown provenance kind ${JSON.stringify(kind)}`);

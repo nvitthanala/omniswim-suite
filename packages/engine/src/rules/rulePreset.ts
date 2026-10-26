@@ -237,7 +237,7 @@ function parseAutoRules(raw: unknown, path: string): EngineScorerAutoRules | nul
 
 /**
  * Read a stored or imported preset. Throws `RulePresetError` on: a missing key; an unknown key or
- * `null`; a provenance kind outside the three (`'legacy'` gives `legacy_provenance`); a numeric cap
+ * `null`; a provenance kind outside the four (`'legacy'` gives `legacy_provenance`); a numeric cap
  * of 999 or more; `eligibility: 'roster'` with `autoRules: null`; a bad `DiverWeight`; a negative
  * or non-finite point.
  */

@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILTIN_RULE_PRESETS,
   BUILTIN_SESSION_PRESETS,
+  BUILTIN_LCM_TO_SCY,
   BUILTIN_TABLE_D,
   builtinRulePreset,
   parseRulePreset,
@@ -48,12 +49,14 @@ const PINNED: Readonly<Record<string, string>> = {
   'rule|generic|1': '56d58f3ed13b00de5732039b3f40da7f5117c9562fdce0df3bfb7f0829668ac4',
   'session|nsisc-table-c|1': '17c5ccef7f94c0900aa8997ffe1447bb6cafb71350fbe906e05c7a9dfd8bb731',
   'tableD|table-d-user|1': 'ad287084f4934bfee8a5e1285ee5f3cd3283b2564cff9faa91653fbc25b80359',
+  'lcmToScy|lcm-scy-swimswam|1': '76d9b570e06aed33b90bd64d48bbd3653e0816b0c0a88a398b9fce8e43986c7c',
 };
 
 const SHIPPED: readonly { key: string; preset: unknown }[] = [
   ...BUILTIN_RULE_PRESETS.map(b => ({ key: `rule|${b.id}|${b.version}`, preset: b.preset })),
   ...BUILTIN_SESSION_PRESETS.map(b => ({ key: `session|${b.id}|${b.version}`, preset: b.preset })),
   ...BUILTIN_TABLE_D.map(b => ({ key: `tableD|${b.id}|${b.version}`, preset: b.preset })),
+  ...BUILTIN_LCM_TO_SCY.map(b => ({ key: `lcmToScy|${b.id}|${b.version}`, preset: b.preset })),
 ];
 
 describe('built-in versions', () => {
@@ -196,6 +199,10 @@ describe('built-in provenance', () => {
     }
     expect(collectProvenance(BUILTIN_SESSION_PRESETS.map(b => b.preset)).filter(p => p.kind === 'published')).toStrictEqual([]);
     expect(collectProvenance(BUILTIN_TABLE_D.map(b => b.preset)).filter(p => p.kind === 'published')).toStrictEqual([]);
+    // The LCM to SCY values are fitted to a converter's outputs (R58): tool-derived, never published.
+    const lcm = collectProvenance(BUILTIN_LCM_TO_SCY.map(b => b.preset));
+    expect(lcm.length).toBeGreaterThan(30);
+    expect(lcm.every(p => p.kind === 'tool-derived')).toBe(true);
   });
 });
 

@@ -14,6 +14,12 @@ export interface Builtin<P> {
   readonly version: number;
   readonly label: string;
   readonly preset: P;
+  /**
+   * Set when the built-in is out of use. A saved reference to `{id, version}` still resolves, so
+   * stored data does not break, but a picker must not offer it and no default may point at it. The
+   * preset content, and so its pinned hash, does not change.
+   */
+  readonly retired?: { readonly on: string; readonly reason: string; readonly supersededBy: string };
 }
 
 /** The user's plan, stated 2026-10-25 (verbatim). */
