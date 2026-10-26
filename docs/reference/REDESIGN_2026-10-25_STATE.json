@@ -630,6 +630,8 @@
     "DONE: answers backlog (NSISC v2, storage fields, zod/mini, colors, conversion capture).",
     "DONE: engine LCM->SCY (8d188a27)",
     "DONE: P2 risk. profile_fastest_times answers without a challenge (bests only; see p2Risk).",
+    "P2 UI: overlay results table + matches-SwimCloud line (Codex via Orca, child worktree). Brief notes: simulator preset is parity-only (never in a picker or copied); rescoreSimulator throws AdapterError on SCM/LCM, Actual relays, exhibition, coach-edited times, unknown pointSystem: catch and show not-compared reason",
+    "storage: rule presets read through parseRulePreset (v1 migrates, ties pending) before scoring; record wrapper PAYLOAD_VERSION stays; grep validate.ts:174",
     "P2 per plan; adapter brief notes flystart optional on relay rows"
   ],
   "notes": [
@@ -807,6 +809,10 @@
     {
       "sha": "8d188a27",
       "subject": "Convert LCM to SCY from the SwimSwam capture"
+    },
+    {
+      "sha": "92c438d6",
+      "subject": "Re-score the simulator with exact SwimCloud parity"
     }
   ],
   "lowPriority": {
@@ -835,7 +841,10 @@
     "review": "Codex read-only (Orca ctx_144994e95538, released): one P2 finding, test default export omitted classYearOverrides; fixed in the commit. Migration, import and provenance: no findings.",
     "leadChecks": "v1 validate.ts:403 already refused empty teamIds and empty memberIds, so no v1 record falls into a newly refused state; P1 open.ts writes meta.db.schemaVersion in the upgrade tx, so a healthy install passes the new refusal."
   },
-  "liveCheckNext": "After the next reload: open the dashboard and confirm storage opens at schema v2 with no DatabaseInconsistentError. The upgrade is one-way.",
+  "liveCheckNext": [
+    "After the next reload: open the dashboard and confirm storage opens at schema v2 with no DatabaseInconsistentError. The upgrade is one-way.",
+    "P2 live: load teams 58, 48, 412 with 16 Place Scoring (config C setup); confirm matches-SwimCloud on 100 Breast and 100 Free (tied events), once the overlay line exists"
+  ],
   "budget": "2026-10-26 afternoon: command-center band shows 5h 24%, 7d 61%, tier conserve: low-priority pace, one agent at a time",
   "conversionCapture": {
     "done": "2026-10-26",
@@ -878,10 +887,12 @@
       "nothing in the extension calls the new conversion/cut functions yet (P4)"
     ]
   },
-  "inFlight": {
-    "item": "P2 core: adapter SimSnapshot->MeetModel, SwimCloud-settings preset, validateMeetModel, scoreMeet, parity on configs A-D, per-event diff shape",
-    "agent": "Claude executor, background, dispatched 2026-10-26 evening",
-    "scope": "packages/engine/**, packages/swimcloud/** (browser/), new tests, D2 3.6/3.8",
-    "onResume": "resume with SendMessage; do not re-brief. Then Codex read-only review, then a worker builds the overlay results table against the reported API."
+  "p2Core": {
+    "commit": "92c438d6",
+    "parity": "exact on configs A-D (totals, entries, not-scored reasons)",
+    "review": "Codex ctx_9cf123b5b7f2: no findings (48 s, weak evidence); lead advisor audit: provenance cite fixed to the archived bundle (lodash orderBy, module 2877, stable)",
+    "interruptions": [
+      "2026-10-26 ~17:00 local: executor hit the 5h session limit (429) mid tie-policy task; tree left with 3 failing targeted tests (387 passed). After the reset the lead resumed it via SendMessage with the failing test names."
+    ]
   }
 }
