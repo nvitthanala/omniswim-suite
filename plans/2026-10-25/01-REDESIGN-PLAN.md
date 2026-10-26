@@ -680,21 +680,21 @@ Answered later on 2026-10-25 (README rows R20 to R44): Q-D2 (R29), Q-D3
 Q-D1 everything but the points (R21, R24 to R27, R37 to R44). Q4 and Q6 have
 answers that recon completes (R30, R31).
 
+Answered on 2026-10-26 (README rows R45 to R56): Q4 (recon: the simulator
+works signed out), Q6 (R47, R50), Q-D1 rest (R45), Q-D2 rest (R48; recon Q8
+found SwimCloud has no conversion), S2 intent (R49).
+
 Still open:
 - **Q3** New South ISC source documents for the 8-event cap, the 1/3 diver
   weight and the Table C session order, so presets can move from
   `user-stated` to `published`. Not blocking: presets ship as `user-stated`.
-  R32: search the web for them in the next session.
-- **Q4** Does the simulator work on a Free SwimCloud account (R30)? Recon
-  answers it.
-- **Q6** Per-swimmer history fetches, per-season roster fetches, or split
-  fetches (F1 table): approve or not, once recon shows what the simulator
-  already carries. Recon writes the request counts into
-  `02-SIMULATOR-RECON.md` so the user can decide.
-- **Q-D1 (rest)** Individual, relay and diving points per place (recon Q17).
-- **Q-D2 (rest)** Archive SwimSwam's conversion factors for 400→500,
-  800→1000 and 1500→1650 with a manifest entry, if recon shows SwimCloud has
-  no conversion for an LCM swim.
+  R32: search the web for them.
+- **S2 extent** Does the server clamp the date window at 3 years? R49 makes
+  per-swimmer history the main path, so this matters less. Settle it before
+  P2 relies on a wide team window.
+- **History endpoint** "Load history" (R50) needs a per-swimmer request that
+  does not hit a Cloudflare challenge. Recon hit one on the public swimmer
+  profile page. Verify an endpoint before anyone builds the feature.
 
 ---
 

@@ -60,6 +60,25 @@ the SwimCloud meet simulator, plus a dashboard inside the extension.
 | R43 | Finals placement | In NSISC, the A and B finals hold scorers only. Non-scorers never swim an A or B final. |
 | R44 | C final | The 8 fastest non-scorers from prelims swim a C final in the evening. The other non-scorers swim prelims only. |
 
+## Decisions (user, 2026-10-26)
+
+Asked after P1. The state file `docs/reference/REDESIGN_2026-10-25_STATE.json` (`userAnswers`) holds the same answers.
+
+| ID | Question | Answer |
+| --- | --- | --- |
+| R45 | NSISC points (Q-D1 rest) | Individual and diving: 20-17-16-15-14-13-12-11-9-7-6-5-4-3-2-1. Relays: double (40-34-32-30-28-26-24-22-18-14-12-10-8-6-4-2). Ties split. User: "yes, its just like that, swimcloud already has a scoring preset that matches (16 place scoring)". |
+| R46 | Status colors | Material 800 shades: good `#2E7D32`, warn `#EF6C00`, bad `#C62828`. Orange fails text contrast (3.1:1 on white, 2.95:1 on `#FAFAFA`), so the user chose: warn is a fill only, a badge or chip background with dark text (about 6.8:1). It is never a text or thin-icon color. Good and bad pass as text (5.1:1 and 5.6:1). |
+| R47 | Extra SwimCloud requests (Q6) | Only on a user click. One request at a time, no background fetches, stop on any Cloudflare challenge. |
+| R48 | Distance conversions (Q-D2) | Archive SwimSwam's conversion factors for 400→500, 800→1000 and 1500→1650 once, with a manifest entry. Finding (2026-10-26): the SwimSwam page publishes no factors. It converts on its server and credits Colorado Timing's conversion factors. Nothing was archived; open question `Q-D2-swimswam` in the state file. |
+| R49 | Date window (S2) | User: "i want the date range to be applied so that you can search through an athletes history in the selected event and project the performance against the field in the simulator. the issue with the date range is that it opens up people who had previously swam on the team but may not be on the current seasons roster. thats what the scope of the expanded range was for, to pull historical swims from athletes who are on the current seasons roster. this can also be transitive and applied for future recruits". Swimmer 1130590 transferred into Henderson State and is a senior; their 2022-23 swims were at another school. |
+| R50 | History loading | One click per roster: "Load history" fetches each current-roster swimmer's history in turn, with progress, cached, and stops on any Cloudflare challenge. |
+| R51 | Class year | User: "allow an user-overridden class tag, automatically source it from swimcloud but allow the user to select and change it if they wish." |
+| R52 | Recruits | Added by SwimCloud swimmer link or ID. Adding one reruns the optimizer and shows the new lineup and point change. Nothing changes until the user accepts. |
+| R53 | Empty rosters (P4) | Store a roster with no members as verified-empty, with its fetch time and source, apart from "not loaded". |
+| R54 | Draft meets (P3) | A meet with no teams saves as a draft. Scoring and the optimizer refuse a draft. |
+| R55 | Overlay bundle | Switch the overlay's validation to `zod/mini`. |
+| R56 | Panel widths (Q16) | Claude may resize the user's window to measure. The window stayed maximized, so the harness checks the panel geometry instead (D3 §13). |
+
 NSISC is the New South Intercollegiate Swim Conference. The repo's meet data
 labels its meet "New South Championships". It is not the Northern Sun
 conference (NSIC). An early research pass on 2026-10-25 confused the two;
