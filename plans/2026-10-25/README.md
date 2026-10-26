@@ -34,6 +34,20 @@ the SwimCloud meet simulator, plus a dashboard inside the extension.
 | R17 | Sessions and load | A session has no meet-imposed race limit. The load limit protects swimmers' performance; it is a coach preference. Prelims usually swim in the morning and finals later the same day. Timed-final events (usually the distance events) swim once. Each event's format (prelims/finals or timed final) is a setting. |
 | R18 | OpenCode | Add OpenCode to the provider pool for this work ("more resources to knock out the work"). This is the user approval the routing file's OpenCode `availableNote` asked for. |
 | R19 | Chrome | The user will start a new session with Claude in Chrome running. The plan carries a fallback for getting the extension connected. |
+| R20 | Distance events (Q-D3) | The 1000 and 1650 are **timed finals, split**: slower heats swim in the morning, the fastest heat swims in the evening. Each swimmer swims once, and the event scores as a timed final. The fastest-heat size (lane count) is a meet setting; it ships as pending. |
+| R21 | Scorers (Q-D1) | Scorers are picked automatically. The coach's tags override the automatic pick. |
+| R22 | Diving and load (Q-D5) | Diving does not count toward the races-per-session preference. |
+| R23 | Table D rounding (Q-D4) | Truncate. |
+| R24 | Scoring-team size (Q-D1) | 18. |
+| R25 | Scoring relays (Q-D1) | 2 per team per relay event (the A and B relays). |
+| R26 | A final (Q-D1) | 8 swimmers. |
+| R27 | Diving scorer cap (Q-D1) | Same rule as swimming: no limit on how many divers from one team score in an event. |
+| R28 | Relay swimmers and the scoring team | A relay swimmer takes a full scoring-team spot, not half of one. This answers a question framed around scoring-team spots. It does **not** answer the code's `halfRateRelaySwimmer` flag, which sets each relay leg's share of the relay's points (1/4). That flag stays pending (Q-D6). |
+| R29 | Table D distance rows (Q-D2) | Do not use the 0.892 rows for 400→500, 800→1000 and 1500→1650. Use SwimCloud's own conversion first. Where SwimCloud has none, source the factors from SwimSwam's conversion tool (`https://swimswam.com/swimming-times-conversion-tool/`), archived with a manifest entry. The user's check value: a 4:00.00 400 m LCM is about 4:34.32 for a 500 yd (240.00 × 1.143). 1.143 is Table A's SCM factor, so the check value is a sanity range, not a conversion value. |
+| R30 | SwimCloud plan (Q4) | The user has a Free SwimCloud account. Recon records what the simulator shows on Free. |
+| R31 | Extra fetches (Q6) | Decide after recon. |
+| R32 | NSISC documents (Q3) | Search the web for the New South ISC rule documents in the next session. |
+| R33 | Housekeeping | Keep the untracked `omniswim-suite/data/` folder as it is (open item M3). Keep all git worktrees. |
 
 NSISC is the New South Intercollegiate Swim Conference. The repo's meet data
 labels its meet "New South Championships". It is not the Northern Sun

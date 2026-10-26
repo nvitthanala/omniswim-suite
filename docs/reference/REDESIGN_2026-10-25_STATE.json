@@ -157,14 +157,14 @@
     }
   ],
   "openQuestions": [
-    "Q3 New South ISC sources (not blocking)",
-    "Q4 simulator plan level (recon)",
-    "Q6 approve extra fetches after recon",
-    "Q-D1 NSISC values with no source (D2 section 6)",
-    "Q-D2 Table D distance rows give impossible times",
-    "Q-D3 Table C distance events: timed finals or prelims-finals",
-    "Q-D4 Table D rounding",
-    "Q-D5 diving and load preference"
+    "Q3 New South ISC sources: search the web next session (R32)",
+    "Q4 does the simulator work on a Free account (R30, recon)",
+    "Q6 approve extra fetches after recon (R31)",
+    "Q-D1 rest: points per place (recon Q17), relayEligibleFromScorerPool, autoRules field values",
+    "Q-D2 rest: archive SwimSwam factors for 400-500, 800-1000, 1500-1650 if SwimCloud has no conversion (R29)",
+    "Q-D6 halfRateRelaySwimmer: does each relay leg earn 1/4 of relay points (R28 answered a different question)",
+    "Q-D7 fastest-heat size (lane count) for split timed finals (R20)",
+    "Q-D8 confirm relays listed only under (Finals) are evening timed finals"
   ],
   "resumeOrder": [
     "P0 (Claude in Chrome now connects; recon first)",
@@ -174,7 +174,8 @@
   ],
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
-    "oyster has an uncommitted PROVIDER_ROUTING.json change and untracked .opencode/ files; not part of PR #7."
+    "oyster has an uncommitted PROVIDER_ROUTING.json change and untracked .opencode/ files; not part of PR #7.",
+    "PR #8 CI run 40259528508 passed (2026-10-26T02:44Z, 13m07s): every step green. Active vitest 2031 passed / 16 skipped, ci budget 16. Legacy vitest 2881 / 29, ci budget 29. Active scripts 63 / 2 skipped; legacy scripts 25 / 0 (the local skip runs in CI, Postgres service healthy). pytest 63 passed. Extension harness 7 passed. Build and extension build green."
   ],
-  "decisionsAdded": "R14-R19 recorded 2026-10-25 (second user message): flyover user number; NSISC SwimCloud table, no per-event scorer cap; event order editable on simulator page; sessions advisory, prelims AM/finals later, timed finals; OpenCode added; Chrome fallback in plan section 12"
+  "decisionsAdded": "R14-R19 recorded 2026-10-25 (second user message): flyover user number; NSISC SwimCloud table, no per-event scorer cap; event order editable on simulator page; sessions advisory, prelims AM/finals later, timed finals; OpenCode added; Chrome fallback in plan section 12; R20-R33 recorded 2026-10-25 (third user message): split timed finals for 1000/1650, auto scorers with tag overrides, diving excluded from load, Table D truncate, team size 18, 2 scoring relays, A final 8, diving cap unlimited, relay swimmer takes a full scoring-team spot (not the halfRateRelaySwimmer flag), Table D distance rows dropped for SwimCloud then SwimSwam, Free SwimCloud account, Q6 after recon, search NSISC docs, keep omniswim-suite/data and all worktrees"
 }

@@ -232,7 +232,10 @@ an "est." badge.
   D2 2026-27 standards PDF and `NCAA_SCM_CONVERSION_TABLES` (`constants.ts:145`)
   exactly. An LCM swim with no SwimCloud conversion uses Table D:
   `(LCM time − turn adjustment) × 0.892`, shown with an "est." badge. Table D
-  ships as an editable preset, not a constant.
+  ships as an editable preset, not a constant. It truncates (R23). Its
+  400→500, 800→1000 and 1500→1650 rows are not used (R29): those events take
+  SwimCloud's conversion, else SwimSwam factors archived with a manifest
+  entry, else no estimate.
 - Converted times never count toward a cut (invariant #10 and #11: the cut
   table must match the course, and NCAA D2 does not accept LCM times).
 - Altitude (Table B): `NCAA_ALTITUDE_ADJUSTMENT_TABLE` (`constants.ts:287`)
@@ -660,31 +663,35 @@ Answered on 2026-10-25: Q1 (flyover is a user-set number, R14), Q2 (use
 SwimCloud's NSISC table; no per-event scorer cap, R15), Q5 (each round counts
 in its own session, R17).
 
+Answered later on 2026-10-25 (README rows R20 to R33): Q-D3 (distance events
+are split timed finals, R20), Q-D4 (truncate, R23), Q-D5 (diving excluded from
+load, R22), most of Q-D1 (R21, R24 to R27), Q-D2 (SwimCloud conversion, else
+SwimSwam factors, R29), Q4 (Free account, R30), Q6 (decide after recon, R31).
+
 Still open:
 - **Q3** New South ISC source documents for the 8-event cap, the 1/3 diver
   weight and the Table C session order, so presets can move from
   `user-stated` to `published`. Not blocking: presets ship as `user-stated`.
-- **Q4** Does the simulator need a paid SwimCloud plan? Recon answers it.
+  R32: search the web for them in the next session.
+- **Q4** Does the simulator work on a Free SwimCloud account (R30)? Recon
+  answers it.
 - **Q6** Per-swimmer history fetches, per-season roster fetches, or split
   fetches (F1 table): approve or not, once recon shows what the simulator
   already carries. Recon writes the request counts into
   `02-SIMULATOR-RECON.md` so the user can decide.
-
-Raised by the D2 spec (`D2-ENGINE-API.md` section 6). None blocks the
-engine extraction; each value ships as `pending` until answered.
-- **Q-D1** NSISC values with no source: per-place points (recon Q17),
-  scoring-team size (18 exists only in code), scoring relays per team per
-  relay event (2 exists only in code), A-final size, half-rate relay swimmers,
-  whether "no per-event scorer limit" covers diving, and whether scorers come
-  from A/B-final rules or only from the coach's tags.
-- **Q-D2** Table D distance rows (400→500, 800→1000, 1500→1650) give
-  impossible times: a 4:00.00 400 m LCM gives a 3:28.37 500 yd. Confirm or
-  correct them. Until then those rows are pending.
-- **Q-D3** Table C distance events: are the 1000 and 1650 timed finals (slow
-  heats in the morning, fastest heat in the evening) or true prelims and
-  finals? Are relays listed only under "(Finals)" timed finals?
-- **Q-D4** Table D rounding: truncate or round half up?
-- **Q-D5** Does diving count toward the races-per-session preference?
+- **Q-D1 (rest)** Individual, relay and diving points per place (recon Q17),
+  and `relayEligibleFromScorerPool`.
+- **Q-D2 (rest)** Archive SwimSwam's conversion factors for 400→500,
+  800→1000 and 1500→1650 with a manifest entry, if recon shows SwimCloud has
+  no conversion for an LCM swim.
+- **Q-D6** `halfRateRelaySwimmer`: does each relay leg earn 1/4 of the
+  relay's points for individual totals (the legacy value), or something else?
+  R28 answered a different question (scoring-team spots). Ask this one as
+  written.
+- **Q-D7** Fastest-heat size for the split timed finals (R20): the pool's
+  lane count. Per meet; ships as pending.
+- **Q-D8** Relays listed only under "(Finals)" in Table C are read as timed
+  finals in the evening. Confirm.
 
 ---
 

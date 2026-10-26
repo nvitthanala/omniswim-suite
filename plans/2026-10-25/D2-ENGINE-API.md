@@ -595,7 +595,9 @@ export type Violation =
       readonly races: number; readonly limit: number }
   | { readonly kind: 'relay_leg'; readonly entryKey: string; readonly leg: 1 | 2 | 3 | 4;
       readonly reason: 'wrong_gender' | 'duplicate_swimmer' | 'event_mismatch' }
-  | { readonly kind: 'unscheduled_event'; readonly eventKey: EventKey; readonly gender: Gender };
+  | { readonly kind: 'unscheduled_event'; readonly eventKey: EventKey; readonly gender: Gender }
+  | { readonly kind: 'pending_setting'; readonly eventKey: EventKey; readonly gender: Gender;
+      readonly setting: 'fastHeatSize' };   // R20, Q-D7
 export interface Results {
   readonly payloadVersion: 1;
   readonly teams: readonly { readonly teamId: TeamId; readonly points: number; readonly rank: number }[]; // TeamScore types.ts:231
@@ -722,7 +724,9 @@ export type SessionSlot = 'morning' | 'afternoon' | 'evening';
 export interface SessionRef { readonly day: number; readonly slot: SessionSlot }   // day: integer >= 1
 export type EventFormat =
   | { readonly kind: 'timed-final'; readonly session: SessionRef }
-  | { readonly kind: 'prelims-finals'; readonly prelims: SessionRef; readonly finals: SessionRef };
+  | { readonly kind: 'prelims-finals'; readonly prelims: SessionRef; readonly finals: SessionRef }
+  | { readonly kind: 'timed-final-split'; readonly slowHeats: SessionRef; readonly fastHeat: SessionRef;
+      readonly fastHeatSize: Setting<number> };   // R20; lane count, no default (Q-D7)
 export interface ScheduledEvent { readonly eventKey: EventKey; readonly gender: Gender | 'both';
   readonly format: EventFormat }
 export interface SessionPreset { readonly payloadVersion: 1; readonly provenance: Provenance;
@@ -751,8 +755,13 @@ Rules:
 - Race counting (R17): a timed final counts 1 race in its session. A
   prelims-finals event counts 1 race in the prelims session and 1 more in the
   finals session only when the swimmer's projected place is inside the point
-  table (place ≤ length of `individualPoints`). Relay legs count. Diving counts
-  per the `diving` setting.
+  table (place ≤ length of `individualPoints`). A split timed final (R20)
+  counts 1 race: in `fastHeat` when the swimmer's seed rank is within
+  `fastHeatSize`, else in `slowHeats`. While `fastHeatSize` is pending,
+  `sessionLoad` emits a `pending_setting` violation for that event and never
+  guesses a session. It scores as one timed final either way. Relay legs
+  count. Diving counts per the `diving` setting; the NSISC preference is
+  `'excluded'`, user-stated (paraphrase), R22.
 - An event in the lineup missing from the schedule gives an
   `unscheduled_event` violation, never zero races.
 
@@ -791,16 +800,16 @@ Sources: **U** = `plans/2026-10-25/00-USER-PLAN.md` (verbatim, stated
 | `scoring.individualPoints` | pending: "SwimCloud's NSISC per-place values (recon Q17). R15 states 16 places." | — | `[20,17,16,15,14,13,12,11,9,7,6,5,4,3,2,1]`, constants.ts:317 |
 | `scoring.relayPoints` | pending (recon Q17) | — | multiplier 2, :39 |
 | `scoring.divingPoints` | pending (recon Q17) | — | same as individual |
-| `scoring.halfRateRelaySwimmer` | pending | — | true, :40 |
-| `scoring.aFinalBracketSize` | pending | — | 8, :43 |
+| `scoring.halfRateRelaySwimmer` | pending: "Does each relay leg earn 1/4 of the relay's points? (Q-D6)" | — | true, :40 |
+| `scoring.aFinalBracketSize` | 8 | user-stated (paraphrase), R26 | 8, :43 |
 | `scorers.eligibility` | `'roster'` | user-stated, R15 "Only scoring-team swimmers score"; U:23 | roster, :47 |
-| `scorers.autoRules` | pending: "Do scorers come from A/B-final rules, or only from the coach's tags?" | — | :48-53 |
-| `scorers.scoringTeamSize` | pending: "NSISC scoring-team size. 18 is only in code." | — | 18, :41 |
+| `scorers.autoRules` | pending: "R21 says auto rules apply and coach tags override them, so the value is not `null`. Confirm the fields: tiers A and B, relay legs count, distance final required (what is the 'final' of a split timed final, R20?)." | — | :48-53 |
+| `scorers.scoringTeamSize` | 18 | user-stated (paraphrase), R24; a relay swimmer takes a full spot, R28 | 18, :41 |
 | `scorers.scoringTeamScope` | `'meet'` | user-stated verbatim U:21 "Total roster scoring headcount limitation (total number of team members allowed on scoring team)" | meet, :44 |
 | `scorers.diverWeight` | `{1, 3}` | user-stated verbatim U:22 "divers are ⅓ of rull roster limit"; R9 | 1/3, :45 |
 | `scorers.perEventScorerCap` | `{cap:'unlimited'}` | user-stated, R15 "No limit on how many swimmers from one team score in an event" | absent |
-| `scorers.divingPerEventScorerCap` | pending: "Does R15 cover diving events?" | — | absent |
-| `scorers.scoringRelaysPerTeamPerEvent` | pending (recon Q17; R15 is silent on relays) | — | 2, :42 |
+| `scorers.divingPerEventScorerCap` | `{cap:'unlimited'}` | user-stated (paraphrase), R27 | absent |
+| `scorers.scoringRelaysPerTeamPerEvent` | 2 | user-stated (paraphrase), R25 "2 (A and B)" | 2, :42 |
 | `scorers.relayEligibleFromScorerPool` | pending | — | false, :46 |
 | `entries.maxIndividualPerSwimmer` | `'unlimited'` | user-stated verbatim U:24 "you can cut it any way you would like, usually 4I/4R, 3I/5R" | 999, :56 |
 | `entries.maxRelayPerSwimmer` | `'unlimited'` | same, U:24 | 999, :57 |
@@ -814,21 +823,26 @@ control, not an NSISC rule.
 
 **`nsisc-table-c` v1.** Provenance user-stated verbatim, U:55-76, 2026-10-25.
 Swimming events use `'both'`; dives use the gender the table names. Rows
-listed only under "(Finals)" are read as timed finals (confirm, Q-D3).
+listed only under "(Finals)" are read as timed finals (confirm, Q-D8). The 1000
+and 1650 are split timed finals (R20): slower heats in the morning, the fastest
+heat in the evening, one swim each.
 
 | Day | Prelims-finals: prelims morning, finals evening, in this order | Timed final, evening | Dive: prelims afternoon, finals evening |
 | --- | --- | --- | --- |
 | 1 | — | 800 Free Relay | — |
-| 2 | 200 IM, 50 Free, 1000 Free | 200 Medley Relay | 1 m (Men) |
+| 2 | 200 IM, 50 Free, 1000 Free (split timed final) | 200 Medley Relay | 1 m (Men) |
 | 3 | 100 Fly, 400 IM, 200 Free | 400 Medley Relay | 3 m (Women) |
 | 4 | 500 Free, 100 Back, 100 Breast, 200 Fly | 200 Free Relay | 3 m (Men) |
-| 5 | 100 Free, 200 Back, 200 Breast, 1650 Free | 400 Free Relay | 1 m (Women) |
+| 5 | 100 Free, 200 Back, 200 Breast, 1650 Free (split timed final) | 400 Free Relay | 1 m (Women) |
 
 Evening order follows U:64, U:68, U:72, U:76: finals, then the relay, then the dive.
 
 **`table-d-user` v1.** Rows at U:82-84 and U:88-103 are user-stated verbatim
 (`multiplierPermille: 892`, turn adjustments in hundredths). Rows at U:85-87
-(400→500, 800→1000, 1500→1650) are **pending** (Q-D2). `rounding` is pending (Q-D4).
+(400→500, 800→1000, 1500→1650) are **not used** (R29): those events take
+SwimCloud's own conversion, else SwimSwam factors archived with a manifest
+entry. Until that archive exists they are pending. `rounding` is `'truncate'`,
+user-stated (paraphrase), R23.
 
 **Drift test** (`tests/engineNsiscDrift.test.ts`): every `set` NSISC field,
 mapped through the bridge, equals `NSISC_PRESET_SETTINGS`, except
@@ -859,25 +873,26 @@ automatically.
 
 ## 6. Open questions this spec raised (none blocks Steps A to C)
 
-- **Q-D1 (NSISC values).** Pending: individual, relay and diving points per
-  place (recon Q17); scoring-team size (18 exists only in code); scoring relays
-  per team per relay event (2 exists only in code); A-final bracket size (8);
-  half-rate relay swimmers; whether R15's "no per-event scorer limit" covers
-  diving; whether scorers come from the A/B-final auto rules or only from the
-  coach's tags.
-- **Q-D2 (Table D distance rows).** The 400→500, 800→1000 and 1500→1650 rows
-  (U:85-87) give impossible times [ran]: a 4:00.00 400 m LCM gives
-  (240.00 − 6.40) × 0.892 = 208.37 s for a 500 yd, faster than the shorter
-  400 m. A 15:00 1500 m gives 781.39 s for a 1650 yd. Table A's own 400 m →
-  500 yd factor is 1.143 (U:46). Confirm or correct.
-- **Q-D3 (Table C distance events).** Table C lists the 1000 and 1650 under both
-  prelims (morning) and finals (evening) (U:62,64,74,76). R17 says distance
-  events are usually timed finals. Are they timed finals with slower heats in
-  the morning and the fastest heat in the evening, or true prelims and finals?
-  Also confirm relays listed only under "(Finals)" are timed finals.
-- **Q-D4 (Table D rounding).** Truncate, or round half up?
-- **Q-D5 (diving and load).** Does diving count toward the races-per-session
-  preference? Ships as pending, no default.
+Answered 2026-10-25 (README rows R20 to R29): Q-D3 (R20), Q-D4 (R23),
+Q-D5 (R22), Q-D2 (R29), and in Q-D1 the scoring-team size (R24), scoring
+relays (R25), A-final size (R26), diving scorer cap (R27) and auto scorers
+with tag overrides (R21).
+
+- **Q-D1 (rest).** Pending: individual, relay and diving points per place
+  (recon Q17); `relayEligibleFromScorerPool`; the `autoRules` field values
+  (section 4).
+- **Q-D2 (rest).** The 400→500, 800→1000 and 1500→1650 rows (U:85-87) gave
+  impossible times [ran]: (240.00 − 6.40) × 0.892 = 208.37 s for a 500 yd
+  from a 4:00.00 400 m. R29 drops them. Archive SwimSwam's factors with a
+  manifest entry if recon shows an LCM swim with no SwimCloud conversion.
+  The user's check value: 240.00 × 1.143 = 274.32 s (4:34.32). 1.143 is
+  Table A's SCM factor, so this is a sanity range, not a conversion value.
+- **Q-D6 (`halfRateRelaySwimmer`).** Does each relay leg earn 1/4 of the
+  relay's points in a swimmer's individual total (`relayScoring.ts:205-209`)?
+  R28 answered a different question.
+- **Q-D7 (fast-heat size).** The lane count for split timed finals (R20).
+- **Q-D8 (relay format).** Confirm relays listed only under "(Finals)" are
+  evening timed finals.
 
 ## 7. Findings about the existing code
 
