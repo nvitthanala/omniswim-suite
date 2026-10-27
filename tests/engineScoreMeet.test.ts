@@ -126,9 +126,9 @@ const flatOf = new Map<string, number>();
 const lineup = (...entries: LineupEntry[]): Lineup => ({ payloadVersion: 1, meetKey: 'synthetic', entries });
 
 /** A points_pool preset with the college tables (9-4-3-2-1, relay 11-4-2) and the caps a test names. */
-function preset(opts: { ties?: 'split' | 'ordered'; scorerCap?: number; relayCap?: number | 'unlimited'; maxInd?: number | 'unlimited'; eligibility?: 'points_pool' | 'roster'; overCap?: 'holds-place' | 'removed-from-consideration'; divingCap?: { cap: number; overCap: 'holds-place' | 'removed-from-consideration' } } = {}): CompleteRulePreset {
+function preset(opts: { ties?: 'split' | 'ordered'; scorerCap?: number; relayCap?: number | 'unlimited'; relayOverCap?: 'holds-place' | 'exhibition'; maxInd?: number | 'unlimited'; eligibility?: 'points_pool' | 'roster'; overCap?: 'holds-place' | 'removed-from-consideration'; divingCap?: { cap: number; overCap: 'holds-place' | 'removed-from-consideration' } } = {}): CompleteRulePreset {
   const p: RulePreset = {
-    payloadVersion: 2,
+    payloadVersion: 3,
     scoring: {
       ties: set(opts.ties ?? ('split' as const)),
       individualPoints: set([9, 4, 3, 2, 1]),
@@ -149,6 +149,7 @@ function preset(opts: { ties?: 'split' | 'ordered'; scorerCap?: number; relayCap
       perEventScorerCap: set(opts.scorerCap === undefined ? { cap: 'unlimited' as const } : { cap: opts.scorerCap, overCap: opts.overCap ?? ('holds-place' as const) }),
       divingPerEventScorerCap: set(opts.divingCap === undefined ? { kind: 'same-as-swimming' as const } : { kind: 'own' as const, ...opts.divingCap }),
       scoringRelaysPerTeamPerEvent: set(opts.relayCap ?? 'unlimited'),
+      relayOverCap: set(opts.relayOverCap ?? ('holds-place' as const)),
       relayEligibleFromScorerPool: set(false),
       relayLegsMustBeScorers:
         opts.eligibility === 'roster' ? set(false) : { state: 'pending', question: 'not applicable', blocks: ['requireComplete', 'scoreMeet'] },
@@ -532,10 +533,10 @@ describe("scoreMeet: an over-cap entry under 'removed-from-consideration'", () =
     const group = (team: string, g: number): [string, string, string, string] => [0, 1, 2, 3].map((k) => `${team}-${g * 4 + k}`) as [string, string, string, string];
     const entries = [relay('T1', 'A', group('T1', 0)), relay('T1', 'B', group('T1', 1)), relay('T1', 'C', group('T1', 2)), relay('T2', 'A', group('T2', 0))];
 
-    // GAP (reported to the architect): scorers.scoringRelaysPerTeamPerEvent has no over-cap behavior, and D2 says
-    // none is specified. The relay branch therefore keeps today's behavior under every swimming overCap.
-    it("a relay over its cap holds its place even when the swimming cap's overCap is 'removed-from-consideration'", () => {
-      const r = scoreMeet(model(relaySwimmers, swims, { splits }), lineup(...entries), [], preset({ relayCap: 2, scorerCap: 5, overCap: 'removed-from-consideration' }), SOURCING);
+    // A relay over its cap follows scorers.relayOverCap (README R67), never the swimming cap's overCap. Under
+    // 'holds-place' it keeps its place whatever the swimming cap says. The 'exhibition' case is in its own describe below.
+    it("relayOverCap 'holds-place': a relay over its cap holds its place even when the swimming cap's overCap is 'removed-from-consideration'", () => {
+      const r = scoreMeet(model(relaySwimmers, swims, { splits }), lineup(...entries), [], preset({ relayCap: 2, relayOverCap: 'holds-place', scorerCap: 5, overCap: 'removed-from-consideration' }), SOURCING);
       expect(rowsOf(r, '400 Freestyle Relay').map((x) => [x.entryKey, x.place, x.points, x.notScoredReason ?? null])).toEqual([
         ['r|T1|400 Freestyle Relay|Men|A', 1, 11, null],
         ['r|T1|400 Freestyle Relay|Men|B', 2, 4, null],
@@ -551,6 +552,216 @@ describe("scoreMeet: an over-cap entry under 'removed-from-consideration'", () =
     const r = scoreMeet(model(swimmers, swims), lineup(ind('T1', 'a1'), ind('T1', 'a2'), ind('T2', 'b1')), [], removedPreset({ scorerCap: 1 }), SOURCING);
     expect(rowsOf(r, '50 Freestyle').find((x) => x.swimmerId === 'b1')?.place).toBe(2);
     expect(rowsOf(r, '50 Freestyle').find((x) => x.swimmerId === 'a2')).toMatchObject({ place: null, notScoredReason: REMOVED });
+  });
+});
+
+describe('scoreMeet: a relay over the scoring limit under relayOverCap (README R67)', () => {
+  const EXHIBITION = 'exhibition';
+  const RELAY_EVENT = '400 Freestyle Relay';
+  type Spec = { team: string; letter: string; t: number };
+
+  /**
+   * A relay field with exact total times. Each relay has its own four swimmers, every leg at `t` hundredths
+   * (a flat start for leg 1, a split for legs 2 to 4), so the relay's time is 4t. The relay table is 11-4-2.
+   */
+  function relayField(specs: readonly Spec[]) {
+    const swimmers: Swimmer[] = [];
+    const swims: MeetSwim[] = [];
+    const splits: RelaySplit[] = [];
+    const entries: LineupEntry[] = [];
+    for (const { team, letter, t } of specs) {
+      const ids = [0, 1, 2, 3].map((k) => `${team}${letter}-${k}`) as [string, string, string, string];
+      for (const id of ids) {
+        swimmers.push({ id, team });
+        swims.push(swim(id, '100 Freestyle', t));
+        flatOf.set(id, t);
+        splits.push(split(id, t));
+      }
+      entries.push(relay(team, letter, ids));
+    }
+    return { swimmers, swims, splits, entries };
+  }
+
+  /** `order` names the relays (`T1A`) in lineup order. Without it the lineup follows `specs`. */
+  const run = (specs: readonly Spec[], p: CompleteRulePreset, order?: readonly string[]) => {
+    const f = relayField(specs);
+    const entries = order
+      ? order.map((name) => f.entries.find((e) => e.kind === 'relay' && `${e.teamId}${e.letter}` === name) as LineupEntry)
+      : f.entries;
+    return scoreMeet(model(f.swimmers, f.swims, { splits: f.splits }), lineup(...entries), [], p, SOURCING);
+  };
+  const nameOf = (entryKey: string): string => `${entryKey.split('|')[1]}${entryKey.slice(-1)}`;
+  const shapeOf = (r: Results) => rowsOf(r, RELAY_EVENT).map((x) => [nameOf(x.entryKey), x.place, x.points, x.notScoredReason ?? null]);
+  const FIELD: Spec[] = [
+    { team: 'T1', letter: 'A', t: 2000 },
+    { team: 'T1', letter: 'B', t: 2050 },
+    { team: 'T1', letter: 'C', t: 2100 },
+    { team: 'T2', letter: 'A', t: 2200 },
+    { team: 'T3', letter: 'A', t: 2300 },
+  ];
+
+  it("'exhibition' removes the over-limit relay and the relays behind it move up", () => {
+    const r = run(FIELD, preset({ relayCap: 2, relayOverCap: 'exhibition' }));
+    expect(shapeOf(r)).toEqual([
+      ['T1A', 1, 11, null],
+      ['T1B', 2, 4, null],
+      ['T2A', 3, 2, null], // T1 C left the places: T2 A moves from 4th (outside the table) to 3rd
+      ['T3A', 4, 0, 'outside_point_table'],
+      ['T1C', null, 0, EXHIBITION], // in Results, no place, no points, reason exhibition
+    ]);
+    expect(pointsOf(r, 'T1')).toBe(15);
+    expect(pointsOf(r, 'T2')).toBe(2);
+  });
+
+  it("'holds-place' is unchanged: the over-limit relay keeps its place, scores 0, and nobody moves up", () => {
+    const r = run(FIELD, preset({ relayCap: 2, relayOverCap: 'holds-place' }));
+    expect(shapeOf(r)).toEqual([
+      ['T1A', 1, 11, null],
+      ['T1B', 2, 4, null],
+      ['T1C', 3, 0, 'relay_scorer_cap'],
+      ['T2A', 4, 0, 'outside_point_table'],
+      ['T3A', 5, 0, 'outside_point_table'],
+    ]);
+    expect(pointsOf(r, 'T2')).toBe(0);
+  });
+
+  it('which relays are over the limit does not depend on the treatment', () => {
+    const over = (relayOverCap: 'holds-place' | 'exhibition') =>
+      rowsOf(run(FIELD, preset({ relayCap: 2, relayOverCap })), RELAY_EVENT)
+        .filter((x) => x.notScoredReason === 'relay_scorer_cap' || x.notScoredReason === EXHIBITION)
+        .map((x) => x.entryKey);
+    expect(over('exhibition')).toEqual(over('holds-place'));
+    expect(over('exhibition')).toEqual(['r|T1|400 Freestyle Relay|Men|C']);
+  });
+
+  it("an unlimited relay cap removes nothing under 'exhibition'", () => {
+    const r = run(FIELD, preset({ relayCap: 'unlimited', relayOverCap: 'exhibition' }));
+    expect(shapeOf(r)).toEqual([
+      ['T1A', 1, 11, null],
+      ['T1B', 2, 4, null],
+      ['T1C', 3, 2, null],
+      ['T2A', 4, 0, 'outside_point_table'],
+      ['T3A', 5, 0, 'outside_point_table'],
+    ]);
+  });
+
+  describe('ties', () => {
+    // T1 C (over the limit) ties T2 A at 21.00 a leg.
+    const TIED: Spec[] = [
+      { team: 'T1', letter: 'A', t: 2000 },
+      { team: 'T1', letter: 'B', t: 2050 },
+      { team: 'T1', letter: 'C', t: 2100 },
+      { team: 'T2', letter: 'A', t: 2100 },
+      { team: 'T3', letter: 'A', t: 2300 },
+    ];
+    // T1 C is over the limit at 3rd. T2 A and T3 A tie for 4th, so the removal moves the tie into the table.
+    const STAY: Spec[] = [
+      { team: 'T1', letter: 'A', t: 2000 },
+      { team: 'T1', letter: 'B', t: 2010 },
+      { team: 'T1', letter: 'C', t: 2020 },
+      { team: 'T2', letter: 'A', t: 2030 },
+      { team: 'T3', letter: 'A', t: 2030 },
+    ];
+
+    it("'split': the removed relay leaves its tie group, so its tie-mate takes the whole place", () => {
+      const ex = run(TIED, preset({ ties: 'split', relayCap: 2, relayOverCap: 'exhibition' }));
+      expect(shapeOf(ex)).toEqual([
+        ['T1A', 1, 11, null],
+        ['T1B', 2, 4, null],
+        ['T2A', 3, 2, null],
+        ['T3A', 4, 0, 'outside_point_table'],
+        ['T1C', null, 0, EXHIBITION],
+      ]);
+      // Under 'holds-place' the tie group stays: C and T2 A share 3rd.
+      const held = run(TIED, preset({ ties: 'split', relayCap: 2, relayOverCap: 'holds-place' }));
+      expect(shapeOf(held).map((x) => x.slice(0, 2))).toEqual([['T1A', 1], ['T1B', 2], ['T1C', 3], ['T2A', 3], ['T3A', 5]]);
+    });
+
+    it("'split': a tie that stays moves up into the table together and splits the place it reaches", () => {
+      const r = run(STAY, preset({ ties: 'split', relayCap: 2, relayOverCap: 'exhibition' }));
+      // 3rd place is worth 2 and 4th is outside the table: the shared 3rd place pays (2 + 0) / 2 each.
+      expect(shapeOf(r)).toEqual([
+        ['T1A', 1, 11, null],
+        ['T1B', 2, 4, null],
+        ['T2A', 3, 1, null],
+        ['T3A', 3, 1, null],
+        ['T1C', null, 0, EXHIBITION],
+      ]);
+      const held = run(STAY, preset({ ties: 'split', relayCap: 2, relayOverCap: 'holds-place' }));
+      expect(shapeOf(held).map((x) => x.slice(0, 3))).toEqual([['T1A', 1, 11], ['T1B', 2, 4], ['T1C', 3, 0], ['T2A', 4, 0], ['T3A', 4, 0]]);
+    });
+
+    it("'ordered': the removed relay leaves the places, and lineup order still breaks a tie that stays", () => {
+      // C is entered before T2 A, so C is 3rd and T2 A 4th. C is removed: T2 A is 3rd.
+      const ex = run(TIED, preset({ ties: 'ordered', relayCap: 2, relayOverCap: 'exhibition' }), ['T1A', 'T1B', 'T1C', 'T2A', 'T3A']);
+      expect(shapeOf(ex)).toEqual([
+        ['T1A', 1, 11, null],
+        ['T1B', 2, 4, null],
+        ['T2A', 3, 2, null],
+        ['T3A', 4, 0, 'outside_point_table'],
+        ['T1C', null, 0, EXHIBITION],
+      ]);
+      // The tie between T2 A and T3 A stays after the removal: lineup order decides who takes 3rd.
+      const p = preset({ ties: 'ordered', relayCap: 2, relayOverCap: 'exhibition' });
+      expect(shapeOf(run(STAY, p, ['T1A', 'T1B', 'T1C', 'T2A', 'T3A']))).toEqual([
+        ['T1A', 1, 11, null],
+        ['T1B', 2, 4, null],
+        ['T2A', 3, 2, null],
+        ['T3A', 4, 0, 'outside_point_table'],
+        ['T1C', null, 0, EXHIBITION],
+      ]);
+      expect(shapeOf(run(STAY, p, ['T1A', 'T1B', 'T1C', 'T3A', 'T2A'])).slice(2, 4)).toEqual([
+        ['T3A', 3, 2, null],
+        ['T2A', 4, 0, 'outside_point_table'],
+      ]);
+    });
+  });
+
+  // D2 9.8: under 'exhibition' every relay after a team's first `relayCap` leaves the places, past the table or
+  // not. Before the fix T1 D (4th, past the 3-place table) took no cap slot, moved into 3rd once T1 C was removed,
+  // and held it with 0 points, so T2 A lost its 2 points.
+  it("a team's 4th relay, ranked past the table, is also exhibition and does not take the place the removal opens", () => {
+    const field: Spec[] = [
+      { team: 'T1', letter: 'A', t: 2000 },
+      { team: 'T1', letter: 'B', t: 2010 },
+      { team: 'T1', letter: 'C', t: 2020 },
+      { team: 'T1', letter: 'D', t: 2030 },
+      { team: 'T2', letter: 'A', t: 2040 },
+    ];
+    const r = run(field, preset({ relayCap: 2, relayOverCap: 'exhibition' }));
+    expect(shapeOf(r)).toEqual([
+      ['T1A', 1, 11, null],
+      ['T1B', 2, 4, null],
+      ['T2A', 3, 2, null],
+      ['T1C', null, 0, EXHIBITION],
+      ['T1D', null, 0, EXHIBITION],
+    ]);
+  });
+
+  it('only relays are affected: an individual entry over its cap follows its own rule', () => {
+    // The swimming cap holds the place. relayOverCap 'exhibition' removes relays only.
+    const swimmers = [{ id: 'a1', team: 'T1' }, { id: 'a2', team: 'T1' }, { id: 'b1', team: 'T2' }];
+    const swims = [swim('a1', '50 Freestyle', 2000), swim('a2', '50 Freestyle', 2010), swim('b1', '50 Freestyle', 2020)];
+    const p = preset({ scorerCap: 1, overCap: 'holds-place', relayCap: 2, relayOverCap: 'exhibition' });
+    const r = scoreMeet(model(swimmers, swims), lineup(ind('T1', 'a1'), ind('T1', 'a2'), ind('T2', 'b1')), [], p, SOURCING);
+    expect(rowsOf(r, '50 Freestyle').map((x) => [x.swimmerId, x.place, x.points, x.notScoredReason ?? null])).toEqual([
+      ['a1', 1, 9, null],
+      ['a2', 2, 0, 'event_scorer_cap'],
+      ['b1', 3, 3, null],
+    ]);
+  });
+
+  it('a relay removed as exhibition is not a no_time row and not a removed individual entry', () => {
+    const r = run(FIELD, preset({ relayCap: 2, relayOverCap: 'exhibition' }));
+    const noPlace = rowsOf(r, RELAY_EVENT).filter((x) => x.place === null);
+    expect(noPlace).toHaveLength(1);
+    expect(noPlace[0]).toMatchObject({ points: 0, scored: false, notScoredReason: 'exhibition' });
+  });
+
+  it('a pending relayOverCap stops requireComplete, so scoreMeet is never reached with it', () => {
+    const p = preset({ relayCap: 2 });
+    const pendingPreset = { ...p, scorers: { ...p.scorers, relayOverCap: { state: 'pending' as const, question: 'q', blocks: [] } } };
+    expect(() => requireComplete(pendingPreset)).toThrow(/scorers\.relayOverCap/);
   });
 });
 

@@ -400,9 +400,11 @@ export type PlaceTreatment = 'holds-place' | 'removed-from-consideration';      
 export type CFinalRule = { readonly kind: 'none' } | { readonly kind: 'non-scorers'; readonly size: number };
 
 export type TieRule = 'split' | 'ordered';   // P2, 8.16: split = tied entries share a rank and the points; ordered = own place, tie by entry order
-// RulePresetV1 is this interface with payloadVersion 1 and no `ties`. RulePreset below is payload version 2.
+export type RelayOverCapRule = 'holds-place' | 'exhibition';   // P3, README R67; section 9.6
+// RulePresetV1 is this interface with payloadVersion 1, no `ties` and no `relayOverCap`. RulePresetV2 adds
+// `ties` (payload version 2). RulePreset below is payload version 3: it adds `scorers.relayOverCap`.
 export interface RulePreset {
-  readonly payloadVersion: 2;
+  readonly payloadVersion: 3;
   readonly scoring: {
     readonly ties: Setting<TieRule>;                          // P2
     readonly individualPoints: Setting<readonly number[]>;    // scoringPoints :263; places = length
@@ -425,6 +427,7 @@ export interface RulePreset {
     readonly scoringRelaysPerTeamPerEvent: Setting<Cap>;      // maxRelaysScoringPerTeam :268
     readonly relayEligibleFromScorerPool: Setting<boolean>;   // :297; 'points_pool' only
     readonly relayLegsMustBeScorers: Setting<boolean>;        // R37; 'roster' only
+    readonly relayOverCap: Setting<RelayOverCapRule>;         // P3, R67: a relay over scoringRelaysPerTeamPerEvent
   };
   readonly entries: {
     readonly maxIndividualPerSwimmer: Setting<Cap>;           // :311
@@ -1299,3 +1302,35 @@ and `architect` have not accepted them yet. Item 12 decides nothing.
    `placeOrderCompare` picks the one removed, by synthetic-id order. The
    team total does not change. Which swimmer earns the points is arbitrary.
    This matters for per-swimmer totals in P3.core-b.
+6. **Relay over-limit treatment (P3.relay-overcap, 2026-10-27, README R67).**
+   `RulePreset` is payload version 3. It adds `scorers.relayOverCap`:
+   `'holds-place' | 'exhibition'`. It sets what happens to a relay over
+   `scorers.scoringRelaysPerTeamPerEvent`. This supersedes item 4: a relay no
+   longer always holds its place.
+   - Which relays are over the limit does not change. `overCapKeys` picks them
+     by rank in the full field, and a relay ranked past the point table takes
+     no cap slot.
+   - `'holds-place'` is today's behavior (reason `relay_scorer_cap`).
+   - `'exhibition'` reads R67's "tagged exhibition" as "removed from the places
+     like an exhibition entry". The over-limit relays leave the field, and the
+     field is ranked again without them under the same `scoring.ties` rule.
+     This is the removal of item 1. A removed relay keeps its row with
+     `place: null`, `points: 0` and `notScoredReason: 'exhibition'`.
+   - A payload of version 1 or 2 migrates on read with `relayOverCap` pending
+     (`migrateRulePresetV2`). No rule is assumed.
+   - Built-ins: `nsisc` v3 is v2 plus `'exhibition'`, from README R67
+     (line 91). `nsisc` v1, `nsisc` v2 and `generic` v1 keep `relayOverCap`
+     pending, so their scoring does not change. The SwimCloud simulator preset
+     sets `'holds-place'`, because the page zeroes an over-limit relay and
+     keeps its place.
+7. **R42 is not modeled.** R42 says a 3rd NSISC relay is an entry violation.
+   `Results.violations` has no relay entry-limit violation yet, so a 3rd
+   relay scores as an exhibition (nsisc v3) and nothing flags the entry. The
+   entry violation needs its own spec.
+8. **Past-table relays under exhibition (fixed 2026-10-27).** Under
+   `'exhibition'`, every relay after a team's first
+   `scoringRelaysPerTeamPerEvent` leaves the places, past the point table
+   or not. Before the fix, a team's 4th relay past the table took no cap
+   slot. It moved into the place the removal opened and held it with 0
+   points. Under `'holds-place'` a relay past the table still takes no
+   slot (legacy `relayScoring.ts`, SwimCloud parity).

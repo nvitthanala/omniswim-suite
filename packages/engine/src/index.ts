@@ -35,13 +35,24 @@ export type {
   EngineScorerAutoRules,
   PerEventScorerCap,
   PlaceTreatment,
+  RelayOverCapRule,
   RelayPointRule,
   RulePreset,
   RulePresetV1,
+  RulePresetV2,
   ScorerAutoRules,
   TieRule,
 } from './rules/rulePreset';
-export { editSetting, migrateRulePresetV1, parseRulePreset, parseRulePresetV1, pendingPaths, requireComplete } from './rules/rulePreset';
+export {
+  editSetting,
+  migrateRulePresetV1,
+  migrateRulePresetV2,
+  parseRulePreset,
+  parseRulePresetV1,
+  parseRulePresetV2,
+  pendingPaths,
+  requireComplete,
+} from './rules/rulePreset';
 
 // 3.6 MeetModel (types in P1, `validateMeetModel` in P2)
 export type {

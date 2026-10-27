@@ -9,7 +9,9 @@
  * - Entries sort by time (dives by score, descending). The place index is the entry's index in the
  *   full sorted list, over-cap entries included.
  * - `maxScorersPerTeam` caps a team's scoring entries per event, swimming and relays alike. An entry
- *   over the cap earns 0 and keeps its place: `overCap: 'holds-place'`. A cap of `0` means no cap.
+ *   over the cap earns 0 and keeps its place: `overCap: 'holds-place'`, and for a relay
+ *   `scorers.relayOverCap: 'holds-place'` (README R67: the entry-limits tab allows more relays and marks them
+ *   all scoring). A cap of `0` means no cap.
  * - There is no meet-wide scoring team, no scorer roster and no finals structure.
  * - Every `--` entry limit is stored as `0`, and `0` means unlimited. `0` is mapped to `'unlimited'`
  *   here and never reaches `parseCap`, where `0` is a real cap.
@@ -135,7 +137,7 @@ export function simulatorRulePreset(
   });
 
   const preset: RulePreset = {
-    payloadVersion: 2,
+    payloadVersion: 3,
     scoring: {
       individualPoints: table ? set([...table.individual], SIMULATOR_TABLE_PROVENANCE) : noTable(),
       relayPoints: table ? set({ kind: 'table' as const, points: [...table.relay] }, SIMULATOR_TABLE_PROVENANCE) : noTable(),
@@ -159,6 +161,9 @@ export function simulatorRulePreset(
       perEventScorerCap: set(scorerCap === 'unlimited' ? { cap: 'unlimited' as const } : { cap: scorerCap, overCap: 'holds-place' as const }, rule),
       divingPerEventScorerCap: set({ kind: 'same-as-swimming' as const }, rule),
       scoringRelaysPerTeamPerEvent: set(scorerCap, rule),
+      // `gf` zeroes a relay over `maxScorersPerTeam` and keeps it in its place, as it does for any entry.
+      // The scorer reads this setting, so it is not in `INERT`.
+      relayOverCap: set('holds-place' as const, rule),
       relayEligibleFromScorerPool: set(false, rule),
       relayLegsMustBeScorers: {
         state: 'pending',

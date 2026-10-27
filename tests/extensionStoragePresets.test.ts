@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BUILTIN_RULE_PRESETS, BUILTIN_SESSION_PRESETS, builtinRulePreset } from '@omniswim/engine';
+import { BUILTIN_RULE_PRESETS, BUILTIN_SESSION_PRESETS, builtinRulePreset, requireComplete } from '@omniswim/engine';
 import { createStorageRepo } from '../apps/extension/src/storage/repo';
 import { openOmniDb } from '../apps/extension/src/storage/open';
 import {
@@ -36,8 +36,8 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
 
     const choices = await listRulePresetChoices(repo);
     expect(choices.map(c => c.label)).toEqual(['NSISC', 'Generic NCAA championship']);
-    // The picker offers the newest version of each built-in only (nsisc v2, R45); v1 stays resolvable by ref.
-    expect(choices[0]).toEqual({ source: 'builtin', ref: { kind: 'builtin', id: 'nsisc', version: 2 }, label: 'NSISC' });
+    // The picker offers the newest version of each built-in only (nsisc v3, R67); v1 and v2 stay resolvable by ref.
+    expect(choices[0]).toEqual({ source: 'builtin', ref: { kind: 'builtin', id: 'nsisc', version: 3 }, label: 'NSISC' });
     expect(choices.every(c => c.source === 'builtin')).toBe(true);
     const sessions = await listSessionPresetChoices(repo);
     expect(sessions.map(c => c.ref)).toEqual([{ kind: 'builtin', id: 'nsisc-table-c', version: 1 }]);
@@ -63,7 +63,7 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
     db.close();
   });
 
-  it('a stored v1 user preset resolves as payload v2 with ties pending, never a guessed tie rule', async () => {
+  it('a stored v1 user preset resolves as payload v3 with ties and relayOverCap pending, never a guessed rule', async () => {
     const { db, repo } = await fresh();
     const base = withoutRev(fixtureRecord<RulePresetRecord>('rulePresets', 0));
     expect((base.payload as { payloadVersion: number }).payloadVersion).toBe(1);
@@ -71,11 +71,37 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
     const got = await resolveRulePreset(repo, { kind: 'user', id: 'u-v1' });
     expect(got.found).toBe(true);
     if (!got.found) throw new Error('expected the stored preset');
-    expect(got.value.payloadVersion).toBe(2);
+    expect(got.value.payloadVersion).toBe(3);
     expect(got.value.scoring.ties.state).toBe('pending');
+    expect(got.value.scorers.relayOverCap.state).toBe('pending');
     // Every other setting is carried over unchanged.
     const { ties: _ties, ...scoring } = got.value.scoring;
-    expect(scoring).toEqual((base.payload as unknown as RulePresetRecord['payload']).scoring);
+    const { relayOverCap: _relayOverCap, ...scorers } = got.value.scorers;
+    const stored = base.payload as unknown as RulePresetRecord['payload'];
+    expect(scoring).toEqual(stored.scoring);
+    expect(scorers).toEqual(stored.scorers);
+    expect(() => requireComplete(got.value)).toThrow(/scoring.ties/);
+    db.close();
+  });
+
+  it('a stored v2 user preset resolves as payload v3 with relayOverCap pending and its ties kept', async () => {
+    const { db, repo } = await fresh();
+    const base = withoutRev(fixtureRecord<RulePresetRecord>('rulePresets', 0));
+    const v1 = base.payload as unknown as { scoring: Record<string, unknown> };
+    const ties = {
+      state: 'set',
+      value: 'split',
+      provenance: { kind: 'user-stated', statedOn: '2026-10-26', wording: 'Ties split.', where: 'plans/2026-10-25/README.md:69', verbatim: false },
+    };
+    const payload = { ...v1, payloadVersion: 2, scoring: { ...v1.scoring, ties } };
+    await repo.put('rulePresets', { ...base, id: 'u-v2', payload } as unknown as RulePresetRecord, 'new');
+    const got = await resolveRulePreset(repo, { kind: 'user', id: 'u-v2' });
+    if (!got.found) throw new Error('expected the stored preset');
+    expect(got.value.payloadVersion).toBe(3);
+    expect(got.value.scoring.ties).toEqual(ties);
+    expect(got.value.scorers.relayOverCap.state).toBe('pending');
+    const { relayOverCap: _relayOverCap, ...scorers } = got.value.scorers;
+    expect(scorers).toEqual((v1 as unknown as RulePresetRecord['payload']).scorers);
     db.close();
   });
 
@@ -105,8 +131,9 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
     // Against the engine's own registry: a copy of the newest version of each built-in is current.
     for (const b of latestBuiltins(BUILTIN_RULE_PRESETS)) expect(newerBuiltinVersion('rule', { builtinId: b.id, builtinVersion: b.version })).toBeNull();
     for (const b of latestBuiltins(BUILTIN_SESSION_PRESETS)) expect(newerBuiltinVersion('session', { builtinId: b.id, builtinVersion: b.version })).toBeNull();
-    // A copy of nsisc v1 (points pending) is told that v2 exists.
-    expect(newerBuiltinVersion('rule', { builtinId: 'nsisc', builtinVersion: 1 })).toBe(2);
+    // A copy of nsisc v1 (points pending) or v2 (relayOverCap pending) is told that v3 exists.
+    expect(newerBuiltinVersion('rule', { builtinId: 'nsisc', builtinVersion: 1 })).toBe(3);
+    expect(newerBuiltinVersion('rule', { builtinId: 'nsisc', builtinVersion: 2 })).toBe(3);
   });
 
   it('latestBuiltins keeps the newest version of each id, in registry order', () => {
@@ -117,7 +144,7 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
       { id: 'a', version: 2 },
     ];
     expect(latestBuiltins(registry)).toEqual([{ id: 'b', version: 1 }, { id: 'a', version: 3 }]);
-    expect(latestBuiltins(BUILTIN_RULE_PRESETS).map(b => `${b.id}@${b.version}`)).toEqual(['nsisc@2', 'generic@1']);
+    expect(latestBuiltins(BUILTIN_RULE_PRESETS).map(b => `${b.id}@${b.version}`)).toEqual(['nsisc@3', 'generic@1']);
   });
 
   it('no storage code seeds a built-in: only presets.ts reads the registries, and it never writes', () => {

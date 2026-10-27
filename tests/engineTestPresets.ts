@@ -29,14 +29,19 @@ export function builtinPreset(id: string): RulePreset {
 }
 
 /**
- * The shipped NSISC preset with its three pending points settings, and its pending tie rule (v1),
- * filled from the legacy NSISC constants and the legacy scorer's behavior (it splits ties). A setting the built-in already holds is left alone, so the day a built-in sets one of
- * them the tests that use this helper cover it.
+ * The shipped NSISC preset (v1) with its three pending points settings, its pending tie rule and its pending
+ * relay over-cap rule, filled from the legacy NSISC constants and the legacy scorer's behavior (it splits
+ * ties and holds an over-cap relay's place). A setting the built-in already holds is left alone, so the day
+ * a built-in sets one of them the tests that use this helper cover it.
  */
 export function nsiscWithTestPoints(): RulePreset {
   const base = builtinPreset('nsisc');
   return {
     ...base,
+    scorers: {
+      ...base.scorers,
+      relayOverCap: base.scorers.relayOverCap.state === 'set' ? base.scorers.relayOverCap : set('holds-place' as const),
+    },
     scoring: {
       ...base.scoring,
       ties: base.scoring.ties.state === 'set' ? base.scoring.ties : set('split' as const),

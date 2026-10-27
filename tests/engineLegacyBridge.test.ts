@@ -106,7 +106,7 @@ function genPreset(rng: Rng): CompleteRulePreset {
 
   const base = builtinPreset('nsisc');
   const preset: RulePreset = {
-    payloadVersion: 2,
+    payloadVersion: 3,
     scoring: {
       ties: set('split' as const),
       individualPoints: set(genPoints(rng)),
@@ -127,6 +127,7 @@ function genPreset(rng: Rng): CompleteRulePreset {
       perEventScorerCap: set(perEvent),
       divingPerEventScorerCap: set(divingCap),
       scoringRelaysPerTeamPerEvent: set(capOf('relaysPerEvent')),
+      relayOverCap: set('holds-place' as const), // no rng call: the bridge ignores it, and a draw would move every seeded preset
       relayEligibleFromScorerPool: eligibility === 'roster' ? base.scorers.relayEligibleFromScorerPool : set(rng() < 0.5),
       relayLegsMustBeScorers: set(rng() < 0.5),
     },

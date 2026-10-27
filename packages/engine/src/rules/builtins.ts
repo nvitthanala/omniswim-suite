@@ -22,8 +22,8 @@
  * `pendingPaths` skips it, and the legacy bridge writes the inert generic value.
  */
 import { settingsForBuiltInScoringPreset } from '../lib/scoringDefaults';
-import { migrateRulePresetV1 } from './rulePreset';
-import type { RulePreset, RulePresetV1, TieRule } from './rulePreset';
+import { migrateRulePresetV1, migrateRulePresetV2 } from './rulePreset';
+import type { RelayOverCapRule, RulePreset, RulePresetV1, TieRule } from './rulePreset';
 import type { Setting } from '../model/provenance';
 import { pending, readmeRow, recorded, setting, userPlan } from './builtinSupport';
 import type { Builtin } from './builtinSupport';
@@ -243,19 +243,28 @@ function buildNsiscV2(): RulePresetV1 {
 
 /**
  * ## Payload versions of the shipped built-ins
- * `RulePreset` moved to payload version 2 (it adds `scoring.ties`). The three shipped versions keep
- * their frozen version 1 payloads, whose pinned hashes did not change (`frozen`). A saved reference to
- * `{nsisc, 2}` resolves to the same values as before. `preset` is that payload moved to version 2, and
- * the only addition is `scoring.ties`:
- * - `nsisc` v2: `'split'`. The user's statement of the points (README R45, line 69) ends "Ties split."
+ * `RulePreset` is payload version 3. It added `scoring.ties` (version 2) and `scorers.relayOverCap`
+ * (version 3). The shipped versions keep their frozen version 1 shaped bodies, whose pinned hashes did not
+ * change (`frozen`). A saved reference to `{nsisc, 2}` resolves to the same values as before. `preset` is
+ * that body moved to version 3, and the only additions are `scoring.ties` and `scorers.relayOverCap`:
+ * - `nsisc` v3: `relayOverCap: 'exhibition'`. The user's statement (README R67, line 91) is that a relay
+ *   entered beyond the scoring-relay limit is tagged exhibition. Every other value is v2's, so `frozen` is
+ *   v2's body and the two share a hash. The new hash is in the `rule3|` pins.
+ * - `nsisc` v2: `ties: 'split'`. The user's statement of the points (README R45, line 69) ends "Ties split."
  *   The legacy scorer split ties for this preset before the setting existed, so scoring is unchanged.
- * - `nsisc` v1: pending. Its points are pending too, and R45 was stated for the confirmed points of v2.
- * - `generic` v1: pending. NCAA Rule 7 as archived states no tie rule for these tables, and no other
+ * - `nsisc` v1: `ties` pending. Its points are pending too, and R45 was stated for the confirmed points of v2.
+ * - `generic` v1: `ties` pending. NCAA Rule 7 as archived states no tie rule for these tables, and no other
  *   source exists.
- * `tests/engineBuiltinVersions.test.ts` pins both: the frozen hash and the version 2 view.
+ * - `relayOverCap` is pending in `nsisc` v1, `nsisc` v2 and `generic` v1. A shipped version's scoring does not
+ *   change, and `scoreMeet` does not score a pending setting.
+ * `tests/engineBuiltinVersions.test.ts` pins all three: the frozen hash, the version 2 view and the version 3 view.
  */
 export interface RuleBuiltin extends Builtin<RulePreset> {
-  /** The payload as first shipped, version 1. Its sha256 is the pin that was set before the ties setting. */
+  /**
+   * The version 1 shaped body of the values (no `ties`, no `relayOverCap`). For `nsisc` v1, `nsisc` v2 and
+   * `generic` v1 it is the payload as first shipped, and its sha256 is the pin that was set before the ties
+   * setting. For `nsisc` v3 it is v2's body.
+   */
   readonly frozen: RulePresetV1;
 }
 
@@ -265,8 +274,13 @@ const TIES_PENDING_GENERIC =
   'No source states a tie rule for the generic NCAA championship tables. Rule 7 as archived has none, and the user has not stated one.';
 const TIES_BLOCKS = ['requireComplete', 'scoreMeet'] as const;
 
-function tiesOf(frozen: RulePresetV1, tie: Setting<TieRule>): RulePreset {
-  return migrateRulePresetV1(frozen, tie);
+const RELAY_OVER_CAP_PENDING =
+  'This version shipped before the relayOverCap setting existed, and its scoring is unchanged. The user stated the treatment of a relay over the scoring-relay limit in README R67 (plans/2026-10-25/README.md:91); NSISC v3 holds it. Set it here only in a new version.';
+const RELAY_OVER_CAP_PENDING_GENERIC =
+  'No source states what happens to a relay over the scoring-relay limit for the generic NCAA championship tables. README R67 (plans/2026-10-25/README.md:91) is the user\'s statement for NSISC (see NSISC v3), and the user has not stated one for these tables.';
+
+function tiesOf(frozen: RulePresetV1, tie: Setting<TieRule>, relayOverCap: Setting<RelayOverCapRule>): RulePreset {
+  return migrateRulePresetV2(migrateRulePresetV1(frozen, tie), relayOverCap);
 }
 
 const NSISC_V2_TIES: Setting<TieRule> = setting(
@@ -274,15 +288,34 @@ const NSISC_V2_TIES: Setting<TieRule> = setting(
   recorded('2026-10-26', 'plans/2026-10-25/README.md:69', 'Ties split.')
 );
 
-function builtin(id: string, version: number, label: string, frozen: RulePresetV1, tie: Setting<TieRule>): RuleBuiltin {
-  return { id, version, label, frozen, preset: tiesOf(frozen, tie) };
+/**
+ * README R67, line 91: "A relay entered beyond the scoring-relay limit is tagged exhibition." The user's own
+ * words are not in the repo, so this cites the row that paraphrases them. `tests/engineBuiltinVersions.test.ts`
+ * checks that the line holds this wording. Read as "removed from the places like an exhibition entry"
+ * (D2-ENGINE-API.md section 9, P3.relay-overcap).
+ */
+const NSISC_V3_RELAY_OVER_CAP: Setting<RelayOverCapRule> = setting(
+  'exhibition',
+  recorded('2026-10-27', 'plans/2026-10-25/README.md:91', 'A relay entered beyond the scoring-relay limit is tagged exhibition.')
+);
+
+function builtin(
+  id: string,
+  version: number,
+  label: string,
+  frozen: RulePresetV1,
+  tie: Setting<TieRule>,
+  relayOverCap: Setting<RelayOverCapRule>
+): RuleBuiltin {
+  return { id, version, label, frozen, preset: tiesOf(frozen, tie, relayOverCap) };
 }
 
-/** `'nsisc'` v1 and v2, plus `'generic'` v1. */
+/** `'nsisc'` v1, v2 and v3, plus `'generic'` v1. */
 export const BUILTIN_RULE_PRESETS: readonly RuleBuiltin[] = [
-  builtin('nsisc', 1, 'NSISC', buildNsisc(), pending(TIES_PENDING_NSISC_V1, TIES_BLOCKS)),
-  builtin('nsisc', 2, 'NSISC', buildNsiscV2(), NSISC_V2_TIES),
-  builtin('generic', 1, 'Generic NCAA championship', buildGeneric(), pending(TIES_PENDING_GENERIC, TIES_BLOCKS)),
+  builtin('nsisc', 1, 'NSISC', buildNsisc(), pending(TIES_PENDING_NSISC_V1, TIES_BLOCKS), pending(RELAY_OVER_CAP_PENDING, TIES_BLOCKS)),
+  builtin('nsisc', 2, 'NSISC', buildNsiscV2(), NSISC_V2_TIES, pending(RELAY_OVER_CAP_PENDING, TIES_BLOCKS)),
+  builtin('nsisc', 3, 'NSISC', buildNsiscV2(), NSISC_V2_TIES, NSISC_V3_RELAY_OVER_CAP),
+  builtin('generic', 1, 'Generic NCAA championship', buildGeneric(), pending(TIES_PENDING_GENERIC, TIES_BLOCKS), pending(RELAY_OVER_CAP_PENDING_GENERIC, TIES_BLOCKS)),
 ];
 
 /** The built-in with this id and version, or `undefined`. Never a fallback to another id or version. */

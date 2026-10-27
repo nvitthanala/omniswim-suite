@@ -195,7 +195,7 @@ describe('3.4 rule preset', () => {
   it('pendingPaths skips relayEligibleFromScorerPool under roster', () => {
     const p = nsisc();
     expect(p.scorers.relayEligibleFromScorerPool.state).toBe('pending');
-    expect(pendingPaths(p)).toStrictEqual(['scoring.divingPoints', 'scoring.individualPoints', 'scoring.relayPoints', 'scoring.ties']);
+    expect(pendingPaths(p)).toStrictEqual(['scorers.relayOverCap', 'scoring.divingPoints', 'scoring.individualPoints', 'scoring.relayPoints', 'scoring.ties']);
   });
 
   it('pendingPaths skips relayLegsMustBeScorers under points_pool', () => {
@@ -227,7 +227,7 @@ describe('3.4 rule preset', () => {
       expect(e).toBeInstanceOf(RulePresetError);
       const err = e as RulePresetError;
       expect(err.code).toBe('pending');
-      expect(err.paths).toStrictEqual(['scoring.divingPoints', 'scoring.individualPoints', 'scoring.relayPoints', 'scoring.ties']);
+      expect(err.paths).toStrictEqual(['scorers.relayOverCap', 'scoring.divingPoints', 'scoring.individualPoints', 'scoring.relayPoints', 'scoring.ties']);
       for (const path of err.paths) expect(err.message).toContain(path);
       return;
     }

@@ -2,8 +2,9 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * `scoring.ties` and RulePreset payload version 2 (plans/2026-10-25/D2-ENGINE-API.md, 3.4 and 8.12):
+ * `scoring.ties` (RulePreset payload version 2, plans/2026-10-25/D2-ENGINE-API.md, 3.4 and 8.12):
  * the setting, the version 1 migration, the bridge guard, and the `engine-neutral` provenance kind.
+ * The presets here are payload version 3: `engineRelayOverCap.test.ts` covers what version 3 adds.
  * `engineScoreMeet.test.ts` covers how `scoreMeet` places a tie under each rule.
  */
 import { describe, expect, it } from 'vitest';
@@ -44,15 +45,15 @@ describe('scoring.ties in a version 2 payload', () => {
     }
   });
 
-  it('refuses a missing ties key, a value outside split and ordered, and a version 2 preset marked version 3', () => {
+  it('refuses a missing ties key, a value outside split and ordered, and a payload marked version 4', () => {
     const missing = clone(v2()) as unknown as { scoring: Record<string, unknown> };
     delete missing.scoring.ties;
     expect(code(() => parseRulePreset(missing))).toBe('missing@scoring.ties');
     const bad = clone(v2());
     (bad.scoring as { ties: unknown }).ties = set('both');
     expect(code(() => parseRulePreset(bad))).toBe('invalid@scoring.ties.value');
-    const v3 = { ...clone(v2()), payloadVersion: 3 };
-    expect(code(() => parseRulePreset(v3))).toBe('invalid@payloadVersion');
+    const v4 = { ...clone(v2()), payloadVersion: 4 };
+    expect(code(() => parseRulePreset(v4))).toBe('invalid@payloadVersion');
   });
 
   it('a pending ties setting blocks requireComplete, by path', () => {
@@ -75,7 +76,8 @@ describe('payload version 1', () => {
   };
   const v1Json = () => {
     const { ties: _ties, ...scoring } = builtinPreset('nsisc').scoring;
-    return clone({ ...builtinPreset('nsisc'), payloadVersion: 1, scoring });
+    const { relayOverCap: _relayOverCap, ...scorers } = builtinPreset('nsisc').scorers;
+    return clone({ ...builtinPreset('nsisc'), payloadVersion: 1, scoring, scorers });
   };
 
   it('parseRulePresetV1 reads version 1 and refuses a version 2 payload, and a ties key', () => {
@@ -87,12 +89,14 @@ describe('payload version 1', () => {
     expect(code(() => parseRulePresetV1(withTies))).toBe('invalid@scoring.ties');
   });
 
-  it('parseRulePreset migrates a version 1 payload: every setting kept, ties pending, nothing assumed', () => {
+  it('parseRulePreset migrates a version 1 payload: every setting kept, ties and relayOverCap pending, nothing assumed', () => {
     const migrated = parseRulePreset(v1Json());
-    expect(migrated.payloadVersion).toBe(2);
+    expect(migrated.payloadVersion).toBe(3);
     expect(migrated.scoring.ties.state).toBe('pending');
+    expect(migrated.scorers.relayOverCap.state).toBe('pending');
     const { ties: _t, ...scoring } = migrated.scoring;
-    expect({ ...migrated, payloadVersion: 1, scoring }).toStrictEqual(parseRulePresetV1(v1Json()));
+    const { relayOverCap: _r, ...scorers } = migrated.scorers;
+    expect({ ...migrated, payloadVersion: 1, scoring, scorers }).toStrictEqual(parseRulePresetV1(v1Json()));
     expect(() => requireComplete(migrated)).toThrow(/scoring\.ties/);
   });
 
@@ -106,6 +110,9 @@ describe('payload version 1', () => {
     const stale = v1Json() as unknown as RulePreset;
     expect(code(() => requireComplete(stale))).toBe('unsupported_version@payloadVersion');
     expect(code(() => pendingPaths(stale))).toBe('unsupported_version@payloadVersion');
+    const stale2 = { ...v1Json(), payloadVersion: 2 } as unknown as RulePreset;
+    expect(code(() => requireComplete(stale2))).toBe('unsupported_version@payloadVersion');
+    expect(code(() => pendingPaths(stale2))).toBe('unsupported_version@payloadVersion');
   });
 });
 

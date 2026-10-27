@@ -6,6 +6,7 @@
  * `put`, `putCache` or `importData`. T-E5 and T-E6 (import path) live in extensionStorageExport.test.ts.
  */
 import { describe, expect, it } from 'vitest';
+import { builtinRulePreset } from '@omniswim/engine';
 import { validateRecord } from '../apps/extension/src/storage/validate';
 import { BUNDLED_SOURCE_MANIFESTS, BUNDLED_TOOL_ARCHIVES, publishedSourceProblem, toolArchiveProblem } from '../apps/extension/src/storage/sourceManifests';
 import { EDITED_STORES, SETTINGS_DEFAULTS, STORE_NAMES, USER_STORES, toSwimCloudId } from '../apps/extension/src/storage/schema';
@@ -216,6 +217,23 @@ describe('extension storage validation (D3 5.4)', () => {
       expect(paths('lineups', relay)).toEqual(['$.payload.entries[1].legs']);
       const time = setAt(fixtureRecord('lineups', 0), ['payload', 'display', 'entryTimes', 'i|48|1001|100 Freestyle|Women', 'hundredths'], 5001);
       expect(validateRecord('lineups', time)).toHaveLength(1);
+    });
+  });
+
+  describe('rule payload version 3 (README R67)', () => {
+    // A user copy of NSISC v3 is the first thing the preset editor saves. JSON round-trip: storage holds plain data.
+    const v3 = JSON.parse(JSON.stringify(builtinRulePreset('nsisc', 3))) as { payloadVersion: number; scorers: Record<string, unknown> };
+    it('the NSISC v3 built-in is a version 3 payload with relayOverCap set', () => {
+      expect(v3.payloadVersion).toBe(3);
+      expect(v3.scorers.relayOverCap).toMatchObject({ state: 'set', value: 'exhibition' });
+    });
+    it('accepts a version 3 payload as a stored rule preset and as a lineup snapshot', () => {
+      expect(validateRecord('rulePresets', setAt(fixtureRecord('rulePresets', 1), ['payload'], v3))).toEqual([]);
+      expect(validateRecord('lineups', setAt(fixtureRecord('lineups', 0), ['builtUnder', 'rulePresetValues'], v3))).toEqual([]);
+    });
+    it('rejects a version 3 payload with an unknown relayOverCap value', () => {
+      const bad = setAt(v3, ['scorers', 'relayOverCap', 'value'], 'drop');
+      expect(validateRecord('rulePresets', setAt(fixtureRecord('rulePresets', 1), ['payload'], bad))).toHaveLength(1);
     });
   });
 });

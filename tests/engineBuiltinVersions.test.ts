@@ -24,10 +24,11 @@ import {
   builtinRulePreset,
   parseRulePreset,
   parseRulePresetV1,
+  parseRulePresetV2,
   pendingPaths,
   requireComplete,
 } from '@omniswim/engine';
-import type { Provenance, ScheduledEvent, Setting } from '@omniswim/engine';
+import type { Provenance, RulePreset, ScheduledEvent, Setting } from '@omniswim/engine';
 import { normalizeEventForCutline } from '@omniswim/engine/lib/cutlineEventNames';
 import { NCAA_FORMAT_RULESETS } from '@omniswim/engine/lib/ncaaScoringRules';
 
@@ -46,22 +47,39 @@ const sha = (value: unknown): string => createHash('sha256').update(JSON.stringi
 
 /** kind|id|version to the sha256 of the sorted-key JSON of the preset. */
 const PINNED: Readonly<Record<string, string>> = {
-  // `rule|` pins the frozen payload version 1 of each rule preset: these three hashes were set before
-  // the ties setting and did not change. `rule2|` pins what the same (id, version) resolves to now.
+  // `rule|` pins the version 1 shaped body of each rule preset (`frozen`): the hashes of nsisc v1, nsisc v2 and
+  // generic v1 were set before the ties setting and did not change. nsisc v3 has no v1 payload: its body is
+  // v2's, so it carries v2's hash.
+  // `rule2|` pins the payload version 2 view (`scoring.ties`, no `relayOverCap`), set before relayOverCap. The
+  // three shipped hashes did not change: relayOverCap is stripped before hashing. nsisc v3's view is v2's.
+  // `rule3|` pins what each (id, version) resolves to now: payload version 3.
+  'rule3|nsisc|1': '3be16841765bfa368e5a0a04539bf46c63683b6d680aadc48d395952c6e4cb33',
+  'rule3|nsisc|2': '1c747b84a34fa83c243e7c84c8f10f9a02d06cac8105d0e0d8784872752a1951',
+  'rule3|nsisc|3': '2f69ea3d7ce85e46f46df1a8849269d52047840f76332c7ed7c8827041753798',
+  'rule3|generic|1': 'b42d9f8eec4785b03e3c7dd29f6f6b520cbb5fc8dee31084bba636cb55d6f3c4',
   'rule2|nsisc|1': '7670e51fcdb704b0dce2ff899fa2a0d13d443d5bb66bf02936e1cadb73213358',
   'rule2|nsisc|2': '2b72f5a6bc2982aceef0342e3566e42e5cf23ef0cd610f21b6fbc8e2947e638d',
+  'rule2|nsisc|3': '2b72f5a6bc2982aceef0342e3566e42e5cf23ef0cd610f21b6fbc8e2947e638d',
   'rule2|generic|1': '23847dfed79cb372043ff2d0afa24a8561fffa4ce38156c2cd343164e1c855b4',
   'rule|nsisc|1': 'd753a42865adf2450528464be02b6cf69697558d1e08dbf3f046a6a1edd72348',
   'rule|nsisc|2': '6000b59d78e33663ff6f4a485dd3a75a5d20c060eb4ad70fc65a34fb2e7dd2c2',
+  'rule|nsisc|3': '6000b59d78e33663ff6f4a485dd3a75a5d20c060eb4ad70fc65a34fb2e7dd2c2',
   'rule|generic|1': '56d58f3ed13b00de5732039b3f40da7f5117c9562fdce0df3bfb7f0829668ac4',
   'session|nsisc-table-c|1': '17c5ccef7f94c0900aa8997ffe1447bb6cafb71350fbe906e05c7a9dfd8bb731',
   'tableD|table-d-user|1': 'ad287084f4934bfee8a5e1285ee5f3cd3283b2564cff9faa91653fbc25b80359',
   'lcmToScy|lcm-scy-swimswam|1': '76d9b570e06aed33b90bd64d48bbd3653e0816b0c0a88a398b9fce8e43986c7c',
 };
 
+/** The payload version 2 view of a built-in: no `scorers.relayOverCap`. The hashes of the shipped views must not move. */
+function payloadV2View(preset: RulePreset): unknown {
+  const { relayOverCap: _relayOverCap, ...scorers } = preset.scorers;
+  return { ...preset, payloadVersion: 2, scorers };
+}
+
 const SHIPPED: readonly { key: string; preset: unknown }[] = [
   ...BUILTIN_RULE_PRESETS.map(b => ({ key: `rule|${b.id}|${b.version}`, preset: b.frozen })),
-  ...BUILTIN_RULE_PRESETS.map(b => ({ key: `rule2|${b.id}|${b.version}`, preset: b.preset })),
+  ...BUILTIN_RULE_PRESETS.map(b => ({ key: `rule2|${b.id}|${b.version}`, preset: payloadV2View(b.preset) })),
+  ...BUILTIN_RULE_PRESETS.map(b => ({ key: `rule3|${b.id}|${b.version}`, preset: b.preset })),
   ...BUILTIN_SESSION_PRESETS.map(b => ({ key: `session|${b.id}|${b.version}`, preset: b.preset })),
   ...BUILTIN_TABLE_D.map(b => ({ key: `tableD|${b.id}|${b.version}`, preset: b.preset })),
   ...BUILTIN_LCM_TO_SCY.map(b => ({ key: `lcmToScy|${b.id}|${b.version}`, preset: b.preset })),
@@ -91,13 +109,49 @@ describe('built-in versions', () => {
     }
   });
 
-  it('a saved reference keeps resolving to the same values: the view is the frozen payload plus scoring.ties', () => {
+  it('a saved reference keeps resolving to the same values: the view is the frozen payload plus scoring.ties and scorers.relayOverCap', () => {
     for (const b of BUILTIN_RULE_PRESETS) {
       const { ties: _ties, ...scoring } = b.preset.scoring;
-      expect({ ...b.preset, payloadVersion: 1, scoring }, `${b.id} v${b.version}`).toStrictEqual(b.frozen);
+      const { relayOverCap: _relayOverCap, ...scorers } = b.preset.scorers;
+      expect({ ...b.preset, payloadVersion: 1, scoring, scorers }, `${b.id} v${b.version}`).toStrictEqual(b.frozen);
       expect(b.frozen.payloadVersion).toBe(1);
-      expect(b.preset.payloadVersion).toBe(2);
+      expect(b.preset.payloadVersion).toBe(3);
     }
+  });
+
+  it('the shipped payload version 2 views and the version 2 parser agree', () => {
+    for (const b of BUILTIN_RULE_PRESETS) {
+      const view = JSON.parse(JSON.stringify(payloadV2View(b.preset)));
+      expect(parseRulePresetV2(view), `${b.id} v${b.version}`).toStrictEqual(view);
+    }
+  });
+
+  it('scorers.relayOverCap: nsisc v3 is exhibition (README R67), nsisc v1, v2 and generic v1 stay pending', () => {
+    const over = (id: string, version: number) => builtinRulePreset(id, version)!.scorers.relayOverCap;
+    expect(over('nsisc', 3)).toMatchObject({
+      state: 'set',
+      value: 'exhibition',
+      provenance: { kind: 'user-stated', statedOn: '2026-10-27', where: 'plans/2026-10-25/README.md:91', verbatim: false },
+    });
+    expect(linesOf('plans/2026-10-25/README.md')[90]).toContain('| R67 |');
+    expect(linesOf('plans/2026-10-25/README.md')[90]).toContain('A relay entered beyond the scoring-relay limit is tagged exhibition.');
+    for (const [id, version] of [['nsisc', 1], ['nsisc', 2], ['generic', 1]] as const) {
+      const s = over(id, version);
+      expect(s.state, `${id} v${version}`).toBe('pending');
+      expect(s.state === 'pending' && s.question, `${id} v${version}`).toContain('R67');
+    }
+    expect(() => requireComplete(builtinRulePreset('nsisc', 2)!)).toThrow(/scorers.relayOverCap/);
+  });
+
+  it('nsisc v3 is nsisc v2 plus relayOverCap and nothing else, and it resolves complete', () => {
+    const v2 = builtinRulePreset('nsisc', 2)!;
+    const v3 = builtinRulePreset('nsisc', 3)!;
+    const { relayOverCap: _a, ...v2Scorers } = v2.scorers;
+    const { relayOverCap: _b, ...v3Scorers } = v3.scorers;
+    expect({ ...v3, scorers: v3Scorers }).toStrictEqual({ ...v2, scorers: v2Scorers });
+    expect(pendingPaths(v3)).toStrictEqual([]);
+    expect(() => requireComplete(v3)).not.toThrow();
+    expect(v3.scorers.scoringRelaysPerTeamPerEvent).toMatchObject({ state: 'set', value: 2 });
   });
 
   it('scoring.ties: nsisc v2 splits (R45), nsisc v1 and generic v1 stay pending, nobody gets a default', () => {
@@ -116,7 +170,8 @@ describe('built-in versions', () => {
   it('builtinRulePreset returns undefined for an unknown id or version, never a fallback', () => {
     expect(builtinRulePreset('nsisc', 1)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc')?.preset);
     expect(builtinRulePreset('nsisc', 2)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc' && b.version === 2)?.preset);
-    expect(builtinRulePreset('nsisc', 3)).toBeUndefined();
+    expect(builtinRulePreset('nsisc', 3)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc' && b.version === 3)?.preset);
+    expect(builtinRulePreset('nsisc', 4)).toBeUndefined();
     expect(builtinRulePreset('nsisc', 0)).toBeUndefined();
     expect(builtinRulePreset('ncaa', 1)).toBeUndefined();
     expect(builtinRulePreset('', 1)).toBeUndefined();
@@ -292,6 +347,7 @@ describe('generic v1', () => {
       'scorers.perEventScorerCap',
       'scorers.relayEligibleFromScorerPool',
       'scorers.relayLegsMustBeScorers',
+      'scorers.relayOverCap',
       'scorers.scoringRelaysPerTeamPerEvent',
       'scorers.scoringTeamScope',
       'scorers.scoringTeamSize',
@@ -313,7 +369,13 @@ describe('nsisc v1', () => {
   const nsisc = BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc')!.preset;
 
   it('leaves the three points settings pending: no source is archived for them', () => {
-    expect(pendingPaths(nsisc)).toStrictEqual(['scoring.divingPoints', 'scoring.individualPoints', 'scoring.relayPoints', 'scoring.ties']);
+    expect(pendingPaths(nsisc)).toStrictEqual([
+      'scorers.relayOverCap',
+      'scoring.divingPoints',
+      'scoring.individualPoints',
+      'scoring.relayPoints',
+      'scoring.ties',
+    ]);
     for (const s of [nsisc.scoring.individualPoints, nsisc.scoring.relayPoints, nsisc.scoring.divingPoints]) {
       expect(s.state).toBe('pending');
       expect('value' in s).toBe(false);

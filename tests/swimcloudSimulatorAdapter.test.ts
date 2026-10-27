@@ -292,7 +292,21 @@ describe('the SwimCloud preset', () => {
       value: 'ordered',
       provenance: { kind: 'tool-derived', archive: { sha256: SIMULATOR_RULE_PROVENANCE.kind === 'tool-derived' ? SIMULATOR_RULE_PROVENANCE.archive.sha256 : '' } },
     });
-    expect(outcome.adapted.preset.preset.payloadVersion).toBe(2);
+    expect(outcome.adapted.preset.preset.payloadVersion).toBe(3);
+  });
+
+  it("relayOverCap is 'holds-place', set from the archived bundle, and the preset is complete for every configuration", () => {
+    for (const name of ['A', 'B', 'C', 'D'] as const) {
+      const outcome = adaptSimulatorSnapshot(clone(name), OPTS);
+      if (outcome.kind !== 'ready') throw new Error('not ready');
+      const { preset, complete, pending, inert } = outcome.adapted.preset;
+      expect(preset.scorers.relayOverCap, name).toStrictEqual({ state: 'set', value: 'holds-place', provenance: SIMULATOR_RULE_PROVENANCE });
+      expect(pending, name).toEqual([]);
+      expect(complete, name).toBe(true);
+      // The scorer reads relayOverCap, so it is not an inert setting.
+      expect(inert, name).not.toContain('scorers.relayOverCap');
+      expect(() => requireComplete(preset), name).not.toThrow();
+    }
   });
 
   it('inert settings: changing each one does not move any total', () => {

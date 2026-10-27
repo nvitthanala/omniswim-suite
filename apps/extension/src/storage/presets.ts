@@ -53,8 +53,9 @@ export async function resolveRulePreset(repo: StorageRepo, ref: PresetRef): Prom
     return value === undefined ? { found: false } : { found: true, value };
   }
   const got = await repo.get('rulePresets', ref.id);
-  // A preset saved before payload v2 migrates on read, with `ties` pending: no tie rule is assumed, so
-  // it cannot score until someone sets one (D2 3.4). A payload the parser refuses throws.
+  // A preset saved before payload v2 migrates on read, with `ties` pending, and one saved before payload v3
+  // with `relayOverCap` pending: no rule is assumed, so it cannot score until someone sets it (D2 3.4, README R67).
+  // A payload the parser refuses throws.
   return got.found ? { found: true, value: parseRulePreset(got.value.payload), rev: got.value.rev } : { found: false };
 }
 

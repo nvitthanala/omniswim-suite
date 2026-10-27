@@ -15,11 +15,14 @@
  *   scorers.autoRules.splitTimedFinalMarksScorer   true against no such rule (R40)
  *
  * `abFinalsScorersOnly` and `cFinal` have no legacy field and stay outside the comparison.
+ * `scorers.relayOverCap` has no legacy field either, but the legacy scorer always holds an over-cap relay's
+ * place. The test-only completion of nsisc v1 states 'holds-place', which is legacy, so it adds no difference.
+ * nsisc v3 states 'exhibition' (README R67), a fifth difference that has its own test.
  * A pending field drops out. When a pending field becomes `set`, the comparator for it applies.
  */
 import { describe, expect, it } from 'vitest';
 
-import { requireComplete } from '@omniswim/engine';
+import { builtinRulePreset, requireComplete } from '@omniswim/engine';
 import type { EngineScorerAutoRules, RulePreset, Setting } from '@omniswim/engine';
 import { toLegacyScoringSettings } from '@omniswim/engine/rules/legacyBridge';
 import { NSISC_PRESET_SETTINGS, entryCapPolicy, relayLegsAllowTimeTrials } from '@omniswim/engine/lib/scoringDefaults';
@@ -30,6 +33,7 @@ import { nsiscWithTestPoints, set } from './engineTestPresets';
 const LEGACY_NON_SCORER_PLACEMENT = 'holds-place'; // F18: individualScoring.ts:597-602
 const LEGACY_RELAY_LEGS_MUST_BE_SCORERS = false; // F19: scorerRoster.ts:322 does not check legs
 const LEGACY_SPLIT_TIMED_FINAL_MARKS_SCORER = false; // R40: no such field
+const LEGACY_RELAY_OVER_CAP = 'holds-place'; // relayScoring.ts zeroes the relay and keeps its place (R67)
 
 const EXPECTED_DIFFERENCES = [
   'entries.maxTotalPerSwimmer',
@@ -96,6 +100,11 @@ const COMPARATORS: Readonly<Record<string, Comparator>> = {
   }),
   'scorers.divingPerEventScorerCap': (b, l) => ({ bridged: b.divingMaxScorersPerTeamPerEvent, legacy: l.divingMaxScorersPerTeamPerEvent }),
   'scorers.scoringRelaysPerTeamPerEvent': (b, l) => ({ bridged: legacyCap(b.maxRelaysScoringPerTeam), legacy: legacyCap(l.maxRelaysScoringPerTeam) }),
+  // The legacy scorer holds an over-cap relay's place (relayScoring.ts) and has no field for the treatment.
+  'scorers.relayOverCap': (_b, _l, p) => ({
+    bridged: (p.scorers.relayOverCap as Extract<Setting<string>, { state: 'set' }>).value,
+    legacy: LEGACY_RELAY_OVER_CAP,
+  }),
   'scorers.relayEligibleFromScorerPool': same('relayEligibleFromScorerPool'),
   'scorers.relayLegsMustBeScorers': (_b, _l, p) => ({
     bridged: (p.scorers.relayLegsMustBeScorers as Extract<Setting<boolean>, { state: 'set' }>).value,
@@ -174,6 +183,16 @@ describe('NSISC built-in against the legacy NSISC settings', () => {
 
   it('differs in exactly the four known places', () => {
     expect(differences(nsiscWithTestPoints())).toStrictEqual([...EXPECTED_DIFFERENCES].sort());
+  });
+
+  it("nsisc v3 adds one difference to nsisc v2: the user's 'exhibition' against legacy's held place (R67)", () => {
+    // v2 and v3 share every value but relayOverCap. v2's own points differ from the legacy shape (an explicit
+    // relay table against a multiplier); that is not new here. v2 gets the legacy 'holds-place' to be complete.
+    const v2 = builtinRulePreset('nsisc', 2)!;
+    const v2Complete: RulePreset = { ...v2, scorers: { ...v2.scorers, relayOverCap: set('holds-place' as const) } };
+    const v3 = builtinRulePreset('nsisc', 3)!;
+    expect(differences(v2Complete)).not.toContain('scorers.relayOverCap');
+    expect(differences(v3)).toStrictEqual([...differences(v2Complete), 'scorers.relayOverCap'].sort());
   });
 
   it('is complete once the test-only points are filled', () => {
