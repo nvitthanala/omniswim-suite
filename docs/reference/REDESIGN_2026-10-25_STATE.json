@@ -785,7 +785,7 @@
       "answers": {
         "R70": "opponents: build a best-fit scoring roster per untagged opponent, user-editable",
         "R71": "relay swimming does not add untagged swimmers; scoring relays need all legs on the scoring roster (NSISC); outside NSISC user assumes non-scoring relays are all non-scorers (unsourced)",
-        "R72": "NCAA rule book 2025-27 read: 7-10-1, 5-5-1, 5-2-1-a, 5-7-1-g; not archived (needs permission)"
+        "R72": "NCAA rule book 2025-27 read: 7-10-1, 5-5-1, 5-2-1-a, 5-7-1-g; archived in b905e878 (data/scoring_rules/sources/ncaa-rulebook-2025-27.pdf)"
       },
       "liveCheck": "2025-26 and 2026-27 both load with no error. IndexedDB empty: the production build opens no database yet (only the harness does); 0.1.0 is the extension version. Not a defect."
     },
@@ -909,7 +909,7 @@
     "user": "\"continue work, i will be away from computer. move ahead and build everything you can, keep tab on open items or questions you have for me and i will let you know answers when i return.\"",
     "questionsForUser": [],
     "resolvedNote": "Dark good/bad colors: answered by README R57 (system colors in dark), removed from questions 2026-10-26.",
-    "pausedAt": "2026-10-27 after NSISC v4: budget tier critical (7d window). Resume: the exhibitionCounts follow-up (honor false in entryCapViolations, executor), then R70 best-fit roster design (architect), then R66 write-path design. Three open questions on P3.core-b await the user."
+    "pausedAt": "2026-10-27 after the exhibitionCounts fix (lead-built, Codex no defect, advisor audit): budget tier critical (7d window). Resume: R70 best-fit roster design (architect), then R66 write-path design. Three open questions on P3.core-b await the user."
   },
   "p2Risk": {
     "done": "2026-10-26",
@@ -970,10 +970,9 @@
   "followUps": [
     "tests/extensionStorageAudit.test.ts \"a migration that awaits a timer makes openOmniDb reject\" failed once under --maxWorkers=4 (2026-10-26), passed 3/3 alone and on the full rerun: timing flake under load.",
     "Tie at the cap boundary: placeOrderCompare picks which teammate is removed by synthetic-id order. Team total is unchanged; per-swimmer points are arbitrary. Not decided in P3.core-b; decide where per-swimmer point totals first appear (P3.ui or AutoBuilder), D2 9.5.",
-    "entries.exhibitionCounts is not read since P3.core-b: entry limits count every entry (R75). Every built-in sets true or pending. Honor a false value in entryCapViolations (skip exhibition-role entries and exhibition-relay legs) before any preset sets false. First engine fix after NSISC v4.",
     "P4: converted swims and estimated-cut tags must run checkProvenanceSources when they are first stored, or they bypass the tool-archive check.",
     "Deferred to P4: pickers hide retired built-ins (no live picker shows one today). dockedPanel reconnect after an answered port drops: low severity (an iframe reload leaves an empty panel, not a wrong number).",
-    "NCAA Rule 5-5-1 (README R72): an exhibition swim does not count toward a team entries per event or a swimmer events per meet. The engine entry caps count every entry today.",
+    "NCAA Rule 5-5-1 (README R72): a preset honors it with entries.exhibitionCounts false (scoreMeet reads it since 2026-10-27). NSISC keeps true (R75).",
     "NCAA Rule 5-7-1-g (README R72): in a timed-final relay a swimmer may swim on only one of the team relays. Add a lineup check."
   ],
   "p3CoreA": {

@@ -140,6 +140,7 @@ function nsisc(opts: {
   maxInd?: number | 'unlimited';
   maxRelay?: number | 'unlimited';
   maxTotal?: number | 'unlimited';
+  exhibitionCounts?: boolean;
 } = {}): CompleteRulePreset {
   const base = builtinRulePreset('nsisc', 3) as RulePreset;
   const p: RulePreset = {
@@ -163,6 +164,7 @@ function nsisc(opts: {
       ...(opts.maxInd === undefined ? {} : { maxIndividualPerSwimmer: set(opts.maxInd) }),
       ...(opts.maxRelay === undefined ? {} : { maxRelayPerSwimmer: set(opts.maxRelay) }),
       ...(opts.maxTotal === undefined ? {} : { maxTotalPerSwimmer: set(opts.maxTotal) }),
+      ...(opts.exhibitionCounts === undefined ? {} : { exhibitionCounts: set(opts.exhibitionCounts) }),
     },
   };
   return requireComplete(p);
@@ -662,6 +664,80 @@ describe('scoreMeet under roster eligibility: entry limits count every entry (RE
     expect(capViolations(r).filter((v) => v.swimmerId === 'a8' && v.which === 'total')).toEqual([
       { kind: 'entry_cap', swimmerId: 'a8', which: 'total', count: 3, limit: 2 },
     ]);
+  });
+});
+
+describe('scoreMeet: entries.exhibitionCounts false leaves exhibition entries out of the entry limits', () => {
+  const capViolations = (r: Results) => r.violations.filter((v) => v.kind === 'entry_cap');
+  const people: Spec[] = [
+    { id: 'x', team: 'T1', free: 4000, dive: 25000 },
+    { id: 'y', team: 'T1' },
+    { id: 'z', team: 'T1' },
+    { id: 'w', team: 'T1' },
+    { id: 'o', team: 'T2' },
+  ];
+  const { model } = build(people);
+  // x has 3 entries: a 100 Free, a dive and a relay leg.
+  const lu = lineup(free('T1', 'x'), dive('T1', 'x'), relay('T1', 'A', ['x', 'y', 'z', 'w']), free('T2', 'o'));
+  const others = [...tags('T1', ['y', 'z', 'w']), tag('T2', 'o')];
+  const run = (role: ScorerRole, extra: Parameters<typeof nsisc>[0]) =>
+    scoreMeet(model, lu, [tag('T1', 'x', role), ...others], nsisc({ mustBeScorers: false, exhibitionCounts: false, ...extra }), SOURCING);
+
+  it('an exhibition swimmer is not flagged: every one of the entries is exhibition', () => {
+    // The relay is exhibition through x's leg, so its other legs leave the count as well. T2's scorer o is
+    // over the zero limits and stays flagged.
+    expect(capViolations(run('exhibition', { maxTotal: 0, maxInd: 0, maxRelay: 0 })).map((v) => v.swimmerId)).toEqual(['o', 'o']);
+  });
+
+  it.each(['scorer', 'non-scorer'] as const)('a swimmer tagged %s is still flagged', (role) => {
+    expect(capViolations(run(role, { maxTotal: 2 }))).toContainEqual({ kind: 'entry_cap', swimmerId: 'x', which: 'total', count: 3, limit: 2 });
+  });
+
+  it('the legs of a relay removed as exhibition by relayOverCap leave the count', () => {
+    const t1 = Array.from({ length: 12 }, (_, i) => `a${i}`);
+    const m = build(t1.map((id, i) => ({ id, team: 'T1', free: 4000 + i * 10 }))).model;
+    const es = [0, 1, 2].map((g) => relay('T1', 'ABC'[g] as string, [0, 1, 2, 3].map((k) => `a${g * 4 + k}`) as unknown as [string, string, string, string]));
+    const r = scoreMeet(m, lineup(...es), tags('T1', t1), nsisc({ maxRelay: 0, exhibitionCounts: false }), SOURCING);
+    expect(relayShape(r)[2]).toEqual(['T1C', null, 0, 'exhibition']);
+    // T1A and T1B score, so a0 to a7 are flagged. a8 to a11 swim only the exhibition relay T1C.
+    expect(capViolations(r).map((v) => v.swimmerId)).toEqual(t1.slice(0, 8).sort());
+  });
+
+  it('under points_pool the legs of a relay removed as exhibition by relayOverCap leave the count too', () => {
+    const t1 = Array.from({ length: 12 }, (_, i) => `a${i}`);
+    const m = build(t1.map((id, i) => ({ id, team: 'T1', free: 4000 + i * 10 }))).model;
+    const es = [0, 1, 2].map((g) => relay('T1', 'ABC'[g] as string, [0, 1, 2, 3].map((k) => `a${g * 4 + k}`) as unknown as [string, string, string, string]));
+    const pool = (exhibitionCounts: boolean) => {
+      const p = nsisc({ maxRelay: 0, relayCap: 2, exhibitionCounts });
+      return requireComplete({
+        ...p,
+        scorers: {
+          ...p.scorers,
+          eligibility: set('points_pool' as const),
+          autoRules: set(null),
+          scoringTeamSize: set('unlimited' as const),
+          scoringTeamScope: set('event' as const),
+          relayEligibleFromScorerPool: set(false),
+        },
+      });
+    };
+    const flagged = (exhibitionCounts: boolean) => {
+      const r = scoreMeet(m, lineup(...es), [], pool(exhibitionCounts), SOURCING);
+      expect(relayShape(r)[2]).toEqual(['T1C', null, 0, 'exhibition']);
+      return capViolations(r).map((v) => v.swimmerId);
+    };
+    expect(flagged(false)).toEqual(t1.slice(0, 8).sort());
+    expect(flagged(true)).toEqual([...t1].sort());
+  });
+
+  it('true (the NSISC value, README R75) keeps counting them', () => {
+    expect(capViolations(run('exhibition', { maxTotal: 2, exhibitionCounts: true }))).toContainEqual({
+      kind: 'entry_cap',
+      swimmerId: 'x',
+      which: 'total',
+      count: 3,
+      limit: 2,
+    });
   });
 });
 

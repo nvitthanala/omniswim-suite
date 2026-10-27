@@ -55,8 +55,9 @@
  *   trimmed and the engine never picks who drops.
  * - Entry limits count every entry, as under `'points_pool'`: scorer, non-scorer and exhibition alike, including the legs of an
  *   exhibition relay and of a relay removed by `scorers.relayOverCap` (README R75, which corrects R74). The roster only
- *   decides who scores and who may swim a scoring relay. `entries.exhibitionCounts` is not read yet: every built-in sets
- *   it to true or leaves it pending, and honoring a false value is a follow-up.
+ *   decides who scores and who may swim a scoring relay. That is `entries.exhibitionCounts: true`, the NSISC value. A
+ *   preset that sets it to false leaves every row with `notScoredReason: 'exhibition'` out of the entry limits, in
+ *   either eligibility mode (NCAA Rule 5-5-1, README R72).
  * The legacy scorer only awards the table points here. `scoreMeet` hands it a copy of the preset with the roster
  * gate, the team pool and every cap switched off (`pointsOnlyRules`), because it would build its own roster from
  * the rows it sees. `scoreMeet` zeroes the held entries itself, after the tie shares are split.
@@ -937,6 +938,7 @@ export function scoreMeet(
     relay: settled(rules.entries.maxRelayPerSwimmer, 'entries.maxRelayPerSwimmer'),
     total: settled(rules.entries.maxTotalPerSwimmer, 'entries.maxTotalPerSwimmer'),
   };
+  const exhibitionCounts = settled(rules.entries.exhibitionCounts, 'entries.exhibitionCounts');
 
   checkNameCollisions(model);
   const index = buildIndex(model);
@@ -967,11 +969,22 @@ export function scoreMeet(
     events.push({ eventKey: event.eventKey, gender: event.gender, rows });
   }
 
+  // `entries.exhibitionCounts` false: the exhibition entries leave the entry limits. Those are the entries of a
+  // swimmer tagged 'exhibition', the relays with such a leg (every leg leaves), and the relays removed by
+  // `scorers.relayOverCap: 'exhibition'`: exactly the rows with `notScoredReason: 'exhibition'`.
+  const exhibitionKeys = exhibitionCounts
+    ? null
+    : new Set([
+        ...[...(roster?.removed ?? [])].filter(([, why]) => why === 'exhibition').map(([key]) => key),
+        ...resolved.filter((r) => r.event.kind === 'relay' && overCap.removed.has(r.key)).map((r) => r.key),
+      ]);
+  const counted = exhibitionKeys === null ? resolved : resolved.filter((r) => !exhibitionKeys.has(r.key));
+
   return {
     payloadVersion: 1,
     teams: rankTeams(model, events),
     events,
-    violations: [...violations, ...entryCapViolations(resolved, entryCaps), ...(roster?.violations ?? [])],
+    violations: [...violations, ...entryCapViolations(counted, entryCaps), ...(roster?.violations ?? [])],
     rosterUnknown,
   };
 }

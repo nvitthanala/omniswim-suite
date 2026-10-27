@@ -1381,9 +1381,14 @@ and `architect` have not accepted them yet. Item 12 decides nothing.
     relay removed by `relayOverCap`, exactly as under `points_pool`. R75 differs
     from NCAA Rule 5-5-1 (README R72), which exempts an exhibition performance.
     The user's rule applies to NSISC. The roster only decides who scores and who
-    may swim a scoring relay. `entries.exhibitionCounts` is not read yet: every
-    built-in sets it to true or leaves it pending. Honoring a false value is a
-    follow-up.
+    may swim a scoring relay. That is `entries.exhibitionCounts: true`. Since
+    2026-10-27 a preset that sets it to false leaves the exhibition entries out
+    of the entry limits in either eligibility mode: the entries of a swimmer
+    tagged `'exhibition'`, every leg of a relay with such a leg, and every leg
+    of a relay removed by `relayOverCap: 'exhibition'`. Legacy
+    (`swimmerEntryLimits.ts:157`) skips only rows flagged `isExhibition`; it has
+    no exhibition relay legs. The engine owns these violations, so the wider
+    set applies.
 19. **NSISC v4 (2026-10-27).** `nsisc` v4 is v3 with
     `entries.maxTotalPerSwimmer` 7, from README R73 (line 97). R4's 8 was
     wrong. Its `exhibitionCounts` keeps the value true and cites README R75
