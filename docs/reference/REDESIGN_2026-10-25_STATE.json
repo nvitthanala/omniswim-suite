@@ -634,7 +634,8 @@
     "DONE (24a0eee1): stored rule presets migrate on read, ties pending. Diff audit skipped: one-function mechanical change with a red test; no cross-provider review for the same reason.",
     "NEXT: P3 rules per plan (preset editor and pickers). Then P4 sourcing (flyover, history, cut-tag wiring incl. estimated-cut tag, conversion-source picker hiding retired built-ins), then P5 planner.",
     "DONE: P3.core-a over-cap removal (see p3CoreA). NEXT unblocked: P3.ui (preset editor, dropdowns) against the Results surface, budget permitting. P3.core-b waits on Q-roster-untagged.",
-    "2026-10-27 plan: (1) DONE abe52033 mixed-event fix. (2) R68 recon by the lead in Chrome: every-swim endpoint and relay splits. (3) R67 relay exhibition: scoring-relay limit with over-limit relays exhibition (executor). (4) P3.core-b roster mode per R65 (executor). (5) R66 design: write path into the SwimCloud page (architect), then P3.ui on the page."
+    "2026-10-27 plan: (1) DONE abe52033 mixed-event fix. (2) R68 recon by the lead in Chrome: every-swim endpoint and relay splits. (3) R67 relay exhibition: scoring-relay limit with over-limit relays exhibition (executor). (4) P3.core-b roster mode per R65 (executor). (5) R66 design: write path into the SwimCloud page (architect), then P3.ui on the page.",
+    "DONE 2026-10-27: R68 recon (see r68Recon). NEXT: R67 relay exhibition, then P3.core-b (R65), then R66 write-path design, then P4 history adapter."
   ],
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
@@ -949,5 +950,12 @@
   "toolArchiveValidation": {
     "status": "DONE: Codex review accepted (ctx_1727615e5c3f, released), advisor audit passed, gates green",
     "scope": "rulePresets, sessionPresets and lineups (builtUnder.rulePresetValues and sessionPresetValues) are the only stores with provenance today; all three run checkProvenanceSources"
+  },
+  "r68Recon": {
+    "done": "2026-10-27",
+    "doc": "plans/2026-10-25/02-SIMULATOR-RECON.md, section R68",
+    "everySwim": "/api/swimmers/{id}/times_by_event/?event=s|d|c|1: every swim, all teams; includes leadoff legs; no flying legs",
+    "flyingSplits": "/api/teams/{teamId}/simulator/ swimmers[].relaysplits (flystart true) and relayleadoffs: fastest per event in the window, per team. Verified 19.06 (row 159330889) via team 127.",
+    "next": "P4 history adapter (executor): teams from times_by_event team_id, then one team simulator request per team/gender/course/window; best split per event across teams with source row id"
   }
 }

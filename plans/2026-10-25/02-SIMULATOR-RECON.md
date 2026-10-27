@@ -518,3 +518,46 @@ since 2026-10-26 03:32 UTC).
   `orderBy`; lodash breaks a full tie by input index.
 - Unverified: that the points step reads places from this sort with no
   later tie step. The P2 parity tests on configs B to D cover it.
+
+## R68: every swim and relay splits (2026-10-27)
+
+The lead checked these from a SwimCloud tab with same-origin GET requests:
+no Cloudflare challenge, all HTTP 200 JSON. Example swimmer: 1472365
+(README R68), who has swum for several teams.
+
+**Every individual swim: `times_by_event`.**
+`GET /api/swimmers/{id}/times_by_event/?event={stroke}|{distance}|{course}|1`
+returns every swim of that event, across all of the swimmer's teams and
+seasons. For 1472365 and the 50 free SCY it returned 140 rows, from 6
+team ids. Each row carries `team_id`, `meet_id`, `dateofswim`,
+`eventtime`, `flystart`, `relay_id`, `legposition` and `split`. The rows
+include relay **leadoff** legs (`legposition` 1, `flystart: false`,
+`relay_id` set), but no flying legs. The athlete Times page uses this
+endpoint and `profile_fastest_times`. With `numlegs` 4 the endpoint
+returns whole relays (leg 1 only, cumulative `splittimes`). It is not a
+source of flying legs either.
+
+**Flying relay splits: the team simulator endpoint.**
+`GET /api/teams/{teamId}/simulator/?start_date=…&end_date=…&eventgender=M|F&eventcourse=Y|S|L&divecourse=6&time_to_use=fastest`
+returns `{swimmers, relays}`. Each swimmer holds `indrecords`,
+`relaysplits` and `relayleadoffs`: the swimmer's fastest swim of each kind,
+per event, inside the date window, for that team only. A `relaysplits`
+row has `flystart: true`. For 1472365 with team 127 (Auburn) and
+2025-08-01 to 2026-03-31, `relaysplits` held the 50 free 19.06 (row id
+159330889) that README R68 names. Team 58 (Henderson State) for a later
+window held a 50 free split of 19.49 and not the 19.06, because that
+swim was for team 127.
+
+**Method for R68.** One request per team, gender, course and window:
+1. Read the swimmer's teams from the `team_id` of their `times_by_event`
+   rows. These rows also give every individual swim, so a date window can
+   pick the best swim inside it.
+2. For each team, inside the wanted window, call the team simulator
+   endpoint and read that swimmer's `relaysplits` and `relayleadoffs`.
+3. Keep the fastest split per event across teams. Record the team, the
+   window and the row id as its source.
+
+One team request covers every swimmer on that team, so a roster costs
+one request per team, not one per swimmer. Limits: the endpoint gives
+only the fastest split per event in the window, not every split, and not
+the meet or date of that split. The row id is the link back.
