@@ -941,21 +941,9 @@
   },
   "inFlight": {
     "P3.core-b": {
-      "status": "unblocked by R70/R71: plan = roster mode where every team needs a scoring roster (coach tags for own team; best-fit proposal for opponents, editable); only tags count (no relay auto marks before finals); R37 relays need all legs on the roster; R41 non-scorers leave the places; over-size roster reported. Best-fit roster builder is a separate optimization item (design first).",
-      "scope": "roster eligibility for timed finals: tags + relay-leg auto marks (R39), coach tags win (R21/R40), R41 non-scorers leave places (ind + relay), R37/F19 legs must be scorers, scoringTeamSize 18 with diver 1/3 (R9/R24/R28) over-size = reported violation never a silent trim; abFinalTiers and splitTimedFinalMarksScorer set but not evaluable without rounds -> throw needs_rounds (P5)."
-    },
-    "R67": {
-      "status": "Codex accepted (ctx_6e62e43781a6, released); advisor audit passed with fixes (D2 spec type to v3, storage v3 test, R71/R72 negative claims reworded); committing.",
-      "scope": "RulePreset payload v3: scorers.relayOverCap holds-place|exhibition. Over-limit relays chosen as today (overCapKeys by rank); exhibition removes them and re-ranks (core-a mechanism), reason exhibition. Built-ins: simulator holds-place (SIMULATOR_RULE_PROVENANCE); nsisc v1, v2 and generic v1 pending; new nsisc v3 = v2 + exhibition (README R67). Picker offers nsisc v3.",
-      "followUp": "R42 (a 3rd NSISC relay is an entry violation) is not modeled: no relay entry-limit violation exists yet.",
-      "api": "BREAKING (not additive): RulePreset payloadVersion 3 with scorers.relayOverCap: Setting<RelayOverCapRule> (holds-place|exhibition). migrateRulePresetV1 now returns RulePresetV2. requireComplete and pendingPaths throw unsupported_version on v1/v2 objects. New exports: RelayOverCapRule, RulePresetV2, migrateRulePresetV2, parseRulePresetV2. Effect: nsisc v1/v2, generic v1 and any stored v1/v2 preset or lineup snapshot cannot score until relayOverCap is set. nsisc v3 added (frozen = v2 body). place null reasons: no_time, removed_over_event_cap, exhibition. Storage accepts v3 payloads (tests/extensionStorageValidate.test.ts).",
-      "openFindings": [
-        "Open gap (it.fails marker in tests/engineRelayOverCap.test.ts): a 4th relay ranked past the point table takes no cap slot, so it is not removed; after removal it moves into the table, holds a place with 0 points and no reason, and the relay behind loses a place. Candidate fix in D2 section 9 item 8. Decide before commit or log.",
-        "README R67 lacks the user quote \"the relays that are entered that dont score can be tagged as exhibition\"; nsisc v3 provenance cites README line 91 with the existing wording. Add the quote, then repoint.",
-        "nsisc v3 cannot reach exhibition through scoreMeet until roster mode lands (P3.core-b).",
-        "R42 entry violation not modeled (D2 9 item 7).",
-        "toLegacyScoringSettings drops relayOverCap; only scoreMeet calls it."
-      ]
+      "status": "dispatched to executor (Sonnet); then Codex review, advisor audit",
+      "scope": "scoreMeet under eligibility roster: scoring roster = scorer tags (R65/R71; no auto marks before finals); missing roster for a team with entries -> named refusal; non-scorers per nonScorerPlacement (R41) with reason non_scorer; relay with a non-roster leg does not score (R37); exhibition-role tag -> exhibition (Rule 7-10-1); scoringTeamSize with diverWeight over -> violation, never trimmed; points_pool parity path unchanged.",
+      "next": "best-fit opponent roster (R70): design item (architect) before any build"
     }
   },
   "followUps": [
@@ -983,5 +971,18 @@
     "everySwim": "/api/swimmers/{id}/times_by_event/?event=s|d|c|1: every swim, all teams; includes leadoff legs; no flying legs",
     "flyingSplits": "/api/teams/{teamId}/simulator/ swimmers[].relaysplits (flystart true) and relayleadoffs: fastest per event in the window, per team. Verified 19.06 (row 159330889) via team 127.",
     "next": "P4 history adapter (executor): teams from times_by_event team_id, then one team simulator request per team/gender/course/window; best split per event across teams with source row id"
+  },
+  "r67": {
+    "status": "DONE b690448e: Codex accepted, advisor audit passed, gates green (vitest 2742, npm test 65, golden, mutation 413, harness 2/2)",
+    "scope": "RulePreset payload v3: scorers.relayOverCap holds-place|exhibition. Over-limit relays chosen as today (overCapKeys by rank); exhibition removes them and re-ranks (core-a mechanism), reason exhibition. Built-ins: simulator holds-place (SIMULATOR_RULE_PROVENANCE); nsisc v1, v2 and generic v1 pending; new nsisc v3 = v2 + exhibition (README R67). Picker offers nsisc v3.",
+    "followUp": "R42 (a 3rd NSISC relay is an entry violation) is not modeled: no relay entry-limit violation exists yet.",
+    "api": "BREAKING (not additive): RulePreset payloadVersion 3 with scorers.relayOverCap: Setting<RelayOverCapRule> (holds-place|exhibition). migrateRulePresetV1 now returns RulePresetV2. requireComplete and pendingPaths throw unsupported_version on v1/v2 objects. New exports: RelayOverCapRule, RulePresetV2, migrateRulePresetV2, parseRulePresetV2. Effect: nsisc v1/v2, generic v1 and any stored v1/v2 preset or lineup snapshot cannot score until relayOverCap is set. nsisc v3 added (frozen = v2 body). place null reasons: no_time, removed_over_event_cap, exhibition. Storage accepts v3 payloads (tests/extensionStorageValidate.test.ts).",
+    "openFindings": [
+      "Open gap (it.fails marker in tests/engineRelayOverCap.test.ts): a 4th relay ranked past the point table takes no cap slot, so it is not removed; after removal it moves into the table, holds a place with 0 points and no reason, and the relay behind loses a place. Candidate fix in D2 section 9 item 8. Decide before commit or log.",
+      "README R67 lacks the user quote \"the relays that are entered that dont score can be tagged as exhibition\"; nsisc v3 provenance cites README line 91 with the existing wording. Add the quote, then repoint.",
+      "nsisc v3 cannot reach exhibition through scoreMeet until roster mode lands (P3.core-b).",
+      "R42 entry violation not modeled (D2 9 item 7).",
+      "toLegacyScoringSettings drops relayOverCap; only scoreMeet calls it."
+    ]
   }
 }
