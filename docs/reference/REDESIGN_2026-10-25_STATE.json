@@ -909,7 +909,7 @@
     "user": "\"continue work, i will be away from computer. move ahead and build everything you can, keep tab on open items or questions you have for me and i will let you know answers when i return.\"",
     "questionsForUser": [],
     "resolvedNote": "Dark good/bad colors: answered by README R57 (system colors in dark), removed from questions 2026-10-26.",
-    "pausedAt": "2026-10-27 after the R67 executor: paused at the user request (losing connection). Resume: Codex review of the R67 diff + abe52033, decide the 4th-relay gap, advisor audit, commit. Then P3.core-b once the user answers the two questions (opponents untagged; relay auto marks after tagging)."
+    "pausedAt": "2026-10-27 after commit 493fee3e (P3.core-b): budget tier critical (7d window pace 112%, resets in about 46h; 5h resets in about 3h). Resume: NSISC v4 (inFlight), then the exhibitionCounts follow-up, then R70 best-fit roster design (architect), then R66 write-path design. Three open questions on P3.core-b await the user (inFlight[P3.core-b].openQuestions)."
   },
   "p2Risk": {
     "done": "2026-10-26",
