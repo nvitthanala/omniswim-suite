@@ -633,7 +633,8 @@
     "DONE (d22375ee): P2 UI. Overlay forwards the validated snapshot over the nonce port and keeps the console log; dashboard re-scores and shows team totals plus the parity line. Codex wrote it; Claude reviewed (advisor audit). Gates green: vitest 2693, npm test 65, golden, harness 2/2.",
     "DONE (24a0eee1): stored rule presets migrate on read, ties pending. Diff audit skipped: one-function mechanical change with a red test; no cross-provider review for the same reason.",
     "NEXT: P3 rules per plan (preset editor and pickers). Then P4 sourcing (flyover, history, cut-tag wiring incl. estimated-cut tag, conversion-source picker hiding retired built-ins), then P5 planner.",
-    "DONE: P3.core-a over-cap removal (see p3CoreA). NEXT unblocked: P3.ui (preset editor, dropdowns) against the Results surface, budget permitting. P3.core-b waits on Q-roster-untagged."
+    "DONE: P3.core-a over-cap removal (see p3CoreA). NEXT unblocked: P3.ui (preset editor, dropdowns) against the Results surface, budget permitting. P3.core-b waits on Q-roster-untagged.",
+    "2026-10-27 plan: (1) DONE abe52033 mixed-event fix. (2) R68 recon by the lead in Chrome: every-swim endpoint and relay splits. (3) R67 relay exhibition: scoring-relay limit with over-limit relays exhibition (executor). (4) P3.core-b roster mode per R65 (executor). (5) R66 design: write path into the SwimCloud page (architect), then P3.ui on the page."
   ],
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
@@ -765,6 +766,18 @@
       "id": "provenance-exception",
       "answered": "2026-10-26",
       "answer": "R63: yes, an exception. Added to CLAUDE.md data-provenance rule 2."
+    },
+    {
+      "date": "2026-10-27",
+      "answers": {
+        "R64": "per-event scorer cap may be unlimited (preset setting)",
+        "R65": "Q-roster-untagged = (c): coach tags first, else not scored; AutoBuilder shows swaps later",
+        "R66": "Q-P3-ui-target: read AND write the SwimCloud simulator page; features on the page, not only the docked panel",
+        "R67": "Q-relay-overcap: relays beyond the scoring-relay limit are exhibition; add a scoring-relay limit field",
+        "R68": "Q-history-depth: look for an every-swim endpoint and pull bests; find relay splits (example swimmer 1472365, 19.06 split, results/357106)",
+        "R69": "Q-R61-weaker-real: show both tags"
+      },
+      "liveCheck": "P2 parity: 2026-27 season, teams HSU/Delta State/Ouachita: Matches SwimCloud (757/624/530). 2025-26 season threw unsupported_gender on swims[55].eventgender X; fixed in abe52033, needs a re-check. The tie claim was mine: the recorded config C used the 2025-26 range, which I did not say."
     }
   ],
   "commits": [
@@ -848,8 +861,8 @@
     "leadChecks": "v1 validate.ts:403 already refused empty teamIds and empty memberIds, so no v1 record falls into a newly refused state; P1 open.ts writes meta.db.schemaVersion in the upgrade tx, so a healthy install passes the new refusal."
   },
   "liveCheckNext": [
-    "After the next reload: open the dashboard and confirm storage opens at schema v2 with no DatabaseInconsistentError. The upgrade is one-way.",
-    "P2 live (d22375ee): reload the unpacked extension. Load teams 58, 48, 412 with 16 Place Scoring (config C setup). The docked panel should show the team table and \"Matches SwimCloud\", including the tied events 100 Breast and 100 Free. The console should still show [OmniSwim] SimSnapshot."
+    "Reload the extension. Load HSU, Delta State and Ouachita with the 2025-26 date range: the panel should score (abe52033 accepts mixed-event X swims) and say Matches SwimCloud, including 100 Breast and 100 Free (ties). If it shows differing entries, paste them.",
+    "Storage schema v2: open the dashboard tab, DevTools > Application > IndexedDB: the OmniSwim database is version 2 and no DatabaseInconsistentError is in the console."
   ],
   "budget": "2026-10-26 evening: 5h 14%, 7d 72% (pace 118% at reset in 3d), tier conserve: low-priority pace, one agent at a time",
   "conversionCapture": {
@@ -871,15 +884,9 @@
   "awayMode": {
     "since": "2026-10-26 afternoon",
     "user": "\"continue work, i will be away from computer. move ahead and build everything you can, keep tab on open items or questions you have for me and i will let you know answers when i return.\"",
-    "questionsForUser": [
-      "Q-history-depth: profile_fastest_times gives one best swim per event and course (all teams, back to 2012), not every swim. Is that enough for Load history (R50) and recruits (R52)? If the date window (R49) must pick the best swim inside the window, a full per-swim history endpoint is needed; may Claude look for one (a few requests, stop on any challenge)?",
-      "Q-R61-weaker-real: when a real swim earns a weaker cut than an estimated one (real B, estimated A), foldEventCutTags keeps both tags, real first. Keep both, or show only the stronger one?",
-      "Q-roster-untagged: in a lineup that has no finals yet (all timed finals), who is on the scoring team when the coach has tagged no one? The legacy rule (scorerRoster.ts:240) makes an untagged swimmer a scorer only if a relay or a final marked them, or they are a recruit. Under that rule almost nobody scores before finals exist. Options: (a) keep legacy, (b) every untagged swimmer is a scorer until the 18-spot team is full (who drops then?), (c) the planner must tag first, else the meet is not scored.",
-      "Q-relay-overcap: when a team enters more relays in one event than may score (NSISC: 2), does the extra relay keep its place and score 0 (today), or leave the places so the relays behind move up, like a non-scorer under R41? R42 says NSISC enters no non-scoring relays, so this matters for other presets and for a lineup that breaks the limit.",
-      "Q-P3-ui-target: the rule dropdowns (per-event scorer cap with \"-\", total entries per swimmer) go in SwimCloud's settings panel (plan 3.5, D3 4). Should changing one also change SwimCloud's own simulator setting (so its totals move too), or only OmniSwim's preset (SwimCloud keeps its own numbers, and parity then shows the difference)? Writing to SwimCloud's page state is a new trust direction; today the bridge only reads."
-    ],
+    "questionsForUser": [],
     "resolvedNote": "Dark good/bad colors: answered by README R57 (system colors in dark), removed from questions 2026-10-26.",
-    "pausedAt": "2026-10-26 after c13596f9: clean tree (only the pre-existing untracked omniswim-suite/data/ from June). Every next item waits on a user answer: P3.core-b (Q-roster-untagged), P3.ui (Q-P3-ui-target), relay over-cap (Q-relay-overcap), P4 history (Q-history-depth), R61 display (Q-R61-weaker-real). Resume: read the answers, then P3.core-b via executor."
+    "pausedAt": null
   },
   "p2Risk": {
     "done": "2026-10-26",
