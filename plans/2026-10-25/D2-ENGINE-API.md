@@ -647,7 +647,10 @@ export type Violation =
   | { readonly kind: 'session_load'; readonly swimmerId: SwimmerId; readonly session: SessionRef;
       readonly races: number; readonly limit: number }
   | { readonly kind: 'relay_leg'; readonly entryKey: string; readonly leg: 1 | 2 | 3 | 4;
-      readonly reason: 'wrong_gender' | 'duplicate_swimmer' | 'event_mismatch' | 'basis_position' }   // basis_position: 8.12
+      readonly reason: 'wrong_gender' | 'duplicate_swimmer' | 'event_mismatch' | 'basis_position'   // basis_position: 8.12
+        | 'off_scoring_roster' }   // a warning, README R77 (section 9 item 20)
+  | { readonly kind: 'scorer_without_entry'; readonly teamId: TeamId; readonly gender: Gender;
+      readonly swimmerId: SwimmerId }   // a warning, README R78 (section 9 item 20)
   | { readonly kind: 'scoring_team_size'; readonly teamId: TeamId; readonly gender: Gender; readonly scorers: number;
       readonly divers: number; readonly spots: { readonly numerator: number; readonly denominator: number };   // not reduced
       readonly limit: number }   // P3.core-b, roster eligibility
@@ -1395,3 +1398,15 @@ and `architect` have not accepted them yet. Item 12 decides nothing.
     (line 99). `nsisc` v2 and v3 stay frozen at 8, so a saved reference to
     them scores as before. The picker offers v4, and a user copy of v1 to v3
     is told that v4 exists.
+20. **Roster warnings (README R76 to R78, 2026-10-27).** R76 confirms that a
+    relay with an exhibition-tagged leg is wholly exhibition. Two warnings
+    join `Results.violations`. Neither changes a score.
+    - R77: under roster eligibility with `relayLegsMustBeScorers` false, a
+      relay with a leg not tagged scorer (untagged or `'non-scorer'`) still
+      scores. Each such leg gets `relay_leg` with reason
+      `'off_scoring_roster'`. With the setting true the relay does not score,
+      so there is no warning. A relay removed by `relayOverCap: 'exhibition'`
+      does not score either, so its legs get no warning.
+    - R78: a swimmer tagged scorer with no entry in the meet takes a full
+      scoring-roster spot and gets `scorer_without_entry`. A non-scorer or
+      exhibition tag with no entry takes no spot and gets no warning.

@@ -741,6 +741,70 @@ describe('scoreMeet: entries.exhibitionCounts false leaves exhibition entries ou
   });
 });
 
+describe('scoreMeet under roster eligibility: warnings for R77 and R78', () => {
+  const people: Spec[] = [
+    { id: 'x', team: 'T1', free: 4000 },
+    { id: 'y', team: 'T1' },
+    { id: 'z', team: 'T1' },
+    { id: 'w', team: 'T1' },
+    { id: 'q', team: 'T1' },
+    { id: 'o', team: 'T2', free: 4100 },
+  ];
+  const { model } = build(people);
+  const lu = lineup(free('T1', 'x'), relay('T1', 'A', ['x', 'y', 'z', 'w']), free('T2', 'o'));
+  const legWarnings = (r: Results) => r.violations.filter((v) => v.kind === 'relay_leg' && v.reason === 'off_scoring_roster');
+  const noEntry = (r: Results) => r.violations.filter((v) => v.kind === 'scorer_without_entry');
+  const relayKey = (r: Results) => r.events.flatMap((e) => e.rows).find((row) => row.swimmerId === null)?.entryKey;
+
+  it('R77: with relayLegsMustBeScorers false, a relay with an untagged leg scores and each such leg is warned', () => {
+    const r = scoreMeet(model, lu, [...tags('T1', ['x', 'y']), tag('T1', 'z', 'non-scorer'), tag('T2', 'o')], nsisc({ mustBeScorers: false }), SOURCING);
+    const key = relayKey(r);
+    expect(r.events.flatMap((e) => e.rows).find((row) => row.entryKey === key)?.scored).toBe(true);
+    // z is tagged non-scorer and w is untagged: neither is on the scoring roster.
+    expect(legWarnings(r)).toEqual([
+      { kind: 'relay_leg', entryKey: key, leg: 3, reason: 'off_scoring_roster' },
+      { kind: 'relay_leg', entryKey: key, leg: 4, reason: 'off_scoring_roster' },
+    ]);
+  });
+
+  it('R77: a relay removed as exhibition by relayOverCap does not score, so its off-roster leg is not warned', () => {
+    const t1 = Array.from({ length: 12 }, (_, i) => `a${i}`);
+    const m = build(t1.map((id, i) => ({ id, team: 'T1', free: 4000 + i * 10 }))).model;
+    const es = [0, 1, 2].map((g) => relay('T1', 'ABC'[g] as string, [0, 1, 2, 3].map((k) => `a${g * 4 + k}`) as unknown as [string, string, string, string]));
+    // a3 (T1A leg 4) and a11 (T1C leg 4) are untagged. T1C is the third relay, over the limit of 2.
+    const r = scoreMeet(m, lineup(...es), tags('T1', t1.filter((id) => id !== 'a3' && id !== 'a11')), nsisc({ mustBeScorers: false, relayCap: 2 }), SOURCING);
+    expect(relayShape(r)[2]).toEqual(['T1C', null, 0, 'exhibition']);
+    const keyOf = (label: string) => rowsOf(r, RELAY).find((x) => `${x.entryKey.split('|')[1]}${x.entryKey.slice(-1)}` === `T1${label}`)?.entryKey;
+    expect(legWarnings(r)).toEqual([{ kind: 'relay_leg', entryKey: keyOf('A'), leg: 4, reason: 'off_scoring_roster' }]);
+  });
+
+  it('R77: with relayLegsMustBeScorers true the relay does not score, so there is no leg warning', () => {
+    const r = scoreMeet(model, lu, [...tags('T1', ['x', 'y', 'z']), tag('T2', 'o')], nsisc({ mustBeScorers: true }), SOURCING);
+    expect(legWarnings(r)).toEqual([]);
+  });
+
+  it('R77: a relay whose legs are all scorers is not warned', () => {
+    const r = scoreMeet(model, lu, [...tags('T1', ['x', 'y', 'z', 'w']), tag('T2', 'o')], nsisc({ mustBeScorers: false }), SOURCING);
+    expect(legWarnings(r)).toEqual([]);
+  });
+
+  it('R78: a tagged scorer with no entry takes a full spot and is warned', () => {
+    const r = scoreMeet(model, lu, [...tags('T1', ['x', 'y', 'z', 'w', 'q']), tag('T2', 'o')], nsisc({ size: 4 }), SOURCING);
+    expect(noEntry(r)).toEqual([{ kind: 'scorer_without_entry', teamId: 'T1', gender: 'Men', swimmerId: 'q' }]);
+    // q's full spot puts T1 at 5 spots against 4.
+    expect(r.violations.filter((v) => v.kind === 'scoring_team_size')).toEqual([
+      expect.objectContaining({ teamId: 'T1', scorers: 5, divers: 0, limit: 4 }),
+    ]);
+  });
+
+  it('R78: a non-scorer or exhibition tag with no entry is not warned (it takes no spot)', () => {
+    for (const role of ['non-scorer', 'exhibition'] as const) {
+      const r = scoreMeet(model, lu, [...tags('T1', ['x', 'y', 'z', 'w']), tag('T1', 'q', role), tag('T2', 'o')], nsisc(), SOURCING);
+      expect(noEntry(r), role).toEqual([]);
+    }
+  });
+});
+
 describe('scoreMeet under roster eligibility: nsisc v3 end to end', () => {
   it('scores a small fixture: individuals, a dive and two relays, with a non-scorer and an exhibition swimmer', () => {
     const specs: Spec[] = [

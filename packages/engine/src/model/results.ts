@@ -179,7 +179,22 @@ export type Violation =
       readonly kind: 'relay_leg';
       readonly entryKey: string;
       readonly leg: 1 | 2 | 3 | 4;
-      readonly reason: 'wrong_gender' | 'duplicate_swimmer' | 'event_mismatch' | 'basis_position';
+      /**
+       * `off_scoring_roster` (README R77) is a warning: under roster eligibility with `scorers.relayLegsMustBeScorers`
+       * false, the relay stays on the scoring roster although this leg is not tagged a scorer. A relay that
+       * `scorers.relayOverCap: 'exhibition'` removes does not score and gets no such warning.
+       */
+      readonly reason: 'wrong_gender' | 'duplicate_swimmer' | 'event_mismatch' | 'basis_position' | 'off_scoring_roster';
+    }
+  /**
+   * Roster eligibility, a warning (README R78): a swimmer tagged a scorer has no entry in the meet. The swimmer still
+   * takes a full scoring-roster spot, because no entry shows whether the swimmer is a diver.
+   */
+  | {
+      readonly kind: 'scorer_without_entry';
+      readonly teamId: TeamId;
+      readonly gender: Gender;
+      readonly swimmerId: SwimmerId;
     }
   /**
    * Roster eligibility: a team's tagged scorers take more than `scorers.scoringTeamSize` spots. The roster is scored as
@@ -842,6 +857,7 @@ function planRoster(resolved: readonly Resolved[], tags: readonly ScorerTag[], r
   const holds = settled(rules.scoring.nonScorerPlacement, 'scoring.nonScorerPlacement') === 'holds-place';
   const removed = new Map<string, 'non_scorer' | 'exhibition'>();
   const held = new Set<string>();
+  const warnings: Violation[] = [];
   for (const r of resolved) {
     const legRoles = r.swimmerIds.map(roleOf);
     if (legRoles.includes('exhibition')) {
@@ -849,19 +865,35 @@ function planRoster(resolved: readonly Resolved[], tags: readonly ScorerTag[], r
       continue;
     }
     const onRoster = r.entry.kind === 'individual' ? legRoles[0] === 'scorer' : !mustBeScorers || legRoles.every((role) => role === 'scorer');
-    if (onRoster) continue;
+    if (onRoster) {
+      // R77: the relay scores, and each leg off the scoring roster is named.
+      if (r.entry.kind === 'relay') {
+        legRoles.forEach((role, i) => {
+          if (role !== 'scorer') warnings.push({ kind: 'relay_leg', entryKey: r.key, leg: (i + 1) as 1 | 2 | 3 | 4, reason: 'off_scoring_roster' });
+        });
+      }
+      continue;
+    }
     if (holds) held.add(r.key);
     else removed.set(r.key, 'non_scorer');
   }
 
-  return { removed, held, violations: teamSizeViolations(resolved, scorers, rules) };
+  // R78: a tagged scorer with no entry. Sorted by team, gender, then swimmer id.
+  const entered = new Set(resolved.flatMap((r) => r.swimmerIds));
+  const noEntry: Extract<Violation, { kind: 'scorer_without_entry' }>[] = [];
+  for (const { teamId, gender, ids } of scorers.values()) {
+    for (const swimmerId of ids) if (!entered.has(swimmerId)) noEntry.push({ kind: 'scorer_without_entry', teamId, gender, swimmerId });
+  }
+  noEntry.sort((a, b) => byTeamThenGender(a, b) || (a.swimmerId < b.swimmerId ? -1 : a.swimmerId > b.swimmerId ? 1 : 0));
+
+  return { removed, held, violations: [...warnings, ...noEntry, ...teamSizeViolations(resolved, scorers, rules)] };
 }
 
 /**
  * Over-size rosters (README R24, R9, R28). A tagged scorer takes a full spot, except a swimmer whose entries are all
  * diving, who takes `diverWeight` of one. The legacy rule is the precedent: a swimmer with an individual diving row is a
  * diver (`buildRosterMeta`). R28 says a relay swimmer takes a full spot, so a swimmer on any relay is not a diver. A
- * tagged swimmer with no entry is not known to be a diver, so takes a full spot. The sums are whole numbers over the
+ * tagged swimmer with no entry is not known to be a diver, so takes a full spot (README R78, which `planRoster` warns of). The sums are whole numbers over the
  * weight's denominator, so no float decides a boundary.
  */
 function teamSizeViolations(
@@ -984,9 +1016,18 @@ export function scoreMeet(
     payloadVersion: 1,
     teams: rankTeams(model, events),
     events,
-    violations: [...violations, ...entryCapViolations(counted, entryCaps), ...(roster?.violations ?? [])],
+    violations: [...violations, ...entryCapViolations(counted, entryCaps), ...rosterViolations(roster, overCap)],
     rosterUnknown,
   };
+}
+
+/**
+ * The roster's violations, without the R77 leg warnings of a relay that `scorers.relayOverCap: 'exhibition'` removed:
+ * that relay does not score, so its off-roster legs need no warning.
+ */
+function rosterViolations(roster: RosterPlan | null, overCap: OverCap): readonly Violation[] {
+  if (roster === null) return [];
+  return roster.violations.filter((v) => !(v.kind === 'relay_leg' && v.reason === 'off_scoring_roster' && overCap.removed.has(v.entryKey)));
 }
 
 /** The fields without the removed entries. The best entry of a team is never over its cap, so no field empties. */

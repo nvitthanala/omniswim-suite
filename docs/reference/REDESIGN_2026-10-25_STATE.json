@@ -956,14 +956,10 @@
       "scope": "scoreMeet under eligibility roster: scoring roster = scorer tags (R65/R71; no auto marks before finals); missing roster for a team with entries -> named refusal; non-scorers per nonScorerPlacement (R41) with reason non_scorer; relay with a non-roster leg does not score (R37); exhibition-role tag -> exhibition (Rule 7-10-1); scoringTeamSize with diverWeight over -> violation, never trimmed; points_pool parity path unchanged.",
       "next": "best-fit opponent roster (R70): design item (architect) before any build",
       "scopeAdded": "R74 sent by SendMessage: exhibition-tagged entries and exhibition relays do not count toward entry caps (roster mode only).",
-      "openQuestions": [
-        "exhibition-role leg makes the whole relay exhibition (executor chose yes; R72 silent)",
-        "relayLegsMustBeScorers false + untagged leg scores (executor chose score; R71 assumption)",
-        "tagged swimmer with no entry counts a full team-size spot (cannot know if diver)"
-      ]
+      "openQuestionsAnswered": "README R76 (exhibition leg makes the relay exhibition), R77 (untagged leg scores, with a relay_leg off_scoring_roster warning), R78 (tagged scorer with no entry takes a full spot, with a scorer_without_entry warning). Built 2026-10-27, commit follows this state edit."
     },
     "R70 design": {
-      "status": "NEXT, not dispatched (budget tier critical on 2026-10-27). Dispatch to architect (read-only, Opus) after the 7d window resets.",
+      "status": "DISPATCHED 2026-10-27 to architect (read-only) at the user request. On report: re-check every file:line against the committed results.ts, check the design never picks a swimmer with no entry (R78), paste the spec as its own docs-only commit.",
       "brief": "Target: a spec section in plans/2026-10-25/D2-ENGINE-API.md for a best-fit scoring roster for each untagged opponent team (README R70), editable by the user. Inputs to read: README R65, R70, R71, R75; packages/engine/src/model/results.ts (planRoster, scoreMeet, scoring_roster_missing, scoring_team_size, pointsOnlyRules); packages/engine/src/rules/builtins.ts (nsisc v4); the extension optimizer (apps/extension, optimizer.worker.js and highs.wasm). Decide: (1) the objective (maximize that team's points with the other teams' rosters fixed, or a joint fixed point) and why; (2) the constraints (scoringTeamSize with diverWeight, relay legs must be on the roster per R71, entry limits per R75); (3) the algorithm (ILP on HiGHS or a greedy with a proof of optimality bounds), determinism and tie-breaks; (4) how a suggested tag is marked apart from a coach tag (provenance), and how a user edit overrides it; (5) whether scoreMeet still throws scoring_roster_missing when only suggested tags exist; (6) acceptance tests. Constraints: read-only, no code, no git, never invent a competition value. Report: the spec text plus open questions for the user, under 1,200 words."
     },
     "NSISC v4": {
