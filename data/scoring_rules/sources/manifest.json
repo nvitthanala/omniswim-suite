@@ -29,6 +29,27 @@
         "Rule 7-6-7 (more than 24 competitors): 'shall model the pattern reflected in Rules 7-6-3, 7-6-4, 7-6-5 and 7-6-6' — no table is published, so none is implemented.",
         "NAIA and NFHS point tables — different governing bodies, different documents, not fetched."
       ]
+    },
+    {
+      "id": "ncaa-rulebook-2025-27",
+      "governingBody": "NCAA",
+      "document": "NCAA Men's and Women's Swimming and Diving Rules, 2025-26 and 2026-27 (full rule book)",
+      "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/rules/PRXSW_RulesBook.pdf",
+      "linkedFrom": "https://www.ncaa.org/championships/playing-rules/swimming-and-diving-playing-rules/",
+      "filename": "ncaa-rulebook-2025-27.pdf",
+      "textExtraction": "ncaa-rulebook-2025-27.txt",
+      "textExtractionTool": "pdftotext 4.00 -layout",
+      "sha256": "3c32eace52e1d9c01300cbf23ff0ea102fd5248ef2c4ae807246864fdedda9ea",
+      "bytes": 5190578,
+      "pageCount": 134,
+      "retrievedAt": "2026-10-27T15:50:00Z",
+      "coversSections": [
+        "Rule 5-2-1 Number of entries in non-championship meets",
+        "Rule 5-5-1 Exhibition performances (nonscoring competitors)",
+        "Rule 5-7-1-g Relay participation in a timed final",
+        "Rule 7-10-1 Exhibition swims"
+      ],
+      "note": "Archived with the user's approval (2026-10-27, README R72). Rules cited in README R72 were read from this file."
     }
   ]
 }
