@@ -24,11 +24,42 @@
  *   places come from position (plans/2026-10-25/02-SIMULATOR-RECON.md, "P2: how the simulator ranks ties").
  * The rows the legacy scorer receives always carry the ranks chosen here.
  *
- * ## What P2 does not score
- * - `scorers.eligibility: 'roster'` throws: the rounds, A/B/C finals and scorer tags it needs come
- *   with the planner and the NSISC rules (P3, P5).
- * - A tag throws under `'points_pool'`: the legacy scorer ignores a tag there, and a silent ignore
- *   would be a plausible, wrong lineup.
+ * ## Tags
+ * A tag throws under `'points_pool'`: the legacy scorer ignores a tag there, and a silent ignore
+ * would be a plausible, wrong lineup. Under `'roster'` the tags are the scoring roster (next section).
+ *
+ * ## Roster eligibility (P3.core-b; README R9, R24, R28, R37, R41, R65, R70 to R72)
+ * Under `scorers.eligibility: 'roster'` the scoring roster of a team is the swimmers the coach tagged
+ * `'scorer'`, and nobody else (R65). Swimming a relay does not add an untagged swimmer (R71). The
+ * `autoRules` marks (an A or B final, a relay leg, a split timed final) are not evaluated. That follows R71
+ * and the model: a lineup has no rounds, so no entry can show a swimmer made an A final. It is not a skipped
+ * rule. `scoreMeet` scores every entry as one timed final (D2 section 9, P3.core-b item 7).
+ * - A team and gender with entries and no `'scorer'` tag is refused (`scoring_roster_missing`), never scored as
+ *   zeros (R65). The opponents' rosters come from the caller (R70).
+ * - A tag for an unknown team or swimmer, a swimmer of another team, a swimmer who is not on the roster, and two
+ *   roles for one swimmer each throw.
+ * - `'exhibition'` role: the swimmer's swims leave the places (NCAA Rule 7-10-1, R72) with reason
+ *   `'exhibition'`. A relay with an exhibition leg is an exhibition relay.
+ * - Every other entry of an untagged or `'non-scorer'` swimmer is a non-scorer entry, and so is a relay with a leg
+ *   off the scoring roster when `scorers.relayLegsMustBeScorers` is true (R37). `scoring.nonScorerPlacement`
+ *   decides (R41, and the same rule for relays):
+ *   - `'removed-from-consideration'`: the entry leaves the places, like an exhibition entry, and the entries behind
+ *     it move up. Reason `'non_scorer'`, `place: null`.
+ *   - `'holds-place'`: the entry keeps its place, scores 0, and takes its share of a tie. Reason `'non_scorer'`.
+ *   A non-scorer entry takes no per-event scorer slot and no scoring-relay slot.
+ * - The per-event caps and the relay limit run on the field without the exhibition entries and the removed
+ *   non-scorers.
+ * - Scoring-team size (`scorers.scoringTeamSize`, R24): per team and gender, every tagged scorer takes a full spot,
+ *   except a swimmer whose only entries are diving, who takes `scorers.diverWeight` of one. A relay swimmer takes a
+ *   full spot (R28). An over-size roster adds a `scoring_team_size` violation and is scored as tagged: it is never
+ *   trimmed and the engine never picks who drops.
+ * - Entry limits count every entry, as under `'points_pool'`: scorer, non-scorer and exhibition alike, including the legs of an
+ *   exhibition relay and of a relay removed by `scorers.relayOverCap` (README R75, which corrects R74). The roster only
+ *   decides who scores and who may swim a scoring relay. `entries.exhibitionCounts` is not read yet: every built-in sets
+ *   it to true or leaves it pending, and honoring a false value is a follow-up.
+ * The legacy scorer only awards the table points here. `scoreMeet` hands it a copy of the preset with the roster
+ * gate, the team pool and every cap switched off (`pointsOnlyRules`), because it would build its own roster from
+ * the rows it sees. `scoreMeet` zeroes the held entries itself, after the tie shares are split.
  *
  * ## Over-cap entries
  * A per-team per-event scorer cap (`scorers.perEventScorerCap`, and `divingPerEventScorerCap` when it has
@@ -73,17 +104,22 @@ import { capAllows } from '../rules/cap';
 import type { Cap } from '../rules/cap';
 import { RulePresetError } from '../rules/cap';
 import { toLegacyScoringSettings } from '../rules/legacyBridge';
-import type { CompleteRulePreset, TieRule } from '../rules/rulePreset';
+import type { CompleteRulePreset, DivingPerEventScorerCap, EngineScorerAutoRules, PerEventScorerCap, TieRule } from '../rules/rulePreset';
 import type { ConversionSettings } from '../sourcing/convert';
 import type { SessionRef } from '../planner/types';
 import { formatHundredths } from './primitives';
 import type { EventKey, Gender, Hundredths, SwimmerId, TeamId } from './primitives';
 import type { Setting } from './provenance';
-import type { Lineup, LineupDisplay, LineupEntry, RelayEntry, ScorerTag } from './lineup';
+import type { Lineup, LineupDisplay, LineupEntry, RelayEntry, ScorerRole, ScorerTag } from './lineup';
 import { entryKey } from './lineup';
 import type { MeetEvent, MeetModel, MeetSwim, MeetSwimmer, RelaySplit } from './meet';
 
 export type NotScoredReason =
+  /**
+   * Roster eligibility: the entry is a non-scorer entry (README R41): its swimmer is untagged or tagged `'non-scorer'`,
+   * or a relay has a leg off the scoring roster (R37). Under `nonScorerPlacement: 'removed-from-consideration'` the
+   * entry left the places (`place` is `null`). Under `'holds-place'` it keeps its place and earns 0.
+   */
   | 'non_scorer'
   | 'scoring_team_full'
   | 'event_scorer_cap'
@@ -95,8 +131,9 @@ export type NotScoredReason =
    */
   | 'removed_over_event_cap'
   /**
-   * A relay over `scorers.scoringRelaysPerTeamPerEvent` under `scorers.relayOverCap: 'exhibition'` (README R67):
-   * it left the places (`place` is `null`) and the relays behind it moved up. `scoreMeet` gives no other row this reason.
+   * The entry left the places (`place` is `null`) and the entries behind it moved up, as an exhibition entry does:
+   * a relay over `scorers.scoringRelaysPerTeamPerEvent` under `scorers.relayOverCap: 'exhibition'` (README R67), or,
+   * under roster eligibility, an entry of a swimmer tagged `'exhibition'` or a relay with such a leg (Rule 7-10-1, R72).
    */
   | 'exhibition'
   | 'outside_point_table'
@@ -143,6 +180,20 @@ export type Violation =
       readonly leg: 1 | 2 | 3 | 4;
       readonly reason: 'wrong_gender' | 'duplicate_swimmer' | 'event_mismatch' | 'basis_position';
     }
+  /**
+   * Roster eligibility: a team's tagged scorers take more than `scorers.scoringTeamSize` spots. The roster is scored as
+   * tagged. `scorers` are the tagged swimmers who take a full spot, `divers` those who take `scorers.diverWeight` of
+   * one. `spots` is `scorers + divers * diverWeight` as an exact fraction (not reduced). It is more than `limit`.
+   */
+  | {
+      readonly kind: 'scoring_team_size';
+      readonly teamId: TeamId;
+      readonly gender: Gender;
+      readonly scorers: number;
+      readonly divers: number;
+      readonly spots: { readonly numerator: number; readonly denominator: number };
+      readonly limit: number;
+    }
   | { readonly kind: 'unscheduled_event'; readonly eventKey: EventKey; readonly gender: Gender }
   | {
       readonly kind: 'pending_setting';
@@ -166,8 +217,15 @@ export interface Results {
 
 export type ScoreMeetErrorCode =
   | 'meet_key_mismatch'
+  /** No longer thrown (P3.core-b scores `'roster'`). It stays so existing callers still compile. */
   | 'roster_mode_unsupported'
   | 'tags_need_roster_mode'
+  /** Roster eligibility: a team and gender with entries and no scorer tag. `teamIds` and `missingRosters` name them. */
+  | 'scoring_roster_missing'
+  /** Roster eligibility: one swimmer tagged with two different roles. */
+  | 'duplicate_tag'
+  /** Roster eligibility with a numeric `scoringTeamSize` and `scoringTeamScope: 'event'`: no source says what that means. */
+  | 'team_size_scope_unsupported'
   | 'placement_unsupported'
   | 'name_collision'
   | 'unresolved_team'
@@ -189,12 +247,23 @@ export class ScoreMeetError extends Error {
   readonly code: ScoreMeetErrorCode;
   /** The entry key or id the error is about, when it has one. */
   readonly subject: string | null;
+  /** `scoring_roster_missing` only: the team ids with entries and no scorer tag, sorted. Empty for every other code. */
+  readonly teamIds: readonly TeamId[];
+  /** `scoring_roster_missing` only: each team and gender with entries and no scorer tag, sorted. Empty for every other code. */
+  readonly missingRosters: readonly { readonly teamId: TeamId; readonly gender: Gender }[];
 
-  constructor(code: ScoreMeetErrorCode, message: string, subject: string | null = null) {
+  constructor(
+    code: ScoreMeetErrorCode,
+    message: string,
+    subject: string | null = null,
+    missingRosters: readonly { readonly teamId: TeamId; readonly gender: Gender }[] = []
+  ) {
     super(message);
     this.name = 'ScoreMeetError';
     this.code = code;
     this.subject = subject;
+    this.missingRosters = missingRosters;
+    this.teamIds = [...new Set(missingRosters.map((m) => m.teamId))].sort();
   }
 }
 
@@ -593,7 +662,8 @@ function overCapKeys(
   fieldOf: ReadonlyMap<string, readonly Resolved[]>,
   rankOf: ReadonlyMap<string, number>,
   rules: CompleteRulePreset,
-  tables: Tables
+  tables: Tables,
+  heldNonScorers: ReadonlySet<string> = new Set()
 ): OverCap {
   const relayCap = settled(rules.scorers.scoringRelaysPerTeamPerEvent, 'scorers.scoringRelaysPerTeamPerEvent');
   const relayOver = settled(rules.scorers.relayOverCap, 'scorers.relayOverCap') === 'exhibition' ? 'removed' : 'held';
@@ -601,7 +671,8 @@ function overCapKeys(
   const removed = new Set<string>();
   for (const field of fieldOf.values()) {
     const sample = (field[0] as Resolved).event;
-    const timed = field.filter((r) => rankOf.has(r.key)).sort(byRank(rankOf));
+    // A non-scorer entry that holds its place is not a scorer: it takes no cap slot (roster eligibility).
+    const timed = field.filter((r) => rankOf.has(r.key) && !heldNonScorers.has(r.key)).sort(byRank(rankOf));
     if (sample.kind === 'relay') {
       if (relayCap === 'unlimited') continue;
       const counts = new Map<TeamId, number>();
@@ -638,15 +709,27 @@ function entryPoints(r: Resolved, place: number | null, pointsById: ReadonlyMap<
   return r.swimmerIds.reduce((sum, _id, i) => sum + (pointsById.get(`${r.key}#${i}`) as number), 0);
 }
 
-function resultRow(r: Resolved, rankOf: ReadonlyMap<string, number>, pointsById: ReadonlyMap<string, number>, overCap: OverCap, tables: Tables): ResultRow {
+function resultRow(
+  r: Resolved,
+  rankOf: ReadonlyMap<string, number>,
+  pointsById: ReadonlyMap<string, number>,
+  overCap: OverCap,
+  tables: Tables,
+  roster: RosterPlan | null
+): ResultRow {
   const place = rankOf.get(r.key) ?? null;
-  const points = entryPoints(r, place, pointsById);
+  // Under roster eligibility the legacy scorer is uncapped and knows no roster: the engine zeroes what it holds.
+  const zeroed = roster !== null && (roster.held.has(r.key) || overCap.held.has(r.key));
+  const points = zeroed ? 0 : entryPoints(r, place, pointsById);
   const base = { entryKey: r.key, teamId: r.entry.teamId, swimmerId: r.entry.kind === 'individual' ? r.entry.swimmerId : null, place, points, scored: points > 0 };
+  const rosterRemoved = roster?.removed.get(r.key);
+  if (rosterRemoved !== undefined) return { ...base, notScoredReason: rosterRemoved };
   // A removed entry has no place and no points, like an entry with no time. Its own reason keeps the two apart:
   // an individual entry over its cap is `removed_over_event_cap`, a relay over its cap is `exhibition` (R67).
   if (overCap.removed.has(r.key)) return { ...base, notScoredReason: r.event.kind === 'relay' ? 'exhibition' : 'removed_over_event_cap' };
   if (points > 0) return base;
   if (place === null) return { ...base, notScoredReason: 'no_time' };
+  if (roster?.held.has(r.key)) return { ...base, notScoredReason: 'non_scorer' };
   const table = r.event.kind === 'relay' ? tables.relay : r.event.kind === 'diving' ? tables.diving : tables.individual;
   if (place > table.length) return { ...base, notScoredReason: 'outside_point_table' };
   if (overCap.held.has(r.key)) return { ...base, notScoredReason: r.event.kind === 'relay' ? 'relay_scorer_cap' : 'event_scorer_cap' };
@@ -669,18 +752,169 @@ function rankTeams(model: MeetModel, events: readonly { readonly rows: readonly 
   return teams;
 }
 
-/** The refusals that come before any scoring: a lineup for another meet, and the rules P2 does not score. */
+/** The refusals that come before any scoring: a lineup for another meet, a size rule with no meaning, and a tag under `'points_pool'`. */
 function checkScorable(model: MeetModel, lineup: Lineup, tags: readonly ScorerTag[], rules: CompleteRulePreset): void {
   if (lineup.meetKey !== model.meetKey) {
     fail('meet_key_mismatch', `the lineup is for meet "${lineup.meetKey}", the model for "${model.meetKey}"`);
   }
   const eligibility = settled(rules.scorers.eligibility, 'scorers.eligibility');
   if (eligibility === 'roster') {
-    fail('roster_mode_unsupported', 'scorers.eligibility "roster" needs rounds, finals and tags; scoring it arrives in P3 and P5');
+    const size = settled(rules.scorers.scoringTeamSize, 'scorers.scoringTeamSize');
+    if (size !== 'unlimited' && settled(rules.scorers.scoringTeamScope, 'scorers.scoringTeamScope') === 'event') {
+      fail('team_size_scope_unsupported', 'scorers.scoringTeamSize is a number and scorers.scoringTeamScope is "event": no rule says what a per-event team size means under roster eligibility');
+    }
+    return;
   }
   if (tags.length > 0) {
     fail('tags_need_roster_mode', `${tags.length} tag(s) given, but the legacy scorer ignores a tag under "points_pool"`);
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Roster eligibility                                                         */
+/* -------------------------------------------------------------------------- */
+
+/** What the roster rules decided about the entries. Only built under `scorers.eligibility: 'roster'`. */
+interface RosterPlan {
+  /** Entries that leave the places, with the reason: exhibition, or a non-scorer under `'removed-from-consideration'`. */
+  readonly removed: ReadonlyMap<string, 'non_scorer' | 'exhibition'>;
+  /** Non-scorer entries that keep their place and score 0 (`nonScorerPlacement: 'holds-place'`). */
+  readonly held: ReadonlySet<string>;
+  /** The `scoring_team_size` violations. */
+  readonly violations: readonly Violation[];
+}
+
+const teamGender = (teamId: TeamId, gender: Gender): string => `${teamId}\u0000${gender}`;
+const byTeamThenGender = (
+  a: { readonly teamId: TeamId; readonly gender: Gender },
+  b: { readonly teamId: TeamId; readonly gender: Gender }
+): number => (a.teamId < b.teamId ? -1 : a.teamId > b.teamId ? 1 : a.gender < b.gender ? -1 : a.gender > b.gender ? 1 : 0);
+
+/** The tags as one role per swimmer. Throws on a tag the model cannot place, and on two roles for one swimmer. */
+function readTags(tags: readonly ScorerTag[], index: Index): Map<SwimmerId, ScorerRole> {
+  const roles = new Map<SwimmerId, ScorerRole>();
+  for (const t of tags) {
+    const what = `tag for swimmer "${t.swimmerId}" on team "${t.teamId}"`;
+    if (!index.teams.has(t.teamId)) fail('unresolved_team', `${what}: team is not in the model`, t.teamId);
+    const swimmer = index.swimmers.get(t.swimmerId);
+    if (!swimmer) return fail('unresolved_swimmer', `${what}: swimmer is not in the model`, t.swimmerId);
+    if (swimmer.teamId !== t.teamId) fail('team_mismatch', `${what}: the swimmer is on team ${swimmer.teamId}`, t.swimmerId);
+    if (swimmer.roster === 'not_member') fail('roster_not_member', `${what}: the swimmer is not on the roster`, t.swimmerId);
+    const prior = roles.get(t.swimmerId);
+    if (prior !== undefined && prior !== t.role) fail('duplicate_tag', `${what}: tagged both "${prior}" and "${t.role}"`, t.swimmerId);
+    roles.set(t.swimmerId, t.role);
+  }
+  return roles;
+}
+
+/**
+ * The scoring roster from the tags (R65, R71), the entries it makes non-scorer or exhibition, and the team-size
+ * violations. Throws `scoring_roster_missing` for a team and gender with entries and no scorer tag.
+ */
+function planRoster(resolved: readonly Resolved[], tags: readonly ScorerTag[], rules: CompleteRulePreset, index: Index): RosterPlan {
+  const roles = readTags(tags, index);
+  const roleOf = (id: SwimmerId): ScorerRole | undefined => roles.get(id);
+
+  // One scoring roster per team and gender, as the legacy roster is (`teamMeetStateKey`, `scorerRosterKey`).
+  const scorers = new Map<string, { teamId: TeamId; gender: Gender; ids: SwimmerId[] }>();
+  for (const [id, role] of roles) {
+    if (role !== 'scorer') continue;
+    const swimmer = index.swimmers.get(id) as MeetSwimmer;
+    const key = teamGender(swimmer.teamId, swimmer.gender);
+    const bucket = scorers.get(key);
+    if (bucket) bucket.ids.push(id);
+    else scorers.set(key, { teamId: swimmer.teamId, gender: swimmer.gender, ids: [id] });
+  }
+
+  const missing = new Map<string, { teamId: TeamId; gender: Gender }>();
+  for (const r of resolved) {
+    const key = teamGender(r.entry.teamId, r.gender);
+    if (!scorers.has(key)) missing.set(key, { teamId: r.entry.teamId, gender: r.gender });
+  }
+  if (missing.size > 0) {
+    const list = [...missing.values()].sort(byTeamThenGender);
+    const named = list.map((m) => `${m.teamId} (${m.gender})`).join(', ');
+    throw new ScoreMeetError('scoring_roster_missing', `no scoring roster tagged for ${named}: tag the scoring team before the meet is scored`, null, list);
+  }
+
+  const mustBeScorers = settled(rules.scorers.relayLegsMustBeScorers, 'scorers.relayLegsMustBeScorers');
+  const holds = settled(rules.scoring.nonScorerPlacement, 'scoring.nonScorerPlacement') === 'holds-place';
+  const removed = new Map<string, 'non_scorer' | 'exhibition'>();
+  const held = new Set<string>();
+  for (const r of resolved) {
+    const legRoles = r.swimmerIds.map(roleOf);
+    if (legRoles.includes('exhibition')) {
+      removed.set(r.key, 'exhibition');
+      continue;
+    }
+    const onRoster = r.entry.kind === 'individual' ? legRoles[0] === 'scorer' : !mustBeScorers || legRoles.every((role) => role === 'scorer');
+    if (onRoster) continue;
+    if (holds) held.add(r.key);
+    else removed.set(r.key, 'non_scorer');
+  }
+
+  return { removed, held, violations: teamSizeViolations(resolved, scorers, rules) };
+}
+
+/**
+ * Over-size rosters (README R24, R9, R28). A tagged scorer takes a full spot, except a swimmer whose entries are all
+ * diving, who takes `diverWeight` of one. The legacy rule is the precedent: a swimmer with an individual diving row is a
+ * diver (`buildRosterMeta`). R28 says a relay swimmer takes a full spot, so a swimmer on any relay is not a diver. A
+ * tagged swimmer with no entry is not known to be a diver, so takes a full spot. The sums are whole numbers over the
+ * weight's denominator, so no float decides a boundary.
+ */
+function teamSizeViolations(
+  resolved: readonly Resolved[],
+  scorers: ReadonlyMap<string, { teamId: TeamId; gender: Gender; ids: readonly SwimmerId[] }>,
+  rules: CompleteRulePreset
+): Violation[] {
+  const limit = settled(rules.scorers.scoringTeamSize, 'scorers.scoringTeamSize');
+  if (limit === 'unlimited') return [];
+  const weight = settled(rules.scorers.diverWeight, 'scorers.diverWeight');
+  const dives = new Set<SwimmerId>();
+  const relays = new Set<SwimmerId>();
+  for (const r of resolved) {
+    if (r.entry.kind === 'relay') r.swimmerIds.forEach((id) => relays.add(id));
+    else if (r.event.kind === 'diving') dives.add(r.entry.swimmerId);
+  }
+  const out: Extract<Violation, { kind: 'scoring_team_size' }>[] = [];
+  for (const { teamId, gender, ids } of scorers.values()) {
+    const divers = ids.filter((id) => dives.has(id) && !relays.has(id)).length;
+    const full = ids.length - divers;
+    const numerator = full * weight.denominator + divers * weight.numerator;
+    if (numerator > limit * weight.denominator) {
+      out.push({ kind: 'scoring_team_size', teamId, gender, scorers: full, divers, spots: { numerator, denominator: weight.denominator }, limit });
+    }
+  }
+  return out.sort(byTeamThenGender);
+}
+
+/**
+ * The rules the legacy scorer gets under roster eligibility: points by place and nothing else. The roster gate, the
+ * team pool and every cap are off. Left on, the scorer would build its own roster from the rows (every row is labeled
+ * an A Final, so it would mark everyone), pass every relay without a leg check (D2 F19), and trim a team that is over
+ * its size. `scoreMeet` makes those decisions itself. The copy keeps the point tables, the half-rate relay rule and the
+ * tie handling.
+ */
+function pointsOnlyRules(rules: CompleteRulePreset): CompleteRulePreset {
+  const eligibility = rules.scorers.eligibility;
+  if (eligibility.state !== 'set') return settled(eligibility, 'scorers.eligibility') as never;
+  // Internal and never returned: every overridden value borrows the eligibility setting's provenance.
+  const as = <T>(value: T): Setting<T> => ({ state: 'set', value, provenance: eligibility.provenance });
+  return {
+    ...rules,
+    scorers: {
+      ...rules.scorers,
+      eligibility: as<'roster' | 'points_pool'>('points_pool'),
+      autoRules: as<EngineScorerAutoRules | null>(null),
+      scoringTeamSize: as<Cap>('unlimited'),
+      scoringTeamScope: as<'meet' | 'event'>('event'),
+      perEventScorerCap: as<PerEventScorerCap>({ cap: 'unlimited' }),
+      divingPerEventScorerCap: as<DivingPerEventScorerCap>({ kind: 'same-as-swimming' }),
+      scoringRelaysPerTeamPerEvent: as<Cap>('unlimited'),
+      relayEligibleFromScorerPool: as(false),
+    },
+  } as CompleteRulePreset;
 }
 
 export function scoreMeet(
@@ -695,7 +929,8 @@ export function scoreMeet(
   void sourcing;
   checkScorable(model, lineup, tags, rules);
   const ties = settled(rules.scoring.ties, 'scoring.ties');
-  const legacySettings = toLegacyScoringSettings(rules, { ranksAreDistinct: true });
+  const rosterMode = settled(rules.scorers.eligibility, 'scorers.eligibility') === 'roster';
+  const legacySettings = toLegacyScoringSettings(rosterMode ? pointsOnlyRules(rules) : rules, { ranksAreDistinct: true });
   const tables = pointTables(rules);
   const entryCaps = {
     individual: settled(rules.entries.maxIndividualPerSwimmer, 'entries.maxIndividualPerSwimmer'),
@@ -708,21 +943,27 @@ export function scoreMeet(
   const { resolved, violations, rosterUnknown } = resolveLineup(model, lineup, index);
 
   const fieldOf = groupFields(resolved);
-  const fullRankOf = rankFields(fieldOf, ties);
-  const overCap = overCapKeys(fieldOf, fullRankOf, rules, tables);
+  // Roster eligibility: the exhibition entries and the removed non-scorers leave before any cap runs, so the caps
+  // see the field of scoring-roster entries. Under 'points_pool' nothing leaves here and `kept` is `fieldOf`.
+  const roster = rosterMode ? planRoster(resolved, tags, rules, index) : null;
+  const leaving = roster === null ? new Set<string>() : new Set(roster.removed.keys());
+  const kept = leaving.size === 0 ? fieldOf : withoutRemoved(fieldOf, leaving);
+  const fullRankOf = rankFields(kept, ties);
+  const overCap = overCapKeys(kept, fullRankOf, rules, tables, roster?.held);
   // 'removed-from-consideration' (and a relay under 'exhibition'): the over-cap entries leave the field, and the
   // rest are ranked again without them, so the entries behind move up. A removed entry has no rank. One pass is
   // enough for the selection, which is made on the full-field ranks (see the header for the relay edge case).
   // 'holds-place' skips this and keeps the full-field ranks.
-  const rankOf = overCap.removed.size === 0 ? fullRankOf : rankFields(withoutRemoved(fieldOf, overCap.removed), ties);
-  const survivors = overCap.removed.size === 0 ? resolved : resolved.filter((r) => !overCap.removed.has(r.key));
+  const removedKeys = overCap.removed.size === 0 ? leaving : new Set([...leaving, ...overCap.removed]);
+  const rankOf = overCap.removed.size === 0 ? fullRankOf : rankFields(withoutRemoved(fieldOf, removedKeys), ties);
+  const survivors = removedKeys.size === 0 ? resolved : resolved.filter((r) => !removedKeys.has(r.key));
   const pointsById = legacyPoints(survivors, rankOf, legacySettings);
 
   const events: { eventKey: EventKey; gender: Gender; rows: ResultRow[] }[] = [];
   for (const event of model.events) {
     const field = fieldOf.get(eventId(event.eventKey, event.gender));
     if (!field) continue;
-    const rows = field.map((r) => resultRow(r, rankOf, pointsById, overCap, tables)).sort(compareRows);
+    const rows = field.map((r) => resultRow(r, rankOf, pointsById, overCap, tables, roster)).sort(compareRows);
     events.push({ eventKey: event.eventKey, gender: event.gender, rows });
   }
 
@@ -730,7 +971,7 @@ export function scoreMeet(
     payloadVersion: 1,
     teams: rankTeams(model, events),
     events,
-    violations: [...violations, ...entryCapViolations(resolved, entryCaps)],
+    violations: [...violations, ...entryCapViolations(resolved, entryCaps), ...(roster?.violations ?? [])],
     rosterUnknown,
   };
 }

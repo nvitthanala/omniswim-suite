@@ -796,6 +796,12 @@
         "R73": "NSISC total cap is 7 (R4 8 was wrong)",
         "R74": "exhibition swims do not count toward the total cap"
       }
+    },
+    {
+      "date": "2026-10-27d",
+      "answers": {
+        "R75": "entry limits apply to every swimmer (scorer, non-scorer, exhibition); the roster only decides scoring and scoring-relay eligibility. Supersedes R74."
+      }
     }
   ],
   "commits": [
@@ -946,19 +952,25 @@
   },
   "inFlight": {
     "P3.core-b": {
-      "status": "dispatched to executor (Sonnet); then Codex review, advisor audit",
+      "status": "DONE 2026-10-27 (commit follows this state edit): executor built with R75; lead gates green (vitest 2791, npm test 65, golden unchanged, harness 2/2, lint); Codex review ctx_6c0369ee804c found no defect (146 focused tests), released; advisor audit passed (D2 3.8 unions updated, exhibitionCounts not read logged as follow-up). NEXT: NSISC v4.",
       "scope": "scoreMeet under eligibility roster: scoring roster = scorer tags (R65/R71; no auto marks before finals); missing roster for a team with entries -> named refusal; non-scorers per nonScorerPlacement (R41) with reason non_scorer; relay with a non-roster leg does not score (R37); exhibition-role tag -> exhibition (Rule 7-10-1); scoringTeamSize with diverWeight over -> violation, never trimmed; points_pool parity path unchanged.",
       "next": "best-fit opponent roster (R70): design item (architect) before any build",
-      "scopeAdded": "R74 sent by SendMessage: exhibition-tagged entries and exhibition relays do not count toward entry caps (roster mode only)."
+      "scopeAdded": "R74 sent by SendMessage: exhibition-tagged entries and exhibition relays do not count toward entry caps (roster mode only).",
+      "openQuestions": [
+        "exhibition-role leg makes the whole relay exhibition (executor chose yes; R72 silent)",
+        "relayLegsMustBeScorers false + untagged leg scores (executor chose score; R71 assumption)",
+        "tagged swimmer with no entry counts a full team-size spot (cannot know if diver)"
+      ]
     },
     "NSISC v4": {
-      "status": "queued after P3.core-b (builtins tests overlap)",
-      "scope": "nsisc v4 = v3 with entries.maxTotalPerSwimmer 7, provenance README R73; v2/v3 stay frozen at 8 (R4, now marked superseded); picker offers v4."
+      "status": "NEXT (P3.core-b committed). Cite README R73 at line 97.",
+      "scope": "nsisc v4 = v3 with entries.maxTotalPerSwimmer 7 (README R73); exhibitionCounts stays true (R75); v2/v3 stay frozen at 8; picker offers v4."
     }
   },
   "followUps": [
     "tests/extensionStorageAudit.test.ts \"a migration that awaits a timer makes openOmniDb reject\" failed once under --maxWorkers=4 (2026-10-26), passed 3/3 alone and on the full rerun: timing flake under load.",
-    "Tie at the cap boundary: placeOrderCompare picks which teammate is removed by synthetic-id order. Team total is unchanged; per-swimmer points are arbitrary. Decide in P3.core-b (D2 9.5).",
+    "Tie at the cap boundary: placeOrderCompare picks which teammate is removed by synthetic-id order. Team total is unchanged; per-swimmer points are arbitrary. Not decided in P3.core-b; decide where per-swimmer point totals first appear (P3.ui or AutoBuilder), D2 9.5.",
+    "entries.exhibitionCounts is not read since P3.core-b: entry limits count every entry (R75). Every built-in sets true or pending. Honor a false value in entryCapViolations (skip exhibition-role entries and exhibition-relay legs) before any preset sets false. First engine fix after NSISC v4.",
     "P4: converted swims and estimated-cut tags must run checkProvenanceSources when they are first stored, or they bypass the tool-archive check.",
     "Deferred to P4: pickers hide retired built-ins (no live picker shows one today). dockedPanel reconnect after an answered port drops: low severity (an iframe reload leaves an empty panel, not a wrong number).",
     "NCAA Rule 5-5-1 (README R72): an exhibition swim does not count toward a team entries per event or a swimmer events per meet. The engine entry caps count every entry today.",

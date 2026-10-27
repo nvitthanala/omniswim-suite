@@ -648,6 +648,9 @@ export type Violation =
       readonly races: number; readonly limit: number }
   | { readonly kind: 'relay_leg'; readonly entryKey: string; readonly leg: 1 | 2 | 3 | 4;
       readonly reason: 'wrong_gender' | 'duplicate_swimmer' | 'event_mismatch' | 'basis_position' }   // basis_position: 8.12
+  | { readonly kind: 'scoring_team_size'; readonly teamId: TeamId; readonly gender: Gender; readonly scorers: number;
+      readonly divers: number; readonly spots: { readonly numerator: number; readonly denominator: number };   // not reduced
+      readonly limit: number }   // P3.core-b, roster eligibility
   | { readonly kind: 'unscheduled_event'; readonly eventKey: EventKey; readonly gender: Gender }
   | { readonly kind: 'pending_setting'; readonly eventKey: EventKey; readonly gender: Gender;
       readonly setting: 'fastHeatSize' | 'smallFieldSession' | 'cFinal' };   // R35, R44
@@ -663,10 +666,13 @@ export function scoreMeet(model: MeetModel, lineup: Lineup, tags: readonly Score
   rules: CompleteRulePreset, sourcing: ConversionSettings): Results;   // P2 reads nothing from `sourcing`; 8.12
 export function stripResultsDisplay(r: Results): Results;
 export type ScoreMeetErrorCode = 'meet_key_mismatch' | 'roster_mode_unsupported' | 'tags_need_roster_mode'
+  | 'scoring_roster_missing' | 'duplicate_tag' | 'team_size_scope_unsupported'   // P3.core-b; roster_mode_unsupported no longer thrown
   | 'placement_unsupported' | 'name_collision' | 'unresolved_team' | 'unresolved_swimmer' | 'unresolved_event'
   | 'unresolved_swim' | 'unresolved_split' | 'team_mismatch' | 'gender_mismatch' | 'event_kind_mismatch'
   | 'roster_not_member' | 'duplicate_entry' | 'seed_mismatch' | 'leg_basis_unsupported' | 'leg_missing' | 'split_not_scy';
-export class ScoreMeetError extends Error { readonly code: ScoreMeetErrorCode; readonly subject: string | null }
+export class ScoreMeetError extends Error { readonly code: ScoreMeetErrorCode; readonly subject: string | null;
+  readonly teamIds: readonly TeamId[];   // P3.core-b: scoring_roster_missing only, else empty
+  readonly missingRosters: readonly { readonly teamId: TeamId; readonly gender: Gender }[] }   // same
 ```
 
 Rules:
@@ -1334,3 +1340,47 @@ and `architect` have not accepted them yet. Item 12 decides nothing.
    slot. It moved into the place the removal opened and held it with 0
    points. Under `'holds-place'` a relay past the table still takes no
    slot (legacy `relayScoring.ts`, SwimCloud parity).
+9. **P3.core-b: roster scoring (2026-10-27).** `scoreMeet` scores
+   `eligibility: 'roster'`; `points_pool` and `lib` are unchanged. The scoring
+   roster is the `'scorer'` tags only (R65, R71). `autoRules` are not
+   evaluated: that follows R71, and the model has no rounds.
+10. **Legacy scorer is points-only under roster.** `scoreMeet` gives it a copy
+    of the preset with the roster gate, team pool and caps off
+    (`pointsOnlyRules`), and zeroes held entries itself after the tie shares
+    split. Left on, legacy would mark every `A Final` row a scorer, pass every
+    relay (F19) and trim an over-size team. Side effect: a numeric per-event cap
+    beside a meet-wide team size no longer stops at the bridge under roster.
+11. **No scorer tag: named refusal (R65, R70).** `scoring_roster_missing`,
+    checked per team and gender, so an untagged women's side cannot score zeros.
+    `ScoreMeetError.teamIds` and `.missingRosters` list them.
+12. **Tag checks.** A tag for an unknown team or swimmer, another team's swimmer,
+    a `not_member` swimmer, or a second different role throws (`duplicate_tag`
+    is new). The same tag twice is accepted.
+13. **Non-scorers (R41).** `'removed-from-consideration'` removes the entry and
+    re-ranks before any cap runs. `'holds-place'` keeps the place, scores 0 and
+    shares a tie. A held non-scorer takes no event-cap or relay-limit slot.
+14. **Relays (R37).** With `relayLegsMustBeScorers` true, a relay with a leg off
+    the roster is a non-scorer entry. With it false the legs do not gate it. Open
+    question: should an untagged-leg relay then be exhibition? R71 calls that an
+    assumption.
+15. **Exhibition role (Rule 7-10-1, R72).** The swimmer's entries leave the
+    places, even under `holds-place`. A relay with an exhibition leg is an
+    exhibition relay. R72 does not say the second part. Open question.
+16. **Team size (R24, R9, R28).** Counted per team and gender over tagged
+    scorers, in whole numbers over the `diverWeight` denominator. A diver has an
+    individual diving entry (legacy `buildRosterMeta`). A relay swimmer takes a
+    full spot. A tagged swimmer with no entry takes a full spot (the engine cannot
+    know a diver). Over size: `scoring_team_size` violation, never trimmed. A
+    numeric size with scope `'event'` is refused (`team_size_scope_unsupported`).
+17. **Rounds.** `MeetModel`, `Lineup` and `scoreMeet` carry no round or session,
+    so nothing can be refused: every entry scores as one timed final. P5 must pass
+    the event format in.
+18. **Entry limits count every entry (README R75, which corrects R74).** Under
+    roster the individual, relay and total limits count scorer, non-scorer and
+    exhibition entries alike, including the legs of an exhibition relay and of a
+    relay removed by `relayOverCap`, exactly as under `points_pool`. R75 differs
+    from NCAA Rule 5-5-1 (README R72), which exempts an exhibition performance.
+    The user's rule applies to NSISC. The roster only decides who scores and who
+    may swim a scoring relay. `entries.exhibitionCounts` is not read yet: every
+    built-in sets it to true or leaves it pending. Honoring a false value is a
+    follow-up.

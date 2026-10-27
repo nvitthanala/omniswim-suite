@@ -821,9 +821,10 @@ describe('scoreMeet: entry limits and the roster', () => {
     expect(r.rosterUnknown).toEqual(['a1']);
   });
 
-  it('roster eligibility and tags under points_pool each throw', () => {
+  it('roster eligibility refuses an untagged team, and tags under points_pool throw', () => {
     const m = model(swimmers, swims);
-    expect(scoreCode(() => scoreMeet(m, lineup(ind('T1', 'a1')), [], preset({ eligibility: 'roster' }), SOURCING))).toBe('roster_mode_unsupported');
+    // Roster eligibility scores now (P3.core-b). With no tag for T1 it refuses by name, it never scores zeros.
+    expect(scoreCode(() => scoreMeet(m, lineup(ind('T1', 'a1')), [], preset({ eligibility: 'roster' }), SOURCING))).toBe('scoring_roster_missing');
     expect(scoreCode(() => scoreMeet(m, lineup(ind('T1', 'a1')), [{ teamId: 'T1', swimmerId: 'a1', role: 'scorer' }], preset(), SOURCING))).toBe('tags_need_roster_mode');
   });
 
