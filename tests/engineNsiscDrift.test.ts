@@ -18,6 +18,7 @@
  * `scorers.relayOverCap` has no legacy field either, but the legacy scorer always holds an over-cap relay's
  * place. The test-only completion of nsisc v1 states 'holds-place', which is legacy, so it adds no difference.
  * nsisc v3 states 'exhibition' (README R67), a fifth difference that has its own test.
+ * nsisc v4 sets the total cap to 7 (README R73), which removes the first difference. It has its own test.
  * A pending field drops out. When a pending field becomes `set`, the comparator for it applies.
  */
 import { describe, expect, it } from 'vitest';
@@ -193,6 +194,13 @@ describe('NSISC built-in against the legacy NSISC settings', () => {
     const v3 = builtinRulePreset('nsisc', 3)!;
     expect(differences(v2Complete)).not.toContain('scorers.relayOverCap');
     expect(differences(v3)).toStrictEqual([...differences(v2Complete), 'scorers.relayOverCap'].sort());
+  });
+
+  it('nsisc v4 drops one difference from nsisc v3: the total cap is 7, as in legacy (README R73)', () => {
+    const v3 = builtinRulePreset('nsisc', 3)!;
+    const v4 = builtinRulePreset('nsisc', 4)!;
+    expect(differences(v3)).toContain('entries.maxTotalPerSwimmer');
+    expect(differences(v4)).toStrictEqual(differences(v3).filter(p => p !== 'entries.maxTotalPerSwimmer'));
   });
 
   it('is complete once the test-only points are filled', () => {

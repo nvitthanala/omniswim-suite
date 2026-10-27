@@ -36,8 +36,8 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
 
     const choices = await listRulePresetChoices(repo);
     expect(choices.map(c => c.label)).toEqual(['NSISC', 'Generic NCAA championship']);
-    // The picker offers the newest version of each built-in only (nsisc v3, R67); v1 and v2 stay resolvable by ref.
-    expect(choices[0]).toEqual({ source: 'builtin', ref: { kind: 'builtin', id: 'nsisc', version: 3 }, label: 'NSISC' });
+    // The picker offers the newest version of each built-in only (nsisc v4, R73); v1 to v3 stay resolvable by ref.
+    expect(choices[0]).toEqual({ source: 'builtin', ref: { kind: 'builtin', id: 'nsisc', version: 4 }, label: 'NSISC' });
     expect(choices.every(c => c.source === 'builtin')).toBe(true);
     const sessions = await listSessionPresetChoices(repo);
     expect(sessions.map(c => c.ref)).toEqual([{ kind: 'builtin', id: 'nsisc-table-c', version: 1 }]);
@@ -131,9 +131,10 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
     // Against the engine's own registry: a copy of the newest version of each built-in is current.
     for (const b of latestBuiltins(BUILTIN_RULE_PRESETS)) expect(newerBuiltinVersion('rule', { builtinId: b.id, builtinVersion: b.version })).toBeNull();
     for (const b of latestBuiltins(BUILTIN_SESSION_PRESETS)) expect(newerBuiltinVersion('session', { builtinId: b.id, builtinVersion: b.version })).toBeNull();
-    // A copy of nsisc v1 (points pending) or v2 (relayOverCap pending) is told that v3 exists.
-    expect(newerBuiltinVersion('rule', { builtinId: 'nsisc', builtinVersion: 1 })).toBe(3);
-    expect(newerBuiltinVersion('rule', { builtinId: 'nsisc', builtinVersion: 2 })).toBe(3);
+    // A copy of nsisc v1 (points pending), v2 (relayOverCap pending) or v3 (total cap 8, corrected by R73) is told that v4 exists.
+    expect(newerBuiltinVersion('rule', { builtinId: 'nsisc', builtinVersion: 1 })).toBe(4);
+    expect(newerBuiltinVersion('rule', { builtinId: 'nsisc', builtinVersion: 2 })).toBe(4);
+    expect(newerBuiltinVersion('rule', { builtinId: 'nsisc', builtinVersion: 3 })).toBe(4);
   });
 
   it('latestBuiltins keeps the newest version of each id, in registry order', () => {
@@ -144,7 +145,7 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
       { id: 'a', version: 2 },
     ];
     expect(latestBuiltins(registry)).toEqual([{ id: 'b', version: 1 }, { id: 'a', version: 3 }]);
-    expect(latestBuiltins(BUILTIN_RULE_PRESETS).map(b => `${b.id}@${b.version}`)).toEqual(['nsisc@3', 'generic@1']);
+    expect(latestBuiltins(BUILTIN_RULE_PRESETS).map(b => `${b.id}@${b.version}`)).toEqual(['nsisc@4', 'generic@1']);
   });
 
   it('no storage code seeds a built-in: only presets.ts reads the registries, and it never writes', () => {

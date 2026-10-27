@@ -237,6 +237,33 @@ function buildNsiscV2(): RulePresetV1 {
   };
 }
 
+/**
+ * NSISC v4 is v2's body with the total entry cap the user corrected to 7 (README R73, line 97; R4's 8 was
+ * wrong). `exhibitionCounts` keeps its value, true, and now cites README R75 (line 99): entry limits count
+ * every entry, exhibition included. v2 and v3 stay frozen at 8.
+ */
+function buildNsiscV4(): RulePresetV1 {
+  const v2 = buildNsiscV2();
+  return {
+    ...v2,
+    entries: {
+      ...v2.entries,
+      maxTotalPerSwimmer: setting(
+        7,
+        recorded('2026-10-27', 'plans/2026-10-25/README.md:97', '7 total events per swimmer, individuals and relays together.')
+      ),
+      exhibitionCounts: setting(
+        true,
+        recorded(
+          '2026-10-27',
+          'plans/2026-10-25/README.md:99',
+          'Entry limits (per-swimmer individual, relay and total) count every entry, whether the swimmer is a scorer, a non-scorer or exhibition.'
+        )
+      ),
+    },
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Registry                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -250,6 +277,8 @@ function buildNsiscV2(): RulePresetV1 {
  * - `nsisc` v3: `relayOverCap: 'exhibition'`. The user's statement (README R67, line 91) is that a relay
  *   entered beyond the scoring-relay limit is tagged exhibition. Every other value is v2's, so `frozen` is
  *   v2's body and the two share a hash. The new hash is in the `rule3|` pins.
+ * - `nsisc` v4: v3 with `entries.maxTotalPerSwimmer` 7 (README R73) and `exhibitionCounts` citing R75. Its
+ *   body is new, so all three of its hashes are new.
  * - `nsisc` v2: `ties: 'split'`. The user's statement of the points (README R45, line 69) ends "Ties split."
  *   The legacy scorer split ties for this preset before the setting existed, so scoring is unchanged.
  * - `nsisc` v1: `ties` pending. Its points are pending too, and R45 was stated for the confirmed points of v2.
@@ -263,7 +292,8 @@ export interface RuleBuiltin extends Builtin<RulePreset> {
   /**
    * The version 1 shaped body of the values (no `ties`, no `relayOverCap`). For `nsisc` v1, `nsisc` v2 and
    * `generic` v1 it is the payload as first shipped, and its sha256 is the pin that was set before the ties
-   * setting. For `nsisc` v3 it is v2's body.
+   * setting. For `nsisc` v3 it is v2's body. For `nsisc` v4 it is its own body, which never shipped as payload
+   * version 1.
    */
   readonly frozen: RulePresetV1;
 }
@@ -310,11 +340,12 @@ function builtin(
   return { id, version, label, frozen, preset: tiesOf(frozen, tie, relayOverCap) };
 }
 
-/** `'nsisc'` v1, v2 and v3, plus `'generic'` v1. */
+/** `'nsisc'` v1 to v4, plus `'generic'` v1. */
 export const BUILTIN_RULE_PRESETS: readonly RuleBuiltin[] = [
   builtin('nsisc', 1, 'NSISC', buildNsisc(), pending(TIES_PENDING_NSISC_V1, TIES_BLOCKS), pending(RELAY_OVER_CAP_PENDING, TIES_BLOCKS)),
   builtin('nsisc', 2, 'NSISC', buildNsiscV2(), NSISC_V2_TIES, pending(RELAY_OVER_CAP_PENDING, TIES_BLOCKS)),
   builtin('nsisc', 3, 'NSISC', buildNsiscV2(), NSISC_V2_TIES, NSISC_V3_RELAY_OVER_CAP),
+  builtin('nsisc', 4, 'NSISC', buildNsiscV4(), NSISC_V2_TIES, NSISC_V3_RELAY_OVER_CAP),
   builtin('generic', 1, 'Generic NCAA championship', buildGeneric(), pending(TIES_PENDING_GENERIC, TIES_BLOCKS), pending(RELAY_OVER_CAP_PENDING_GENERIC, TIES_BLOCKS)),
 ];
 

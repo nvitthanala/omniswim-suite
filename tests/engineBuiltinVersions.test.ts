@@ -56,7 +56,11 @@ const PINNED: Readonly<Record<string, string>> = {
   'rule3|nsisc|1': '3be16841765bfa368e5a0a04539bf46c63683b6d680aadc48d395952c6e4cb33',
   'rule3|nsisc|2': '1c747b84a34fa83c243e7c84c8f10f9a02d06cac8105d0e0d8784872752a1951',
   'rule3|nsisc|3': '2f69ea3d7ce85e46f46df1a8849269d52047840f76332c7ed7c8827041753798',
-  'rule3|generic|1': 'b42d9f8eec4785b03e3c7dd29f6f6b520cbb5fc8dee31084bba636cb55d6f3c4',
+  // nsisc v4 is a new body (the 7 total cap, README R73), so all three of its hashes are new.
+  'rule3|nsisc|4': '5f1cbe51e7e9e10f3bc06f1eb8213012981714998d443ccde79607a7ec9e0d51',
+  'rule2|nsisc|4': '3fce6204305ea2f0e91c9d262c6403e3a3151bdfa9782b992fd7bc80a20726c1',
+  'rule|nsisc|4': '3a5b13dccaad26b73475b2b6a03311f512e23f40413638fdd071eaa335673d46',
+  'rule3|generic|1':'b42d9f8eec4785b03e3c7dd29f6f6b520cbb5fc8dee31084bba636cb55d6f3c4',
   'rule2|nsisc|1': '7670e51fcdb704b0dce2ff899fa2a0d13d443d5bb66bf02936e1cadb73213358',
   'rule2|nsisc|2': '2b72f5a6bc2982aceef0342e3566e42e5cf23ef0cd610f21b6fbc8e2947e638d',
   'rule2|nsisc|3': '2b72f5a6bc2982aceef0342e3566e42e5cf23ef0cd610f21b6fbc8e2947e638d',
@@ -154,6 +158,36 @@ describe('built-in versions', () => {
     expect(v3.scorers.scoringRelaysPerTeamPerEvent).toMatchObject({ state: 'set', value: 2 });
   });
 
+  it('nsisc v4 is nsisc v3 with the total cap 7 (README R73) and exhibitionCounts citing R75, and nothing else', () => {
+    const v3 = builtinRulePreset('nsisc', 3)!;
+    const v4 = builtinRulePreset('nsisc', 4)!;
+    const { maxTotalPerSwimmer: _a, exhibitionCounts: _b, ...v3Entries } = v3.entries;
+    const { maxTotalPerSwimmer: _c, exhibitionCounts: _d, ...v4Entries } = v4.entries;
+    expect({ ...v4, entries: v4Entries }).toStrictEqual({ ...v3, entries: v3Entries });
+    expect(v3.entries.maxTotalPerSwimmer).toMatchObject({ state: 'set', value: 8 });
+    expect(v4.entries.maxTotalPerSwimmer).toMatchObject({
+      state: 'set',
+      value: 7,
+      provenance: { kind: 'user-stated', statedOn: '2026-10-27', where: 'plans/2026-10-25/README.md:97' },
+    });
+    expect(v4.entries.exhibitionCounts).toMatchObject({
+      state: 'set',
+      value: true,
+      provenance: { kind: 'user-stated', statedOn: '2026-10-27', where: 'plans/2026-10-25/README.md:99' },
+    });
+    const readme = linesOf('plans/2026-10-25/README.md');
+    expect(readme[96]).toMatch(/^\| R73 \|/);
+    expect(readme[96]).toContain('capped at 7 total events across individuals and relays');
+    expect(readme[96]).toContain('7 total events per swimmer, individuals and relays together.');
+    expect(readme[98]).toContain(
+      'Entry limits (per-swimmer individual, relay and total) count every entry, whether the swimmer is a scorer, a non-scorer or exhibition.'
+    );
+    expect(readme[98]).toMatch(/^\| R75 \|/);
+    expect(readme[98]).toContain('entry limits are still present regardless of what group you are in');
+    expect(pendingPaths(v4)).toStrictEqual([]);
+    expect(() => requireComplete(v4)).not.toThrow();
+  });
+
   it('scoring.ties: nsisc v2 splits (R45), nsisc v1 and generic v1 stay pending, nobody gets a default', () => {
     const ties = (id: string, version: number) => builtinRulePreset(id, version)!.scoring.ties;
     expect(ties('nsisc', 2)).toMatchObject({
@@ -171,7 +205,8 @@ describe('built-in versions', () => {
     expect(builtinRulePreset('nsisc', 1)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc')?.preset);
     expect(builtinRulePreset('nsisc', 2)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc' && b.version === 2)?.preset);
     expect(builtinRulePreset('nsisc', 3)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc' && b.version === 3)?.preset);
-    expect(builtinRulePreset('nsisc', 4)).toBeUndefined();
+    expect(builtinRulePreset('nsisc', 4)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc' && b.version === 4)?.preset);
+    expect(builtinRulePreset('nsisc', 5)).toBeUndefined();
     expect(builtinRulePreset('nsisc', 0)).toBeUndefined();
     expect(builtinRulePreset('ncaa', 1)).toBeUndefined();
     expect(builtinRulePreset('', 1)).toBeUndefined();

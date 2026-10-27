@@ -1384,3 +1384,9 @@ and `architect` have not accepted them yet. Item 12 decides nothing.
     may swim a scoring relay. `entries.exhibitionCounts` is not read yet: every
     built-in sets it to true or leaves it pending. Honoring a false value is a
     follow-up.
+19. **NSISC v4 (2026-10-27).** `nsisc` v4 is v3 with
+    `entries.maxTotalPerSwimmer` 7, from README R73 (line 97). R4's 8 was
+    wrong. Its `exhibitionCounts` keeps the value true and cites README R75
+    (line 99). `nsisc` v2 and v3 stay frozen at 8, so a saved reference to
+    them scores as before. The picker offers v4, and a user copy of v1 to v3
+    is told that v4 exists.
