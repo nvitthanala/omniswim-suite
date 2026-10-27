@@ -288,7 +288,7 @@ const fail = (code: ScoreMeetErrorCode, message: string, subject: string | null 
 };
 
 /** The value of a setting a complete preset must hold. */
-function settled<T>(setting: Setting<T>, path: string): T {
+export function settled<T>(setting: Setting<T>, path: string): T {
   if (setting.state !== 'set') {
     throw new RulePresetError(path, 'pending', `${path}: pending; scoreMeet needs a complete preset`);
   }
@@ -322,7 +322,7 @@ interface Index {
 const eventId = (eventKey: EventKey, gender: Gender): string => `${gender}\u0000${eventKey}`;
 const seedKey = (swimmerId: SwimmerId, eventKey: EventKey): string => `${swimmerId}\u0000${eventKey}`;
 
-function buildIndex(model: MeetModel): Index {
+export function buildIndex(model: MeetModel): Index {
   const swimsByKey = new Map<string, MeetSwim[]>();
   for (const swim of model.swims) {
     const k = seedKey(swim.swimmerId, swim.eventKey);
@@ -430,7 +430,7 @@ interface Resolution {
   readonly rosterUnknown: readonly SwimmerId[];
 }
 
-function resolveLineup(model: MeetModel, lineup: Lineup, index: Index): Resolution {
+export function resolveLineup(model: MeetModel, lineup: Lineup, index: Index): Resolution {
   const resolved: Resolved[] = [];
   const violations: Violation[] = [];
   const seen = new Set<string>();
@@ -566,7 +566,7 @@ interface Tables {
   readonly relay: readonly number[];
 }
 
-function pointTables(rules: CompleteRulePreset): Tables {
+export function pointTables(rules: CompleteRulePreset): Tables {
   const individual = settled(rules.scoring.individualPoints, 'scoring.individualPoints');
   const relayRule = settled(rules.scoring.relayPoints, 'scoring.relayPoints');
   const divingRule = settled(rules.scoring.divingPoints, 'scoring.divingPoints');
@@ -595,7 +595,7 @@ function individualCap(rules: CompleteRulePreset, event: MeetEvent): IndividualC
 }
 
 /** The entries of each (gender, event), in lineup order. */
-function groupFields(resolved: readonly Resolved[]): Map<string, Resolved[]> {
+export function groupFields(resolved: readonly Resolved[]): Map<string, Resolved[]> {
   const fieldOf = new Map<string, Resolved[]>();
   for (const r of resolved) {
     const id = eventId(r.event.eventKey, r.gender);
@@ -607,7 +607,7 @@ function groupFields(resolved: readonly Resolved[]): Map<string, Resolved[]> {
 }
 
 /** The rank of every timed entry, by entry key. An entry with no time has no rank. */
-function rankFields(fieldOf: ReadonlyMap<string, readonly Resolved[]>, ties: TieRule): Map<string, number> {
+export function rankFields(fieldOf: ReadonlyMap<string, readonly Resolved[]>, ties: TieRule): Map<string, number> {
   const rankOf = new Map<string, number>();
   for (const field of fieldOf.values()) {
     const timed = field.filter((r) => r.value !== null);

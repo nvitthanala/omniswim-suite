@@ -41,7 +41,16 @@ export type RelayEntry = {
 export type LineupEntry = IndividualEntry | RelayEntry;
 
 export type ScorerRole = 'scorer' | 'non-scorer' | 'exhibition';
-export type ScorerTag = { readonly teamId: TeamId; readonly swimmerId: SwimmerId; readonly role: ScorerRole };
+/**
+ * `source` is absent on a coach tag and `'suggested'` on a tag `suggestScoringRosters` made (D2 3.14).
+ * `scoreMeet` never reads it: a suggested tag scores as a scorer tag.
+ */
+export type ScorerTag = {
+  readonly teamId: TeamId;
+  readonly swimmerId: SwimmerId;
+  readonly role: ScorerRole;
+  readonly source?: 'suggested';
+};
 
 export interface LineupDisplay {
   readonly swimmers: Readonly<Record<SwimmerId, { readonly name: string }>>;

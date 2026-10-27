@@ -93,6 +93,10 @@ export { entryKey, stripSwimCloudData } from './model/lineup';
 export type { NotScoredReason, ResultRow, Results, ScoreMeetErrorCode, Violation } from './model/results';
 export { ScoreMeetError, scoreMeet, stripResultsDisplay } from './model/results';
 
+// 3.14 Suggested opponent rosters (P3.core-c). The solver is injected: the engine takes no `highs` dependency.
+export type { LpSolution, LpSolve, RosterSuggestErrorCode, RosterSuggestRequest, RosterSuggestion } from './model/rosterSuggest';
+export { RosterSuggestError, suggestScoringRosters } from './model/rosterSuggest';
+
 // 3.10 Table D types. Retired from use (R58): no function reads them.
 export type { TableDPreset, TableDRow } from './sourcing/tableD';
 

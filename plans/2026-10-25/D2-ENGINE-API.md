@@ -992,9 +992,10 @@ live panel needs P4 wiring before users see any of this.
 
 ### 3.14 Suggested opponent rosters (`model/rosterSuggest.ts`), P3.core-c (README R65, R70, R71, R75 to R78)
 
-**Status (2026-10-27).** Designed by `architect`, not built. Three open
-questions wait for the user (at the end of this section). Code citations are
-at commit 775c02af.
+**Status (2026-10-27).** Designed by `architect`, built by `executor`
+(deviations in section 9 item 21). The three open questions at the end of
+this section still wait for the user; the build uses the chosen defaults. Code
+citations are at commit 775c02af.
 
 **Purpose.** For each opponent team and gender the coach has not tagged,
 build a best-fit scoring roster (R70). The user can edit it. `scoreMeet` stays
@@ -1631,3 +1632,64 @@ and `architect` have not accepted them yet. Item 12 decides nothing.
     - R78: a swimmer tagged scorer with no entry in the meet takes a full
       scoring-roster spot and gets `scorer_without_entry`. A non-scorer or
       exhibition tag with no entry takes no spot and gets no warning.
+21. **Suggested rosters, as built (P3.core-c, 2026-10-27, D2 3.14).** The build
+    follows 3.14. It adds these decisions, each outside or beside the text of
+    3.14:
+    - **Spots are weighted.** "Most spots used" (tie-break 2) maximizes the
+      total diver-weighted spots (a diver counts `numerator` of `denominator`),
+      not the head count. `RosterSuggestion.spots` is that total, pins included,
+      as an exact fraction (not reduced).
+    - **`referencePoints` is one side.** It is the points of the target team in
+      the target gender, from `scoreMeet` in the reference field. It is not the
+      team total over both genders. The ILP objective is the same quantity.
+    - **New refusal: a point table that rises with place or holds a negative
+      value** throws `suggest_rule_unsupported` with the setting path
+      (`scoring.individualPoints`, `.divingPoints` or `.relayPoints`). The
+      all-entered shortcut needs a table that never rises (3.14, Algorithm 1).
+      A table with decimals is scaled by a power of ten (up to 10^4) so the
+      objective stays whole. A finer table throws the same code.
+    - **`scorers.scoringTeamScope` must be `'meet'`.** Any other value throws
+      `suggest_rule_unsupported`, even with an unlimited team size.
+    - **Stage 2 `Infeasible` and any solver drift are `suggest_model_mismatch`.**
+      3.14 names only stage 3. Stage 1 already holds a witness for P*, so an
+      infeasible stage 2 means P* is wrong. `optimize` also checks every stage
+      against its own columns: the reported objective must equal the objective
+      recomputed from the columns. This closes a solver that reports P* one scaled
+      unit low, which would pass the final guard. A stage 1 status other than
+      `Optimal` (`Infeasible` included) gives absent `solver_not_optimal`. The
+      guard also fails when the suggested roster adds a `scoring_team_size`
+      violation.
+    - **The linking rows are equalities.** The one-hot `u[m, in, scoring]` of a
+      block is tied to the number of T entries ahead by an equality, so the model
+      needs no monotone-table argument. The equality is exact where 3.14's
+      inequality relies on monotonicity. A block also tracks entries that stand
+      in the places (`in`) apart from those that earn points (`scoring`), which
+      the `'holds-place'` rule needs (a held non-scorer keeps its place and takes
+      a share of a tie).
+    - **The relay cap is exact.** The target's counting relays, in rank order,
+      stand up to the cap (`w` and `t` rows). Non-target relays over the cap are
+      constants.
+    - **Targets are de-duplicated.** Listing one team and gender twice gives one
+      suggestion.
+    - **Legacy quirk the guard refuses (a `scoreMeet` defect candidate).**
+      `relayEntryGroupKey` keys a relay on event, team, rank, clock and
+      `relayEntryLegSignature`, which sorts the four names. Two relays of one team
+      in one event with the same set of four swimmers (any leg order) and the same
+      time therefore share a key under `ties: 'split'` (equal times share a rank).
+      The scorer counts them as one tie entry and one slot against the relay cap.
+      Nothing flags such a lineup. No real meet enters one swimmer set in two
+      relays of one event, so `scoreMeet` is left alone and the ILP models real
+      meets. Fed such a lineup the ILP finds a different optimum than `scoreMeet`
+      scores, and the guard throws `suggest_model_mismatch` (seen on 3 of 120
+      random fixtures before the generator removed the duplicates).
+    - **Test 4 needs a fixture, not only the shipped table.** "17 full swimmers
+      and 4 divers, exactly one diver left off" holds only when dropping a diver
+      costs no more than dropping a full swimmer. With 17 swimmers in one
+      16-place event the 17th scores 0, and the optimum under shipped `nsisc`
+      v4 is 16 full swimmers and 4 divers. The test splits the full swimmers
+      between two events and gives team A twelve better divers, so the shipped
+      tables hold and exactly the lowest-ranked diver goes.
+    - **Preflight.** Before any solve, `scoreMeet` runs once with every target
+      counting every entered swimmer. Its errors (`scoring_roster_missing` for an
+      untagged non-target side, a bad tag, a lineup the model cannot place) reach
+      the caller unchanged.
