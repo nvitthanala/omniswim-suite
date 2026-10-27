@@ -226,7 +226,9 @@ export function adaptSimulatorSnapshot(snapshot: SimulatorSnapshotInput, opts: A
     if (row.swimmerId === null) throw new AdapterError('unresolved_reference', `${path}.swimmerId`, `a ${row.kind} row has no swimmer`);
     const swimmerId = String(row.swimmerId);
     if (!swimmerById.has(swimmerId)) throw new AdapterError('unresolved_reference', `${path}.swimmerId`, `swimmer ${swimmerId} is not in swimmers`);
-    if (genderOf(row.eventgender, `${path}.eventgender`) !== gender) {
+    // "X" is a mixed event: the swimmer row's own gender was checked above, so the time is theirs. Whether
+    // the swim is used is SwimCloud's choice, read from its splashes. Any other code must match the simulator.
+    if (row.eventgender !== 'X' && genderOf(row.eventgender, `${path}.eventgender`) !== gender) {
       throw new AdapterError('swimmer_gender', `${path}.eventgender`, `row is ${row.eventgender}, the simulator is ${settings.gender}`);
     }
     checkCourse(row.eventstroke, row.eventcourse, `${path}.eventcourse`);

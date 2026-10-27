@@ -387,6 +387,28 @@ describe('what the adapter refuses', () => {
     wrong.swimmers[0].gender = 'F';
     expect(code(() => adaptSimulatorSnapshot(wrong, OPTS))).toBe('swimmer_gender');
   });
+
+  it('a swim from a mixed event ("X") counts for its swimmer: the 2025-26 live check', () => {
+    // The user's live load of the 2025-26 season threw `unsupported_gender` on `swims[55].eventgender: "X"`.
+    // The swimmer's own gender is checked on the swimmer row, so the swim's time is theirs.
+    const snap = clone('A');
+    const individual = snap.swims.filter((s: { kind: string }) => s.kind !== 'relay');
+    expect(individual.length).toBeGreaterThan(0);
+    for (const s of individual) s.eventgender = 'X';
+    const outcome = rescoreSimulator(snap, OPTS);
+    expect(outcome.kind).toBe('scored');
+    if (outcome.kind !== 'scored') throw new Error('expected a scored outcome');
+    expect(outcome.parity).toMatchObject({ kind: 'compared', matches: true });
+  });
+
+  it('a swim row of the other gender, or an unknown gender code, still throws', () => {
+    const other = clone('A');
+    other.swims.find((s: { kind: string }) => s.kind !== 'relay').eventgender = 'F';
+    expect(code(() => adaptSimulatorSnapshot(other, OPTS))).toBe('swimmer_gender');
+    const unknown = clone('A');
+    unknown.swims.find((s: { kind: string }) => s.kind !== 'relay').eventgender = 'Q';
+    expect(code(() => adaptSimulatorSnapshot(unknown, OPTS))).toBe('unsupported_gender');
+  });
 });
 
 describe('parityReport: an entry the page left unset', () => {
