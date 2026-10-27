@@ -885,9 +885,12 @@
   "awayMode": {
     "since": "2026-10-26 afternoon",
     "user": "\"continue work, i will be away from computer. move ahead and build everything you can, keep tab on open items or questions you have for me and i will let you know answers when i return.\"",
-    "questionsForUser": [],
+    "questionsForUser": [
+      "Q-core-b-opponents: the coach tags HSU but not the opponents. (a) nothing scores until every team is tagged, (b) untagged teams score as now with every swimmer able to score, (c) other.",
+      "Q-core-b-relay-marks: once the coach has tagged, does swimming a relay still add an untagged swimmer to the scoring team (R39), or do only the coach tags count before finals?"
+    ],
     "resolvedNote": "Dark good/bad colors: answered by README R57 (system colors in dark), removed from questions 2026-10-26.",
-    "pausedAt": null
+    "pausedAt": "2026-10-27 after the R67 executor: paused at the user request (losing connection). Resume: Codex review of the R67 diff + abe52033, decide the 4th-relay gap, advisor audit, commit. Then P3.core-b once the user answers the two questions (opponents untagged; relay auto marks after tagging)."
   },
   "p2Risk": {
     "done": "2026-10-26",
@@ -930,8 +933,21 @@
   },
   "inFlight": {
     "P3.core-b": {
-      "status": "blocked on Q-roster-untagged; after core-a",
+      "status": "blocked on two user questions (2026-10-27): opponents untagged; relay auto marks after tagging",
       "scope": "roster eligibility for timed finals: tags + relay-leg auto marks (R39), coach tags win (R21/R40), R41 non-scorers leave places (ind + relay), R37/F19 legs must be scorers, scoringTeamSize 18 with diver 1/3 (R9/R24/R28) over-size = reported violation never a silent trim; abFinalTiers and splitTimedFinalMarksScorer set but not evaluable without rounds -> throw needs_rounds (P5)."
+    },
+    "R67": {
+      "status": "executor DONE 2026-10-27; diff UNCOMMITTED in the main tree (17 files + tests/engineRelayOverCap.test.ts). Lead gates green: vitest 2738 + 1 expected fail, npm test 65, golden clean, harness 2/2, lint. Pending before commit: Codex review (also cover abe52033), advisor diff audit.",
+      "scope": "RulePreset payload v3: scorers.relayOverCap holds-place|exhibition. Over-limit relays chosen as today (overCapKeys by rank); exhibition removes them and re-ranks (core-a mechanism), reason exhibition. Built-ins: simulator holds-place (SIMULATOR_RULE_PROVENANCE); nsisc v1, v2 and generic v1 pending; new nsisc v3 = v2 + exhibition (README R67). Picker offers nsisc v3.",
+      "followUp": "R42 (a 3rd NSISC relay is an entry violation) is not modeled: no relay entry-limit violation exists yet.",
+      "api": "RulePreset payloadVersion 3 + scorers.relayOverCap: Setting<RelayOverCapRule> (holds-place|exhibition). New: RulePresetV2, migrateRulePresetV2, parseRulePresetV2; migrateRulePresetV1 returns RulePresetV2; requireComplete/pendingPaths throw unsupported_version on v1/v2 objects. nsisc v3 added (frozen = v2 body). place null reasons: no_time, removed_over_event_cap, exhibition.",
+      "openFindings": [
+        "Open gap (it.fails marker in tests/engineRelayOverCap.test.ts): a 4th relay ranked past the point table takes no cap slot, so it is not removed; after removal it moves into the table, holds a place with 0 points and no reason, and the relay behind loses a place. Candidate fix in D2 section 9 item 8. Decide before commit or log.",
+        "README R67 lacks the user quote \"the relays that are entered that dont score can be tagged as exhibition\"; nsisc v3 provenance cites README line 91 with the existing wording. Add the quote, then repoint.",
+        "nsisc v3 cannot reach exhibition through scoreMeet until roster mode lands (P3.core-b).",
+        "R42 entry violation not modeled (D2 9 item 7).",
+        "toLegacyScoringSettings drops relayOverCap; only scoreMeet calls it."
+      ]
     }
   },
   "followUps": [
