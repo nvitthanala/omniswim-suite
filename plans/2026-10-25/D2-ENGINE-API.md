@@ -990,6 +990,227 @@ LCM factors and their tests stay as they were: they back the golden file and the
 NAIA tests. Nothing in `apps/extension` calls the new functions yet, so the
 live panel needs P4 wiring before users see any of this.
 
+### 3.14 Suggested opponent rosters (`model/rosterSuggest.ts`), P3.core-c (README R65, R70, R71, R75 to R78)
+
+**Status (2026-10-27).** Designed by `architect`, not built. Three open
+questions wait for the user (at the end of this section). Code citations are
+at commit 775c02af.
+
+**Purpose.** For each opponent team and gender the coach has not tagged,
+build a best-fit scoring roster (R70). The user can edit it. `scoreMeet` stays
+the only gate. It still throws `scoring_roster_missing` (results.ts:853) for
+any team and gender with no `'scorer'` tag. The caller merges the coach tags
+and the suggested tags before it scores.
+
+**Types (additive).**
+```ts
+// model/lineup.ts. Absent = coach tag. scoreMeet never reads `source`.
+export type ScorerTag = { readonly teamId: TeamId; readonly swimmerId: SwimmerId; readonly role: ScorerRole;
+  readonly source?: 'suggested' };
+// model/rosterSuggest.ts
+export interface LpSolution { readonly status: string; readonly objective: number;
+  readonly columns: Readonly<Record<string, number>> }        // the fields of SolvedResponse, optimizerProtocol.ts:21-32
+export type LpSolve = (lp: string, options: Readonly<Record<string, string | number | boolean>>) => Promise<LpSolution>;
+export interface RosterSuggestRequest {
+  readonly model: MeetModel; readonly lineup: Lineup; readonly rules: CompleteRulePreset;
+  readonly sourcing: ConversionSettings; readonly coachTags: readonly ScorerTag[];
+  readonly ownTeamId: TeamId; readonly targets: readonly { readonly teamId: TeamId; readonly gender: Gender }[] }
+export type RosterSuggestion =
+  | { readonly kind: 'suggested'; readonly teamId: TeamId; readonly gender: Gender;
+      readonly tags: readonly ScorerTag[];   // role 'scorer', source 'suggested', sorted by swimmerId
+      readonly referencePoints: number;      // from scoreMeet, in the reference field (below)
+      readonly spots: { readonly numerator: number; readonly denominator: number };
+      readonly method: 'all_entered' | 'ilp' }
+  | { readonly kind: 'absent'; readonly teamId: TeamId; readonly gender: Gender;
+      readonly reason: 'pins_over_size' | 'solver_not_optimal' };
+export function suggestScoringRosters(req: RosterSuggestRequest, solve: LpSolve): Promise<readonly RosterSuggestion[]>;
+export type RosterSuggestErrorCode = 'target_is_own_team' | 'target_without_entries'
+  | 'suggested_tag_in_input' | 'suggest_rule_unsupported' | 'suggest_model_mismatch';
+export class RosterSuggestError extends Error { readonly code: RosterSuggestErrorCode; readonly subject: string | null }
+```
+The output is sorted by team id, then gender. Nothing depends on the order of
+the input arrays or on Map iteration order.
+
+**Refusals.** Each of these throws:
+- A target is `ownTeamId` (R65).
+- A target has no entries.
+- An input tag has `source: 'suggested'`. Old suggestions never come back as
+  pins.
+- A rule is outside the supported set. The subject is the setting path.
+- A non-target team and gender has entries and no scorer tag: this throws
+  `ScoreMeetError('scoring_roster_missing')`. An untagged own team lands here.
+
+**Coach edits are pins.** On a target, a coach `'scorer'` tag pins the swimmer
+on. A coach `'non-scorer'` or `'exhibition'` tag pins the swimmer off. The
+suggester fills the remaining spots and never emits a tag for a pinned
+swimmer, so `[...coachTags, ...tags]` cannot raise `duplicate_tag` (readTags,
+results.ts:810). A target with a scorer pin is still a target: the caller
+decides which sides are suggested, not the tags. Otherwise one edit would make
+the side count as tagged and shrink its roster to one swimmer.
+
+**Objective.** For each target T, maximize T's points in its reference field:
+- Every non-target side is scored as tagged, including the coach's own team.
+- T's pins hold.
+- Every other target counts each entered swimmer as a scorer, except its pins.
+
+NSISC removes non-scorers from the places (builtins.ts:123-126), so one
+opponent's roster moves another opponent's places. A joint fixed point depends
+on iteration order and may not converge. One reference field per target needs
+one pass and does not depend on order. `referencePoints` is the total in that
+field, not the final total.
+
+**Tie-break (determinism).**
+1. Most points.
+2. Most spots used, up to the size limit. A spot costs nothing, so a real
+   coach declares a full roster.
+3. Lower swimmer ids preferred: the lexicographically greatest roster vector
+   over swimmer ids in ascending code-unit order.
+
+**Constraints.**
+- **Candidates.** A swimmer of T in that gender with at least one entry and no
+  pin. A swimmer with `unknown` membership is a candidate, because the
+  opponent entered them and `scoreMeet` scores them (D2 3.8). A swimmer with no
+  entry is never a candidate: R78 would warn (results.ts:883-885).
+- **Size.** Whole numbers, with the diver rule of `teamSizeViolations`
+  (results.ts:899-918). A diver has an individual diving entry and no relay
+  entry and weighs `numerator`. Every other swimmer weighs `denominator`. NSISC
+  v4 has 18 spots and divers at 1/3 (builtins.ts:147, :152), so
+  `3·full + divers ≤ 54`. Swimmers pinned on count toward the limit. If the
+  pins alone exceed it, the result is absent with `pins_over_size`.
+- **Relays (R71, R76, R77).** With `relayLegsMustBeScorers`, a relay counts
+  only when every leg is on the roster (results.ts:867). A relay with an
+  exhibition leg never counts.
+- **Relay cap.** NSISC allows 2 scoring relays (builtins.ts:164-167) and
+  removes the rest as exhibition. Only T's first `cap` standing relays, in rank
+  order, score. The later ones leave the places (results.ts:691-701).
+- **Entry limits (R75).** The suggester never adds, drops or moves an entry.
+  Entry limits are not a constraint, and the `entry_cap` violations are the
+  same under any tags.
+
+**Supported rules.** Eligibility `'roster'` with scope `'meet'`. Both
+per-event scorer caps unlimited. A relay cap that is unlimited or uses
+`relayOverCap: 'exhibition'`. Either value of `ties`, `nonScorerPlacement` and
+`relayLegsMustBeScorers`. NSISC v4 is inside this set.
+
+**Algorithm.**
+1. **Shortcut.** If every candidate fits, tag them all with
+   `method: 'all_entered'` and do not call the solver. Lemma: one more
+   standing entry never lowers its team's points. The point table never
+   increases with place and has no negative values. Take a split tie group of
+   size G that holds c of the team's entries, with total S. The added entry
+   changes the team's share by ((G−c)·S + (c+1)·G·P′)/(G(G+1)), which is at
+   least P′, the points of the next place. The entries behind lose at most P′
+   in total.
+2. **ILP** through `solve`.
+   - Variables: x per candidate. y per relay, the AND of its legs. One-hot
+     u[b,m,c] per tie block of T's entries in each event. A block is equal
+     values under `'split'`, or one entry under `'ordered'`, in lineup order.
+     u[b,m,c] means c entries of the block count, with m of T's counting
+     entries ahead.
+   - Linking: the sum of c·u equals the block's count. m has a lower bound of
+     the counting entries ahead. Points never rise with place, so the optimum
+     takes m exactly.
+   - Coefficients come from `pointTables` (results.ts:569) and the split
+     share. Other teams' entries are constants from `resolveLineup` and
+     `rankFields` (results.ts:433, :610) on the reference field.
+   - The objective is scaled to whole numbers by D, the least common multiple
+     of the possible tie-group sizes.
+   - Options: `mip_rel_gap: 0`, `mip_abs_gap: 0.5`, `time_limit: 10`,
+     `random_seed: 0`, `output_flag: false`.
+3. **Stages.** First, maximize points to get P*. Second, maximize spots with
+   points ≥ P* to get S*. Third, for each candidate the solution leaves out, in
+   ascending id order, solve for feasibility with that candidate fixed in and
+   every earlier fix kept. Any status other than `Optimal` or `Infeasible`
+   gives absent with `solver_not_optimal`. "Time limit reached" is not an
+   optimum (optimizerProtocol.ts:24). Never return the solver's last
+   incumbent.
+4. **Guard.** Score the reference field with the result through `scoreMeet`.
+   `round(points·D)` must equal P*, with `|points·D − round(points·D)|` below
+   1e-6. Otherwise throw `suggest_model_mismatch`. The ILP only proposes
+   rosters; `scoreMeet` is the only scorer.
+
+**Why not greedy or local search.** One `scoreMeet` call took 3.7 ms on
+simulator config A (2 teams, 81 entries; architect timing, 2026-10-27). One
+pass of single swaps over an 8-team conference meet is thousands of calls per
+target. A single swap also cannot complete a relay that needs two new legs.
+The legacy `optimizeScorersForTeam` (rosterOptimizer.ts:434-499) counts heads
+and has no diver weight or relay coupling, so it is not reused.
+
+**Where.** In the engine, as a pure function. The solver is injected, so
+`@omniswim/engine` takes no `highs` dependency. The extension passes
+`optimizerClient.solveLp` (optimizerClient.ts:12, :46). The worker's generic
+`solve-lp` needs no change. Tests use Node HiGHS (`require('highs')`).
+
+**Gate.** `scoreMeet` is unchanged. A suggested tag counts as a scorer tag.
+
+**Traps a plausible build falls into.** HiGHS's default `mip_rel_gap` of 1e-4,
+which accepts a roster that is not optimal. Returning the incumbent at the
+time limit. Counting heads, or a float 1/3, against the size limit. Letting a
+relay with an exhibition leg count. Treating an edited side as tagged. Feeding
+old suggestions back as pins. Dropping swimmers with `unknown` membership.
+Results that vary with input order.
+
+**Acceptance tests** (`tests/engineRosterSuggest.test.ts`). Synthetic fixtures
+shaped like `build(specs)` (engineScoreMeetRoster.test.ts:52) and synthetic
+presets from `engineTestPresets` `set`. These are not competition values.
+1. `bruteForceOptimal`: 20 seeded fixtures. Coach team A tagged, opponents B
+   and C untagged. B has 8 entered swimmers, 2 of them divers, with a size of 4
+   at 1/3. Cover both values of `ties`, `nonScorerPlacement` and
+   `relayLegsMustBeScorers`. Enumerate every feasible subset through
+   `scoreMeet`. The suggestion equals the best subset under the full
+   tie-break.
+2. `relayTrap`: one spot left. X scores 20 points in an individual event. Y
+   scores none alone but completes a 40-point relay. Expect Y. A greedy pick
+   fails this test.
+3. `noWorseNeighbor` (mutation): no feasible single swap, add or drop beats
+   the result in `scoreMeet` points, or ties it with more spots or a lower-id
+   roster. A seeded worse roster (top scorer swapped out) fails the same
+   checker.
+4. `diverBoundaryExact`: under NSISC v4, 17 full swimmers and 3 divers all fit
+   (54 = 54). With 17 full and 4 divers, exactly one diver is left off.
+5. `monotoneAddition` and `allEnteredShortcut`: on the brute-force fixtures,
+   f(S ∪ {s}) ≥ f(S). When every candidate fits, the result is all of them and
+   the solver is called 0 times.
+6. `pinsHonored`: no pinned swimmer is in the output. The merged tags score
+   with no `duplicate_tag`.
+7. `pinsOverSize`: absent with `pins_over_size`.
+8. `ownTeamRefusals`: an untagged own team throws `scoring_roster_missing`.
+   Listing the own team as a target throws `target_is_own_team`.
+9. `orderIndependence`: permuting `model.teams`, `model.swimmers`, the tags
+   and the targets gives a deep-equal result. `lineup.entries` is not
+   permuted.
+10. `entryLimitsUntouched`: the `entry_cap` violations are equal with and
+    without the suggestions. The suggestions raise no `scorer_without_entry`
+    and no `scoring_team_size`.
+11. `sourceIgnored`: `scoreMeet` results are deep-equal with `source`
+    stripped. An input tag marked suggested throws `suggested_tag_in_input`.
+12. `solverNotOptimal`: a stub solver returning "Time limit reached" gives
+    absent and no roster.
+13. `guardCatchesDrift`: a stub solver with a tampered objective throws
+    `suggest_model_mismatch`.
+14. `unsupportedRules`: a numeric `perEventScorerCap` throws, and so does a
+    relay cap under `'holds-place'`.
+
+**Files a builder touches.** New: `packages/engine/src/model/rosterSuggest.ts`
+and `tests/engineRosterSuggest.test.ts`. `model/lineup.ts` (`ScorerTag.source`).
+`model/results.ts`: `export` only, no behavior change, on `buildIndex`,
+`resolveLineup`, `groupFields`, `rankFields`, `pointTables` and `settled`; not
+re-exported from `index.ts`. `index.ts`. This file. Do not touch the
+`scoreMeet` logic, `builtins.ts`, the extension worker or protocol, or
+`engineScoreMeetRoster.test.ts`. Extension wiring is later work.
+
+**Open questions for the user.**
+1. **What an edit does.** Chosen: an edit is a pin, and the suggester refills
+   around it. The other option: the first edit saves the whole roster as coach
+   tags and freezes it.
+2. **When a suggestion refreshes.** Chosen: recompute when the coach edits
+   their own lineup. It is deterministic and needs no storage, but opponent
+   rosters can shift between two what-if lineups. Freezing until the coach
+   presses "Recompute" needs a suggestion store in D3.
+3. **The field for the other opponents.** Chosen: every entered swimmer of the
+   other opponents counts as a scorer. The other option is a second pass
+   against the first-pass suggestions. It changes the numbers, not the API.
+
 ## 4. NSISC as data
 
 Sources: **U** = `plans/2026-10-25/00-USER-PLAN.md` (verbatim, stated
