@@ -103,6 +103,7 @@ Asked after P1. The state file `docs/reference/REDESIGN_2026-10-25_STATE.json` (
 | R79 | sim-bridge size cap | 10,000 bytes, raised from 5,000 so the simulator settings writer (D4) fits. User, 2026-10-27: "make the cap 10kb, should be more than enough". |
 | R80 | Applying a preset to the simulator (D4 question 1) | Picking a saved preset only previews it. The extension writes the supported settings to the SwimCloud page only when the user clicks a separate Apply. User, 2026-10-27, chose "Separate Apply click". |
 | R81 | In-page panel default (D4 question 2) | The OmniSwim panel beside the simulator results starts open. User, 2026-10-27, chose "Start open". |
+| R82 | Scorer tags: where they live | Coach scorer tags (R65) are saved per meet in the extension database and survive a reload. This is the first store the production build opens. User, 2026-10-27, chose "Per meet, saved". Next panel slice: scorer tagging (user chose it over Apply, cut tags and suggested rosters). |
 
 NSISC is the New South Intercollegiate Swim Conference. The repo's meet data
 labels its meet "New South Championships". It is not the Northern Sun
