@@ -1693,3 +1693,10 @@ and `architect` have not accepted them yet. Item 12 decides nothing.
       counting every entered swimmer. Its errors (`scoring_roster_missing` for an
       untagged non-target side, a bad tag, a lineup the model cannot place) reach
       the caller unchanged.
+22. **Duplicate relay signatures (2026-10-27).** `resolveLineup` permits the same
+    swimmer on separate relay entries; `duplicate_swimmer` applies only when a
+    swimmer appears twice within one relay. `scoreMeet` now includes each
+    resolved relay key in the legacy relay signature, so same-team, same-event
+    relays with identical swimmers and times remain separate entries. This keeps
+    split-tie scoring and relay-cap accounting aligned without changing the
+    frozen legacy scorer or adding an API error.

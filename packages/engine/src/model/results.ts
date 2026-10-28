@@ -645,7 +645,10 @@ function legacyPoints(resolved: readonly Resolved[], rankOf: ReadonlyMap<string,
     if (r.entry.kind === 'individual') {
       push(r.gender, { ...base, id: r.key, name: legacySwimmer(r.entry.swimmerId) });
     } else {
-      const relayNames = r.swimmerIds.map((id) => ({ name: legacySwimmer(id), year: '' }));
+      // relayEntryGroupKey sorts relayNames to identify an entry. Keep the display/scorer row
+      // names stable, but include the resolved key in this signature so separate lineup entries
+      // with the same swimmers remain distinct in the frozen legacy scorer.
+      const relayNames = r.swimmerIds.map((id) => ({ name: `${legacySwimmer(id)}|${r.key}`, year: '' }));
       r.swimmerIds.forEach((id, i) => {
         push(r.gender, { ...base, id: `${r.key}#${i}`, name: legacySwimmer(id), isRelay: true, relayNames, relayTeamTime: base.time });
       });
