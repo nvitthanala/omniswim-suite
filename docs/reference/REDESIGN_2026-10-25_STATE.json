@@ -91,7 +91,7 @@
           "commit": "d9f5c894 (Codex moves) + 8109785f (review fix-up)",
           "note": "Codex dispatch ctx_a73688b491b3 released. Claude architect review found: Python settings path legacy/legacy (fixed + pytest), 3 moved tests reading legacy/data (silent skips, fixed), 2 source scans ENOENT on fresh checkout (fixed, non-vacuity asserts), skip budget split (legacy/tests/skip-budget.json + --config/--budget flags), Stryker includes legacy/tests, chart scan covers legacy, e2e/harness copy scoring_settings, harness EXTENSION_DIR, vitest double run in CI, eslint . minus legacy, .bat launchers resolve repo root, data/training kept ignored, dead root playwright.config.ts removed. Also: test_scoring_preset_routes now uses a temp data copy (it had started the server on the real data/ and migrated data/omniswim.db to v9; backup data/omniswim-pre-v9-20261025T212107Z.db). Main clone had 382 stale CRLF working files; re-checked out as LF.",
           "followUps": [
-    "Roster suggester: conference-scale (8 teams) solve time not measured. A 21-swimmer ILP takes about 0.4 s in Node.",
+            "Roster suggester: conference-scale (8 teams) solve time not measured. A 21-swimmer ILP takes about 0.4 s in Node.",
             "package-lock.json stale extraneous entries for moved workspaces: regenerate on a clean clone",
             "active tests that guard only legacy code (uiAmberRatchet, uiCaseAndColorRatchet, navigationTargets, tests/harness, test_chart_bundle) belong in legacy/ eventually",
             "gates must run with full local data: the main clone has only part of the captures; oyster worktree data is the full set"
@@ -860,12 +860,10 @@
     "d22375ee Show simulator parity in the docked panel"
   ],
   "lowPriority": {
-    "since": "2026-10-26T16:03Z",
-    "trigger": "local usage report: Claude 5h window 89% used",
-    "resetsAt": "2026-10-26T17:20Z (12:20 local)",
-    "plan": "no new Claude agents until reset; Codex (37% used) takes NSISC v2 via Orca in a child worktree; lead does cheap docs work; resume Claude executors after reset",
-    "resumePoint": "NSISC v2 committed; next is the storage-fields executor",
-    "endedAt": "2026-10-26 (window reset reported to the lead)"
+    "since": "2026-10-27",
+    "trigger": "Budget tier critical: 7d 91% used, resets in about 37h; 5h 28%, resets in 54m",
+    "plan": "no new Claude agents; Codex via Orca only for builds; lead commits and verifies only",
+    "resumePoint": "D4.apply committed; waiting on the user for the partial-apply or 0=unlimited answer, then R70 questions and followUps"
   },
   "codexRuns": [
     {
@@ -888,7 +886,7 @@
   "liveCheckNext": [
     "Storage: nothing to check until a UI feature opens the database (preset editor, P3.ui)."
   ],
-  "budget": "2026-10-26 evening: 5h 14%, 7d 72% (pace 118% at reset in 3d), tier conserve: low-priority pace, one agent at a time",
+  "budget": "2026-10-27: 5h 28% (resets in 54m), 7d 91% (resets in ~37h, pace 117%), tier critical",
   "conversionCapture": {
     "done": "2026-10-26",
     "archive": "data/conversions/swimswam/lcm-to-scy-2026-10-26.json (53 captures) + README.md (fitted model)",
@@ -980,6 +978,10 @@
     "NSISC v4": {
       "status": "DONE 2026-10-27 (commit follows this state edit): lead built it. Gates green (vitest 2792, npm test 65, golden unchanged, mutation 413, harness 2/2, lint, build). Codex review ctx_1808851982f4 found no defect (43 tests), released. Advisor audit passed; its three nits fixed (wording pinned to README lines, drift test for v4, frozen comment). Picker default moves v3 to v4. Saved refs to v3 still score with 8 and get the v4-available flag.",
       "scope": "nsisc v4 = v3 with entries.maxTotalPerSwimmer 7 (README R73); exhibitionCounts stays true (R75); v2/v3 stay frozen at 8; picker offers v4."
+    },
+    "D4.apply": {
+      "status": "DONE 2026-10-27: Codex I (run_828e7a9bf424) built the R80 Apply button and simulatorSettingsFromRulePreset (exact or nothing). Lead reviewed the diff and ran full gates on this tree: vitest 2863, golden unchanged, harness 2/2, lint 0. Advisor audit skipped (Claude quota). Finding: no built-in preset maps fully today. NSISC v3/v4 refuse unlimited caps, relay cap != scorer cap, R67 exhibition; v1/v2/generic have pending rules.",
+      "next": "Ask the user: (a) allow a partial apply that writes mapped settings and lists skipped ones, or (b) write 0 for unlimited. simulatorCap (simulatorRules.ts:98) and recon 02-SIMULATOR-RECON.md:255 both record that the page stores 0 = unlimited, so (b) is exact for entry caps."
     }
   },
   "followUps": [

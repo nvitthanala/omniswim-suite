@@ -6,7 +6,7 @@
  * can run it.
  */
 import { mountDockedPanel } from './dockedPanel';
-import { mountShadowHost, startOverlay } from './overlay';
+import { mountShadowHost, startOverlay, writeSimulatorSettings } from './overlay';
 import { mountPagePanel } from './pagePanel';
 import { isScorerTagState } from '../shared/panelProtocol';
 import type { ParityReport } from '@omniswim/swimcloud/browser';
@@ -25,6 +25,12 @@ panel.onMessage((message) => {
   }
 });
 pagePanel.onScorerAction((action) => panel.sendMessage(action));
+pagePanel.onApplyRule((settings) => {
+  if (!settings) { pagePanel.setApplyStatus('Not applied: this preset has compatibility refusals.'); return; }
+  const token = writeSimulatorSettings(window, settings);
+  if (!token) { latestError = overlayHost.dataset.osxCompatibilityError || 'Simulator settings write is unavailable'; pagePanel.setApplyStatus(`Compatibility error: ${latestError}`); pagePanel.refresh(); return; }
+  pagePanel.setApplyStatus('Pending simulator read-back…');
+});
 const syncCompatibilityError = (): void => { latestError = overlayHost.dataset.osxCompatibilityError; pagePanel.refresh(); };
 new MutationObserver(syncCompatibilityError).observe(overlayHost, { attributes: true, attributeFilter: ['data-osx-compatibility-error'] });
 window.addEventListener('message', (event: MessageEvent) => {
@@ -36,4 +42,4 @@ window.addEventListener('message', (event: MessageEvent) => {
   latestParity = data.report as ParityReport;
   pagePanel.refresh();
 });
-startOverlay(window, console, (snapshot) => panel.sendSnapshot(snapshot));
+startOverlay(window, console, (snapshot) => panel.sendSnapshot(snapshot), () => pagePanel.setApplyStatus('Acknowledged: simulator settings match the requested values.'));

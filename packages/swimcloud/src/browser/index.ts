@@ -20,6 +20,8 @@ export type { RescoreOutcome } from './rescore';
 export { rescoreSimulator, SIMULATOR_SOURCING } from './rescore';
 export type { SimulatorPresetBuild, UnmappedSimulatorSetting } from './simulatorRules';
 export { SIMULATOR_RULE_PROVENANCE, SIMULATOR_TABLE_PROVENANCE, simulatorCap, simulatorRulePreset } from './simulatorRules';
+export type { SimulatorRuleRefusal, SimulatorRuleReverseMapping, SimulatorRuleSettings } from './simulatorReverseRules';
+export { simulatorSettingsFromRulePreset } from './simulatorReverseRules';
 export type {
   AdapterErrorCode,
   SimulatorSettingsInput,

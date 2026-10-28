@@ -13,6 +13,7 @@
 import { simSnapshotSchema } from './bridgeSchema';
 import type { SimSnapshot } from './bridgeSchema';
 import type { PresetRef } from '../storage/schema';
+import type { RulePreset } from '@omniswim/engine';
 
 export const PANEL_PORT_PREFIX = 'osx-panel:';
 
@@ -54,6 +55,7 @@ export interface ScorerTagStateMessage {
   readonly tags: readonly { readonly teamId: string; readonly swimmerId: string; readonly role: 'scorer' | 'non-scorer' | 'exhibition' }[];
   readonly ownTeamId?: string;
   readonly rulePresetRef?: PresetRef;
+  readonly rulePreset?: RulePreset;
   readonly rulePresetChoices?: readonly { readonly ref: PresetRef; readonly label: string }[];
   readonly scoringTeamSize?: number;
   readonly warnings: readonly string[];

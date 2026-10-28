@@ -127,7 +127,7 @@ async function publishTagState(error?: string): Promise<void> {
       latestPanelPort.postMessage({ kind: 'scorer-tag-state', meetKey,
       teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })),
       swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })),
-      tags, ownTeamId: selectedOwnTeam, rulePresetRef, rulePresetChoices: choices.map(c => ({ ref: c.ref, label: c.label })),
+      tags, ownTeamId: selectedOwnTeam, rulePresetRef, rulePreset: rulePreset.found ? rulePreset.value : undefined, rulePresetChoices: choices.map(c => ({ ref: c.ref, label: c.label })),
       scoringTeamSize: scored.scoringTeamSize, warnings: scored.warnings,
         suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey), ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
   } catch (cause) {
