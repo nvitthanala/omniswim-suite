@@ -9,8 +9,11 @@
 /** `source` on every message the bridge posts. */
 export const BRIDGE_SOURCE = 'osx-bridge';
 
-/** `source` on the one message the overlay posts back (`kind: 'ready'`). */
+/** `source` on messages the overlay posts back (`kind: 'ready'` or `kind: 'write'`). */
 export const OVERLAY_SOURCE = 'osx-overlay';
+
+/** Only simulator controls with a native settings equivalent may be written. */
+export const SIM_WRITE_KEYS = 'pointSystem maxScorersPerTeam maxIndrecordsPerAthlete maxIndrecordsPerTeam maxRelaysPerAthlete maxRelaysPerTeam maxTotalPerAthlete'.split(' ');
 
 /** Protocol version, the `v` field. */
 export const BRIDGE_VERSION = 1;

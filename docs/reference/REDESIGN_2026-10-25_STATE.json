@@ -969,7 +969,8 @@
       "note": "User 2026-10-27: Claude 7d at 88%, use Codex through Orca. Three Codex workers in the current worktree, disjoint scopes. Lead reruns full gates, reviews each diff (different provider), commits one area at a time.",
       "A P4 history adapter": "DONE c841d755. run_77761b41fd34 dispatch ctx_82bf3f41f36c: packages/swimcloud/src/browser new modules + tests/swimcloudHistory*.test.ts",
       "B duplicate relay": "DONE 079e5494 (legacy grouping names carry the entry key). run_e4167b2f0d1b dispatch ctx_0a5aa2a31ca8: repro + fix in packages/engine/src/model/results.ts, tests/engineScoreMeetDuplicateRelay.test.ts",
-      "D D4 phases 1-2": "BLOCKED: the sim-bridge reached 5,622 bytes (cap 5,000; 4,974 before, 26 bytes of headroom). Partial edits reverted; patch saved in the session scratchpad (codex-D-partial.patch). Needs a user decision: trim the bridge, defer writes (D4 section 4), or raise the cap.",
+      "D D4 phases 1-2": "DONE 2026-10-27 (commit follows): cap raised to 10,000 bytes (R79, 280ee18e); bridge 5,643 bytes. writeSimulatorSettings(win, settings) returns a token; ack on matching read-back. Lead gates green (vitest 2837). NEXT: D4 phase 3 (in-page panel, starts open R81, Apply click R80).",
+      "followUps": "A dispatch that throws midway leaves earlier settings written (reported as error, never as success). A page limit of unlimited is not writable (numbers only): it is refused visibly. maxRelaysPerTeam is the page entry limit, never the R67 scoring-relay cap.",
       "gotcha": "Never tell Codex to use Bash here: bare bash resolves to WSL with no /bin/bash. Codex worker_done is rejected without a taskId; tell workers to report with --type status.",
       "C R66 design": "DONE 38493204 (D4). run_0a69ea8e3142 dispatch ctx_76dd05411d15: plans/2026-10-25/D4-SIMULATOR-WRITE.md only"
     },

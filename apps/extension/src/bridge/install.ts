@@ -19,11 +19,12 @@
  * A missing link posts an `error` message. The bridge never falls back to a
  * guess. This file must stay under 5 KB built (tests/extensionBundleBoundaries).
  */
-import { BRIDGE_SOURCE, OVERLAY_SOURCE, SETTINGS_KEYS, SIMULATOR_PATH } from '../shared/protocol';
+import { BRIDGE_SOURCE, OVERLAY_SOURCE, SETTINGS_KEYS, SIMULATOR_PATH, SIM_WRITE_KEYS } from '../shared/protocol';
 
 type O = Record<string, unknown>;
 interface Store {
   getState(): O;
+  dispatch?(action: { type: string; payload: unknown }): unknown;
   subscribe(l: () => void): unknown;
 }
 interface Fiber {
@@ -257,6 +258,19 @@ export function installBridge(win: Window & typeof globalThis, opts: BridgeOptio
   // The overlay loads at document_idle, after the first snapshot. Its `ready` message asks for another.
   win.addEventListener('message', (e) => {
     const d = e.data as O | null;
-    if (e.source === win && d?.source === OVERLAY_SOURCE && d.kind === 'ready') emit(true);
+    if (e.source !== win || d?.source !== OVERLAY_SOURCE) return;
+    if (d.kind === 'ready') emit(true);
+    if (d.kind === 'write' && typeof d.token === 'string' && d.settings && typeof d.settings === 'object') {
+      try {
+        if (!store?.dispatch) throw new Error('setter unavailable');
+        const state = store.getState();
+        for (const [k, v] of Object.entries(d.settings as O)) {
+          if (!SIM_WRITE_KEYS.includes(k) || !(k in state) || (k === 'pointSystem' ? typeof v !== 'string' : typeof v !== 'number' || !Number.isFinite(v))) throw new Error('unsupported: ' + k);
+        }
+        for (const [k, v] of Object.entries(d.settings as O)) store.dispatch({ type: '@SETTER/' + k, payload: v });
+      } catch (e) {
+        post('write-result', { token: d.token, status: 'error', detail: String((e as Error).message) });
+      }
+    }
   });
 }

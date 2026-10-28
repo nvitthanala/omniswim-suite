@@ -152,6 +152,15 @@ export const simSnapshotSchema = z.object({
 export type SimSnapshot = z.infer<typeof simSnapshotSchema>;
 
 const header = { source: z.literal(BRIDGE_SOURCE), v: z.literal(BRIDGE_VERSION) };
+const writableSettings = z.strictObject({
+  pointSystem: z.optional(z.string()),
+  maxScorersPerTeam: z.optional(z.number()),
+  maxIndrecordsPerAthlete: z.optional(z.number()),
+  maxIndrecordsPerTeam: z.optional(z.number()),
+  maxRelaysPerAthlete: z.optional(z.number()),
+  maxRelaysPerTeam: z.optional(z.number()),
+  maxTotalPerAthlete: z.optional(z.number()),
+}).check(z.refine((s) => Object.keys(s).length > 0, { error: 'at least one supported setting is required' }));
 
 export const bridgeMessageSchema = z.discriminatedUnion('kind', [
   z.object({ ...header, kind: z.literal('snapshot'), snapshot: simSnapshotSchema }),
@@ -163,8 +172,11 @@ export const bridgeMessageSchema = z.discriminatedUnion('kind', [
     body: z.object({ swimmers: z.array(z.unknown()), relays: z.array(z.unknown()) }),
   }),
   z.object({ ...header, kind: z.literal('error'), code: z.string(), detail: z.string() }),
+  z.object({ ...header, kind: z.literal('write-result'), token: z.string(), status: z.literal('error'), detail: z.string() }),
 ]);
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;
+export type SimulatorWriteSettings = Partial<Record<'pointSystem' | 'maxScorersPerTeam' | 'maxIndrecordsPerAthlete' | 'maxIndrecordsPerTeam' | 'maxRelaysPerAthlete' | 'maxRelaysPerTeam' | 'maxTotalPerAthlete', string | number>>;
+export const simulatorWriteSettingsSchema = writableSettings;
 
 export type ParsedBridgeMessage = { ok: true; message: BridgeMessage } | { ok: false; reason: string };
 

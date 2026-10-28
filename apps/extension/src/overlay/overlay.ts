@@ -18,7 +18,8 @@ import type { SimSnapshot } from '../shared/bridgeSchema';
 import { bindTheme } from '../shared/theme';
 import type { ThemeController, ThemeOptions, ThemePreference } from '../shared/theme';
 import { ROOT_CLASS, SHADOW_CSS } from './shadowStyle';
-import { BRIDGE_SOURCE, BRIDGE_VERSION, OVERLAY_SOURCE } from '../shared/protocol';
+import { BRIDGE_SOURCE, BRIDGE_VERSION, OVERLAY_SOURCE, SIM_WRITE_KEYS } from '../shared/protocol';
+import { simulatorWriteSettingsSchema, type SimulatorWriteSettings } from '../shared/bridgeSchema';
 
 export const LOG_PREFIX = '[OmniSwim]';
 
@@ -26,6 +27,12 @@ export type OverlayLog = Pick<Console, 'log' | 'warn' | 'error' | 'debug'>;
 
 /** Keys typed into OmniSwim UI must not reach SwimCloud's handlers (D3 section 4, trap 5). */
 export const STOPPED_KEY_EVENTS = ['keydown', 'keyup', 'keypress'] as const;
+const writeApi = new WeakMap<Window, (settings: SimulatorWriteSettings) => string | null>();
+
+/** Explicit Apply hook for future UI: writes only settings represented by native simulator controls. */
+export function writeSimulatorSettings(win: Window & typeof globalThis, settings: SimulatorWriteSettings): string | null {
+  return writeApi.get(win)?.(settings) ?? null;
+}
 
 export interface ShadowHostOptions {
   /** Defaults to `'light'`. `'system'` follows `prefers-color-scheme`. */
@@ -71,8 +78,55 @@ export function mountShadowHost(doc: Document, opts: ShadowHostOptions = {}): HT
 }
 
 /** Listen for bridge messages. Returns a function that stops listening. */
-export function startOverlay(win: Window & typeof globalThis, log: OverlayLog = console, onSnapshot: (snapshot: SimSnapshot) => void = () => undefined): () => void {
+export function startOverlay(
+  win: Window & typeof globalThis,
+  log: OverlayLog = console,
+  onSnapshot: (snapshot: SimSnapshot) => void = () => undefined,
+  onWriteAcknowledged: (token: string) => void = () => undefined,
+  onPageSettingsChanged: (settings: SimSnapshot['settings']) => void = () => undefined,
+): () => void {
   const host = mountShadowHost(win.document);
+  const showCompatibilityError = (message?: string): void => {
+    const root = host.shadowRoot;
+    if (!root) return;
+    let alert = root.querySelector<HTMLElement>('[data-osx-compatibility-error]');
+    if (!message) { alert?.remove(); delete host.dataset.osxCompatibilityError; return; }
+    if (!alert) {
+      alert = win.document.createElement('div');
+      alert.dataset.osxCompatibilityError = '';
+      alert.setAttribute('role', 'alert');
+      alert.style.cssText = 'position:fixed;top:12px;left:12px;z-index:2147483000;max-width:420px;padding:10px 14px;border:1px solid var(--osx-border);border-radius:8px;background:var(--osx-bg);color:var(--osx-fg);box-shadow:0 2px 12px rgba(0,0,0,.2);font:14px/1.4 var(--osx-font)';
+      root.querySelector(`.${ROOT_CLASS}`)?.append(alert);
+    }
+    alert.textContent = message;
+    host.dataset.osxCompatibilityError = message;
+  };
+  let lastSettingsSignature: string | undefined;
+  let lastSnapshotSignature: string | undefined;
+  let pending: { token: string; settings: SimulatorWriteSettings; timeout: ReturnType<typeof setTimeout> } | undefined;
+  const signature = (s: Partial<Record<string, unknown>>): string => JSON.stringify(Object.fromEntries(SIM_WRITE_KEYS.map((k) => [k, s[k]])));
+  const sendWrite = (settings: SimulatorWriteSettings): string | null => {
+    const parsedSettings = simulatorWriteSettingsSchema.safeParse(settings);
+    if (!parsedSettings.success) {
+      host.dataset.osxState = 'error';
+      showCompatibilityError('Unsupported simulator settings');
+      log.error(`${LOG_PREFIX} compatibility error: unsupported simulator settings`);
+      return null;
+    }
+    if (pending) clearTimeout(pending.timeout);
+    const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    const timeout = setTimeout(() => {
+      if (pending?.token !== token) return;
+      pending = undefined;
+      host.dataset.osxState = 'error';
+      showCompatibilityError('Simulator settings write was not confirmed');
+      log.error(`${LOG_PREFIX} compatibility error: simulator settings write was not confirmed`);
+    }, 5000);
+    pending = { token, settings: parsedSettings.data, timeout };
+    win.postMessage({ source: OVERLAY_SOURCE, v: BRIDGE_VERSION, kind: 'write', token, settings: parsedSettings.data }, win.location.origin);
+    return token;
+  };
+  writeApi.set(win, sendWrite);
 
   const onMessage = (e: MessageEvent): void => {
     // Not ours: another frame, another origin, or a page that talks to itself.
@@ -88,11 +142,30 @@ export function startOverlay(win: Window & typeof globalThis, log: OverlayLog = 
     const m = parsed.message;
     switch (m.kind) {
       case 'snapshot':
+        {
+        const sig = signature(m.snapshot.settings);
+        const fullSig = JSON.stringify(m.snapshot);
+        if (fullSig === lastSnapshotSignature) break;
+        lastSnapshotSignature = fullSig;
+        const pageSettingsChanged = lastSettingsSignature !== undefined && sig !== lastSettingsSignature;
+        lastSettingsSignature = sig;
+        let acknowledged = false;
+        if (pending && Object.entries(pending.settings).every(([k, v]) => m.snapshot.settings[k as keyof SimSnapshot['settings']] === v)) {
+          const token = pending.token;
+          clearTimeout(pending.timeout);
+          pending = undefined;
+          showCompatibilityError();
+          host.dataset.osxState = 'ready';
+          onWriteAcknowledged(token);
+          acknowledged = true;
+        }
+        if (pageSettingsChanged && !acknowledged) onPageSettingsChanged(m.snapshot.settings);
         host.dataset.osxState = 'ready';
         // The console line stays: the user's live load check reads it (D3 15, P1 `userCheck` in the state file).
         log.log(`${LOG_PREFIX} SimSnapshot`, m.snapshot);
         onSnapshot(m.snapshot);
         break;
+        }
       case 'response':
         log.debug(`${LOG_PREFIX} team response`, m.url);
         break;
@@ -100,11 +173,24 @@ export function startOverlay(win: Window & typeof globalThis, log: OverlayLog = 
         host.dataset.osxState = 'error';
         log.error(`${LOG_PREFIX} bridge error: ${m.code}: ${m.detail}`);
         break;
+      case 'write-result':
+        if (!pending || m.token !== pending.token) {
+          log.warn(`${LOG_PREFIX} dropped an unrecognized write response`);
+          break;
+        }
+        if (m.status === 'error') {
+          clearTimeout(pending.timeout);
+          pending = undefined;
+          host.dataset.osxState = 'error';
+          showCompatibilityError(m.detail || 'Simulator rejected settings write');
+          log.error(`${LOG_PREFIX} compatibility error: ${host.dataset.osxCompatibilityError}`);
+        }
+        break;
     }
   };
 
   win.addEventListener('message', onMessage);
   // The bridge posted its first snapshot before this script loaded. Ask for the latest.
   win.postMessage({ source: OVERLAY_SOURCE, v: BRIDGE_VERSION, kind: 'ready' }, win.location.origin);
-  return () => win.removeEventListener('message', onMessage);
+  return () => { win.removeEventListener('message', onMessage); writeApi.delete(win); if (pending) clearTimeout(pending.timeout); };
 }
