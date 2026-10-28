@@ -31,3 +31,5 @@ export type {
 } from './simulatorTypes';
 export { AdapterError } from './simulatorTypes';
 export { parseSwimCloudHundredths } from './times';
+export type { BestRelaySplit, HistorySource, TeamHistoryOptions, TimesByEventOptions } from './history';
+export { bestRelaySplitsAcrossTeams, parseTeamRelayHistory, parseTimesByEventResponse, teamsFromTimesByEvent } from './history';
