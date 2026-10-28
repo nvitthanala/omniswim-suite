@@ -171,6 +171,8 @@ export interface SettingsMap {
   flyoverAllowanceSec: number;
   /** Default `'off'` (R7: extra fetches are not approved). */
   fetchPosture: 'off' | 'on-click';
+  /** Coach's selected team, keyed by the simulator's meet key. Absent entries mean no team selected. */
+  scorerOwnTeamsByMeet: Readonly<Record<string, SwimCloudId>>;
 }
 export interface SettingRecord<K extends keyof SettingsMap = keyof SettingsMap> {
   readonly key: K;

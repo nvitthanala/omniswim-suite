@@ -45,6 +45,38 @@ export interface PanelSnapshot {
   readonly snapshot: SimSnapshot;
 }
 
+export interface ScorerTagStateMessage {
+  readonly kind: 'scorer-tag-state';
+  readonly meetKey: string;
+  readonly teams: readonly { readonly id: string; readonly name: string }[];
+  readonly swimmers: readonly { readonly id: string; readonly teamId: string; readonly name: string; readonly gender: string }[];
+  readonly tags: readonly { readonly teamId: string; readonly swimmerId: string; readonly role: 'scorer' | 'non-scorer' | 'exhibition' }[];
+  readonly ownTeamId?: string;
+  readonly scoringTeamSize?: number;
+  readonly warnings: readonly string[];
+  readonly error?: string;
+}
+
+export interface ScorerTagActionMessage {
+  readonly kind: 'scorer-tag-action';
+  readonly action: 'choose-team' | 'set-role' | 'clear-role';
+  readonly teamId: string;
+  readonly swimmerId?: string;
+  readonly role?: 'scorer' | 'non-scorer' | 'exhibition';
+}
+
+export function isScorerTagState(m: unknown): m is ScorerTagStateMessage {
+  if (!m || typeof m !== 'object') return false;
+  const v = m as ScorerTagStateMessage;
+  return v.kind === 'scorer-tag-state' && typeof v.meetKey === 'string' && Array.isArray(v.teams) && Array.isArray(v.swimmers) && Array.isArray(v.tags) && Array.isArray(v.warnings);
+}
+
+export function isScorerTagAction(m: unknown): m is ScorerTagActionMessage {
+  if (!m || typeof m !== 'object') return false;
+  const v = m as ScorerTagActionMessage;
+  return v.kind === 'scorer-tag-action' && ['choose-team', 'set-role', 'clear-role'].includes(v.action) && typeof v.teamId === 'string' && (v.action === 'choose-team' || (typeof v.swimmerId === 'string' && (v.action === 'clear-role' || ['scorer', 'non-scorer', 'exhibition'].includes(String(v.role)))));
+}
+
 export function isPanelSnapshot(m: unknown): m is PanelSnapshot {
   if (typeof m !== 'object' || m === null) return false;
   const r = m as { kind?: unknown; snapshot?: unknown };

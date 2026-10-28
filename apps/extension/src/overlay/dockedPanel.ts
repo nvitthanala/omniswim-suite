@@ -54,6 +54,8 @@ export interface DockedPanel {
   /** The URL the iframe loads, `#<nonce>` included. */
   readonly url: string;
   sendSnapshot(snapshot: SimSnapshot): void;
+  sendMessage(message: unknown): void;
+  onMessage(listener: (message: unknown) => void): void;
 }
 
 /** 32 lower-case hex characters from `crypto.getRandomValues`. */
@@ -91,6 +93,7 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
   let pings = 0;
   let activePort: PanelPort | null = null;
   let latest: PanelSnapshot | null = null;
+  const messageListeners = new Set<(message: unknown) => void>();
   const connect = (): void => {
     attempt += 1;
     let answered = false;
@@ -106,6 +109,7 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
       host.dataset.osxPanelAttempts = String(attempt);
       host.dataset.osxPanelPongs = String(Number(host.dataset.osxPanelPongs ?? '0') + 1);
     });
+    port.onMessage.addListener((message) => { for (const listener of messageListeners) listener(message); });
     port.onDisconnect.addListener(() => {
       if (activePort === port) activePort = null;
       void runtime.lastError;
@@ -123,6 +127,8 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
   root.append(iframe);
   return {
     iframe, nonce, url,
+    sendMessage(message) { activePort?.postMessage(message); },
+    onMessage(listener) { messageListeners.add(listener); },
     sendSnapshot(snapshot) {
       const message: PanelSnapshot = { kind: 'simulator-snapshot', snapshot };
       if (!isPanelSnapshot(message)) return;

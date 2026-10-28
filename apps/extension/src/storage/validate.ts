@@ -360,6 +360,13 @@ const SETTING_VALUES: { readonly [K in keyof SettingsMap]: (v: unknown, path: st
   // No bound: no source states a range for the flyover allowance (R14).
   flyoverAllowanceSec: (v, p) => void finite(v, p),
   fetchPosture: (v, p) => void oneOf(v, p, ['off', 'on-click'] as const),
+  scorerOwnTeamsByMeet: (v, p) => {
+    const map = isObj(v) ? v : fail(p, 'expected an object keyed by meet key');
+    for (const [meetKey, teamId] of Object.entries(map)) {
+      str(meetKey, `${p} key`);
+      swimCloudId(teamId, `${p}.${meetKey}`);
+    }
+  },
 };
 
 function parserInfo(raw: unknown, path: string, withWarnings: boolean): void {

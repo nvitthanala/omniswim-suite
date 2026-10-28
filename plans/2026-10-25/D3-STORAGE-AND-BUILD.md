@@ -977,3 +977,15 @@ colors; warning appears only as a filled chip with
 `--osx-warn-bg`/`--osx-warn-fg`, matching README R46/R57 in both themes. The
 Playwright harness exercises config-A parity, an altered entry-point
 mismatch, and an unsupported LCM adapter error.
+
+## Built note: scorer team choice (2026-10-27)
+
+The coach's selected team is saved in the existing `settings` store under the
+`scorerOwnTeamsByMeet` key, as a map from meet key to SwimCloud team ID. This
+is a user preference needed before scorer warnings can run. A `MeetRecord` is
+not a fit here: its required preset and meet metadata are not available from
+the simulator snapshot. The new setting has no default; absent map entries
+mean the coach has not chosen a team. Its validator checks meet keys and team
+IDs, and the existing optimistic writes and change bus synchronize tabs. No
+database migration is needed because the `settings` object store and record
+key path are unchanged.

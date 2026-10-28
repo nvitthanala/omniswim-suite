@@ -16,6 +16,11 @@ import { AdapterError, rescoreSimulator } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import type { Results } from '@omniswim/engine';
 import type { ParityReport } from '@omniswim/swimcloud/browser';
+import type { ScorerTag } from '@omniswim/engine';
+import { createChromeChangeBus, createStorageRepo, openOmniDb, readScorerOwnTeam, saveScorerOwnTeam, watchChanges, toSwimCloudId } from '../storage';
+import type { StorageRepo } from '../storage';
+import type { ScorerTagActionMessage, ScorerTagStateMessage } from '../shared/panelProtocol';
+import { scoreScorerTags } from './scorerTagScoring';
 import './dashboard.css';
 
 export type DashboardHost = 'tab' | 'docked';
@@ -90,12 +95,64 @@ const container = document.getElementById('root');
 if (!container) throw new Error('dashboard.html has no #root element');
 const host = readHost(location.search);
 let pendingSnapshot: SimSnapshot | null = null;
+let latestPanelPort: { postMessage(message: unknown): void } | null = null;
+let tagRepo: Promise<StorageRepo> | undefined;
+const meetKeyFor = (snapshot: SimSnapshot): string => `swimcloud-simulator:${JSON.stringify({ teams: [...new Set(snapshot.teams.map(t => String(t.id)))].sort(), startDate: snapshot.settings.startDate, endDate: snapshot.settings.endDate })}`;
+const repoForTags = (): Promise<StorageRepo> => (tagRepo ??= openOmniDb().then(db => {
+  const bus = createChromeChangeBus(chrome.storage as never);
+  const repo = createStorageRepo(db, { bus });
+  void watchChanges(db, bus, change => { if (change.stores === 'unknown' || change.stores.includes('tags') || change.stores.includes('settings')) void publishTagState(); }, { targets: [document, window] });
+  return repo;
+}));
+async function publishTagState(error?: string): Promise<void> {
+  if (!pendingSnapshot || !latestPanelPort) return;
+  const snapshot = pendingSnapshot;
+  const meetKey = meetKeyFor(snapshot);
+  try {
+    const repo = await repoForTags();
+    const rows = await repo.list('tags', { index: 'byMeet', value: meetKey });
+    const ownTeamId = await readScorerOwnTeam(repo, meetKey);
+    const tags = rows.map(t => ({ teamId: String(t.teamId), swimmerId: String(t.swimmerId), role: t.role }));
+    const selectedOwnTeam = ownTeamId && snapshot.teams.some(team => String(team.id) === String(ownTeamId)) ? String(ownTeamId) : undefined;
+    const scored = scoreScorerTags(snapshot, meetKey, selectedOwnTeam !== undefined, tags as ScorerTag[]);
+    latestPanelPort.postMessage({ kind: 'scorer-tag-state', meetKey,
+      teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })),
+      swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })),
+      tags, ownTeamId: selectedOwnTeam, scoringTeamSize: scored.scoringTeamSize, warnings: scored.warnings, ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
+  } catch (cause) {
+    latestPanelPort.postMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
+  }
+}
+async function handleTagAction(action: ScorerTagActionMessage): Promise<void> {
+  if (!pendingSnapshot || !latestPanelPort) return;
+  const meetKey = meetKeyFor(pendingSnapshot);
+  try {
+    if (!pendingSnapshot.teams.some(team => String(team.id) === action.teamId)) throw new Error('The selected team is not in the current simulator snapshot');
+    if (action.action !== 'choose-team' && !pendingSnapshot.swimmers?.some(swimmer => String(swimmer.id) === action.swimmerId && String(swimmer.teamId) === action.teamId)) {
+      throw new Error('The selected swimmer is not on that team in the current simulator snapshot');
+    }
+    const repo = await repoForTags();
+    if (action.action === 'choose-team') await saveScorerOwnTeam(repo, meetKey, toSwimCloudId(action.teamId));
+    else if (action.swimmerId) {
+      const teamId = toSwimCloudId(action.teamId); const swimmerId = toSwimCloudId(action.swimmerId);
+      const key: [string, string, string] = [meetKey, teamId, swimmerId];
+      const current = await repo.get('tags', key);
+      if (action.action === 'clear-role') { if (current.found) await repo.delete('tags', key, current.value.rev); }
+      else if (action.role) await repo.put('tags', { meetKey, teamId, swimmerId, role: action.role }, current.found ? current.value.rev : 'new');
+    }
+    await publishTagState();
+  } catch (cause) {
+    await publishTagState(`Could not save scorer tag: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+}
 // Top level, before the first render: the overlay connects as soon as the iframe has loaded.
 const nonce = host === 'docked' ? readNonce(location.hash) : null;
 const panel = nonce ? listenForPanelPort(chrome.runtime, nonce, (snapshot) => {
   pendingSnapshot = snapshot;
   window.dispatchEvent(new CustomEvent('osx-snapshot', { detail: snapshot }));
-}) : null;
+  latestPanelPort?.postMessage({ kind: 'scorer-tags-loading' });
+  void publishTagState();
+}, action => { void handleTagAction(action); }, port => { latestPanelPort = port; void publishTagState(); }) : null;
 // `__OSX_HARNESS__` is false in the production build, so esbuild drops this call and the probe.
 if (__OSX_HARNESS__) installHarness(host ?? 'unknown', panel);
 const root = createRoot(container);
