@@ -8,7 +8,7 @@ export interface PagePanel {
   disconnect(): void;
 }
 
-const css = `:host{all:initial;color:var(--osx-fg,CanvasText);font:14px/1.45 system-ui,sans-serif}*{box-sizing:border-box}.panel{border:1px solid var(--osx-border,GrayText);border-radius:8px;background:var(--osx-bg,Canvas);padding:12px;min-width:220px;max-width:300px;color:inherit}.head{display:flex;justify-content:space-between;align-items:center;gap:12px}h2{font-size:16px;margin:0}button,select{font:inherit;color:inherit;background:var(--osx-bg,Canvas);border:1px solid var(--osx-border,GrayText);border-radius:5px;padding:4px 8px;cursor:pointer}.body[hidden]{display:none}.error{color:var(--osx-bad,Mark)}p{margin:10px 0 0}.group{border-top:1px solid var(--osx-border,GrayText);margin-top:10px;padding-top:8px}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;margin:6px 0}.row label{min-width:0}.row select{max-width:140px}.warning{background:var(--osx-warn-bg);color:var(--osx-warn-fg);padding:2px 5px;border-radius:4px}`;
+const css = `:host{all:initial;color:var(--osx-fg,CanvasText);font:14px/1.45 system-ui,sans-serif}*{box-sizing:border-box}.panel{border:1px solid var(--osx-border,GrayText);border-radius:8px;background:var(--osx-bg,Canvas);padding:12px;min-width:220px;max-width:300px;color:inherit}.head{display:flex;justify-content:space-between;align-items:center;gap:12px}h2{font-size:16px;margin:0}button,select{font:inherit;color:inherit;background:var(--osx-bg,Canvas);border:1px solid var(--osx-border,GrayText);border-radius:5px;padding:4px 8px;cursor:pointer}.body[hidden]{display:none}.error{color:var(--osx-bad,Mark)}p{margin:10px 0 0}.group{border-top:1px solid var(--osx-border,GrayText);margin-top:10px;padding-top:8px}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;margin:6px 0}.row label{min-width:0}.row select{max-width:140px}.warning{background:var(--osx-warn-bg);color:var(--osx-warn-fg);padding:2px 5px;border-radius:4px}.cut-row{display:grid;grid-template-columns:minmax(55px,1fr) 1fr 1fr;gap:5px;margin:6px 0;font-size:12px}.cut-head{font-weight:600}.cut-tag{overflow-wrap:anywhere}`;
 
 function appendRulePresetPicker(doc: Document, scorer: HTMLElement, state: ScorerTagStateMessage, send: (action: ScorerTagActionMessage) => void): void {
   const label = doc.createElement('label'); label.textContent = 'OmniSwim scoring rules';
@@ -24,6 +24,55 @@ function appendRulePresetPicker(doc: Document, scorer: HTMLElement, state: Score
   });
   scorer.append(label, select);
   if (!state.rulePresetRef) { const prompt = doc.createElement('p'); prompt.textContent = 'Choose an OmniSwim rule preset to score scorer tags and suggest rosters.'; scorer.append(prompt); }
+}
+
+function renderCutTagRow(doc: Document, item: NonNullable<ScorerTagStateMessage['cutTags']>[number]): HTMLElement {
+  const row = doc.createElement('div'); row.className = 'cut-row';
+  const name = doc.createElement('span'); name.className = 'cut-tag'; name.textContent = item.swimmerName;
+  const real = doc.createElement('span'); real.className = 'cut-tag'; real.textContent = item.real;
+  const estimated = doc.createElement('span'); estimated.className = 'cut-tag'; estimated.textContent = item.estimated;
+  if (item.estimatedIsEstimate) {
+    const badge = doc.createElement('span'); badge.textContent = ' est.'; estimated.append(badge);
+    const provenance = doc.createElement('small'); provenance.textContent = item.estimatedProvenance ?? 'Tool-derived provenance'; estimated.append(doc.createElement('br'), provenance);
+  }
+  row.append(name, real, estimated); return row;
+}
+
+type SuggestionResult = NonNullable<ScorerTagStateMessage['suggestions']>[number]['result'];
+
+/** One opponent's suggested roster (R70): the roster, its absent reason, or its error code. Text only. */
+function renderSuggestion(doc: Document, state: ScorerTagStateMessage, result: SuggestionResult): HTMLElement {
+  const summary = doc.createElement('p'); summary.dataset.osxSuggestion = '';
+  if (result.kind === 'suggested') {
+    const names = result.swimmerIds.map(id => state.swimmers.find(s => s.id === id)?.name ?? id);
+    summary.textContent = `Suggested: ${names.join(', ')} · ${result.points} points · ${result.spots.numerator}/${result.spots.denominator} spots · ${result.method}`;
+  } else if (result.kind === 'absent') {
+    summary.textContent = `Suggested roster unavailable: ${result.reason}`;
+  } else {
+    summary.className = 'error'; summary.setAttribute('role', 'alert'); summary.textContent = `Suggestion error ${result.code}${result.subject ? ` (${result.subject})` : ''}`;
+  }
+  return summary;
+}
+
+function renderCutTags(doc: Document, state: ScorerTagStateMessage | null, open: boolean): HTMLElement {
+  const details = doc.createElement('details'); details.open = open; details.dataset.osxCutTags = '';
+  const summary = doc.createElement('summary'); summary.textContent = 'Cut tags'; details.append(summary);
+  const rows = state?.cutTags ?? [];
+  if (!rows.length) { const empty = doc.createElement('p'); empty.textContent = 'No meet swims to tag'; details.append(empty); }
+  for (const teamId of [...new Set(rows.map(r => r.teamId))]) {
+    const teamRows = rows.filter(r => r.teamId === teamId);
+    const group = doc.createElement('div'); group.className = 'group';
+    const teamHeading = doc.createElement('strong'); teamHeading.textContent = teamRows[0]?.teamName ?? teamId; group.append(teamHeading);
+    for (const eventKey of [...new Set(teamRows.map(r => r.eventKey))]) {
+      const heading = doc.createElement('p'); heading.textContent = eventKey; group.append(heading);
+      const header = doc.createElement('div'); header.className = 'cut-row cut-head';
+      for (const text of ['Swimmer', 'Real SCY', 'Estimated LCM']) { const cell = doc.createElement('span'); cell.textContent = text; header.append(cell); }
+      group.append(header);
+      for (const item of teamRows.filter(r => r.eventKey === eventKey)) group.append(renderCutTagRow(doc, item));
+    }
+    details.append(group);
+  }
+  return details;
 }
 
 function attach(doc: Document, anchor: Element): PagePanel {
@@ -43,7 +92,9 @@ function attach(doc: Document, anchor: Element): PagePanel {
   toggle.addEventListener('click', () => { const open = toggle.getAttribute('aria-expanded') !== 'true'; toggle.setAttribute('aria-expanded', String(open)); toggle.textContent = open ? 'Collapse' : 'Expand'; body.hidden = !open; });
   heading.append(title, toggle); body.append(parity, error, scorer); panel.append(heading, body); root.append(style, panel);
   const renderScorers = (state: ScorerTagStateMessage | null, send: (action: ScorerTagActionMessage) => void): void => {
+    const cutTagsOpen = scorer.querySelector<HTMLDetailsElement>('[data-osx-cut-tags]')?.open ?? true;
     scorer.replaceChildren();
+    scorer.append(renderCutTags(doc, state, cutTagsOpen));
     const title = doc.createElement('h3'); title.textContent = 'Scorer tags'; title.style.cssText = 'font-size:14px;margin:14px 0 6px'; scorer.append(title);
     if (!state) { const waiting = doc.createElement('p'); waiting.textContent = 'Loading saved swimmer tags…'; scorer.append(waiting); return; }
     if (state.error) { const msg = doc.createElement('p'); msg.className = 'error'; msg.dataset.osxTagError = ''; msg.setAttribute('role', 'alert'); msg.textContent = state.error; scorer.append(msg); }
@@ -65,19 +116,7 @@ function attach(doc: Document, anchor: Element): PagePanel {
         heading.textContent = `${team.name} · ${gender}${team.id === state.ownTeamId ? ` (${counted}${state.scoringTeamSize === undefined ? ' tagged scorers' : ` / ${state.scoringTeamSize} roster spots`})` : ''}`; group.append(heading);
         if (team.id !== state.ownTeamId) {
           const suggestion = state.suggestions?.find(s => s.teamId === team.id && s.gender === gender);
-          if (suggestion) {
-            const summary = doc.createElement('p'); summary.dataset.osxSuggestion = '';
-            const result = suggestion.result;
-            if (result.kind === 'suggested') {
-              const names = result.swimmerIds.map(id => state.swimmers.find(s => s.id === id)?.name ?? id);
-              summary.textContent = `Suggested: ${names.join(', ')} · ${result.points} points · ${result.spots.numerator}/${result.spots.denominator} spots · ${result.method}`;
-            } else if (result.kind === 'absent') {
-              summary.textContent = `Suggested roster unavailable: ${result.reason}`;
-            } else {
-              summary.className = 'error'; summary.setAttribute('role', 'alert'); summary.textContent = `Suggestion error ${result.code}${result.subject ? ` (${result.subject})` : ''}`;
-            }
-            group.append(summary);
-          }
+          if (suggestion) group.append(renderSuggestion(doc, state, suggestion.result));
         }
         for (const swimmer of teamSwimmers.filter(s => (s.gender || 'Unknown') === gender)) {
           const row = doc.createElement('div'); row.className = 'row'; const name = doc.createElement('label'); name.textContent = swimmer.name || swimmer.id;

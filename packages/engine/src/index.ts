@@ -125,3 +125,8 @@ export type { Builtin, RuleBuiltin } from './rules/builtins';
 export { BUILTIN_RULE_PRESETS, builtinRulePreset } from './rules/builtins';
 export { BUILTIN_SESSION_PRESETS } from './planner/builtins';
 export { BUILTIN_LCM_TO_SCY, BUILTIN_TABLE_D, builtinLcmToScy } from './sourcing/builtins';
+
+// Strict, season-aware team lifecycle lookups used by adapters. Keep the
+// legacy defaulting division helpers private to the engine.
+export type { TeamDivisionResolution, TeamDivisionOptions } from './data/teamDivisions';
+export { resolveTeamDivision, divisionForEntryInSeason, programCompetedInSeason, programSponsorsGender } from './data/teamDivisions';

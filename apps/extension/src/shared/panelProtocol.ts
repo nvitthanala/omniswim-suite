@@ -57,6 +57,8 @@ export interface ScorerTagStateMessage {
   readonly rulePresetChoices?: readonly { readonly ref: PresetRef; readonly label: string }[];
   readonly scoringTeamSize?: number;
   readonly warnings: readonly string[];
+  readonly cutTags?: readonly { readonly teamId: string; readonly teamName: string; readonly swimmerId: string; readonly swimmerName: string;
+    readonly eventKey: string; readonly real: string; readonly estimated: string; readonly estimatedIsEstimate: boolean; readonly estimatedProvenance?: string }[];
   readonly suggestions?: readonly {
     readonly teamId: string; readonly gender: string;
     readonly result: { readonly kind: 'suggested'; readonly swimmerIds: readonly string[]; readonly points: number;

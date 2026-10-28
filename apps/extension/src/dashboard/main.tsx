@@ -20,7 +20,7 @@ import type { ScorerTag } from '@omniswim/engine';
 import { createChromeChangeBus, createStorageRepo, openOmniDb, readScorerOwnTeam, saveScorerOwnTeam, readScorerRulePreset, saveScorerRulePreset, listRulePresetChoices, resolveRulePreset, watchChanges, toSwimCloudId } from '../storage';
 import type { StorageRepo } from '../storage';
 import type { ScorerTagActionMessage, ScorerTagStateMessage } from '../shared/panelProtocol';
-import { scoreScorerTags } from './scorerTagScoring';
+import { panelCutTags, scoreScorerTags } from './scorerTagScoring';
 import { createOptimizerClient } from './optimizerClient';
 import { suggestOpponentRosters, suggestedTags } from './suggestedRosters';
 import './dashboard.css';
@@ -124,12 +124,12 @@ async function publishTagState(error?: string): Promise<void> {
       (lp, options) => optimizer.solveLp(lp, options));
     if (pendingSnapshot !== snapshot || !latestPanelPort) return;
     const scored = scoreScorerTags(snapshot, meetKey, selectedOwnTeam !== undefined, [...tags, ...suggestedTags(suggestions)] as ScorerTag[], rulePreset.found ? rulePreset.value : undefined);
-    latestPanelPort.postMessage({ kind: 'scorer-tag-state', meetKey,
+      latestPanelPort.postMessage({ kind: 'scorer-tag-state', meetKey,
       teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })),
       swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })),
       tags, ownTeamId: selectedOwnTeam, rulePresetRef, rulePresetChoices: choices.map(c => ({ ref: c.ref, label: c.label })),
       scoringTeamSize: scored.scoringTeamSize, warnings: scored.warnings,
-      suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
+        suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey), ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
   } catch (cause) {
     latestPanelPort.postMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
   }

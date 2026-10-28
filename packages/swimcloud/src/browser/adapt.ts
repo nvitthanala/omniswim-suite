@@ -34,7 +34,7 @@
  *
  * Nothing here reads a clock or a random source. The meet key and snapshot id are inputs.
  */
-import { entryKey, formatHundredths, validateMeetModel } from '@omniswim/engine';
+import { entryKey, formatHundredths, programCompetedInSeason, programSponsorsGender, resolveTeamDivision, validateMeetModel } from '@omniswim/engine';
 import type {
   DateWindow,
   EventKey,
@@ -89,6 +89,8 @@ export interface AdaptedSimulator {
   readonly observedEntries: readonly ObservedEntry[];
   /** Snapshot content the model cannot hold. Counted, never silently dropped. */
   readonly ignored: { readonly relayRows: number };
+  /** Why the snapshot could not supply a season for strict division resolution. */
+  readonly divisionSeasonNote?: string;
 }
 
 export type AdaptOutcome =
@@ -121,6 +123,13 @@ function recordRange(s: SimulatorSnapshotInput['settings']): DateWindow {
   return { kind: 'dates', from, to };
 }
 
+function seasonForSettings(s: SimulatorSnapshotInput['settings']): string | null {
+  if (s.dateToUse !== 'season' || !s.startSeason || !s.endSeason || !ISO_DATE.test(s.startSeason) || !ISO_DATE.test(s.endSeason)) return null;
+  const fromYear = Number(s.startSeason.slice(0, 4));
+  const throughYear = Number(s.endSeason.slice(0, 4));
+  return throughYear === fromYear + 1 ? `${fromYear}-${throughYear}` : null;
+}
+
 const timeValue = (h: Hundredths, diving: boolean): TimeValue => ({ text: diving ? (h / 100).toFixed(2) : formatHundredths(h), hundredths: h });
 
 const swimKey = (swimmerId: SwimmerId, eventKey: EventKey): string => `${swimmerId}\u0000${eventKey}`;
@@ -147,6 +156,8 @@ export function adaptSimulatorSnapshot(snapshot: SimulatorSnapshotInput, opts: A
   }
   const preset = simulatorRulePreset(settings);
   const origin = { kind: 'simulator' as const, snapshotId: opts.snapshotId };
+  const snapshotSeason = seasonForSettings(settings);
+  const divisionSeasonNote = snapshotSeason ? undefined : `The ${settings.dateToUse} date window does not identify one competition season.`;
 
   // ---- teams and swimmers ----
   const teams: MeetTeam[] = [];
@@ -155,8 +166,15 @@ export function adaptSimulatorSnapshot(snapshot: SimulatorSnapshotInput, opts: A
     const teamId = String(t.id);
     if (teamIds.has(teamId)) throw new AdapterError('duplicate_id', `teams[${i}].id`, `team ${teamId} appears twice`);
     teamIds.add(teamId);
-    // The simulator names no division. Unknown is explicit; it is never D1.
-    teams.push({ teamId, division: { state: 'unknown', reason: 'unmapped_team' } });
+    const resolution = snapshotSeason ? resolveTeamDivision(t.name, { season: snapshotSeason }) : null;
+    let division: MeetTeam['division'] = { state: 'unknown', reason: 'unmapped_team' };
+    if (snapshotSeason && resolution?.entry) {
+      if (!programCompetedInSeason(resolution.entry, snapshotSeason)) division = { state: 'unknown', reason: 'program_discontinued' };
+      else if (!resolution.sponsoredGenders) division = { state: 'unknown', reason: 'sponsorship_unaudited' };
+      else if (!programSponsorsGender(resolution.entry, gender)) division = { state: 'unknown', reason: 'gender_not_sponsored' };
+      else if (resolution.division) division = { state: 'known', division: resolution.division, season: snapshotSeason };
+    }
+    teams.push({ teamId, division });
   });
 
   const swimmers: MeetSwimmer[] = [];
@@ -475,6 +493,5 @@ export function adaptSimulatorSnapshot(snapshot: SimulatorSnapshotInput, opts: A
   const display: LineupDisplay = { swimmers: swimmerNames, teams: teamNames, entryTimes };
   const lineup: Lineup = { payloadVersion: 1, meetKey: opts.meetKey, entries, display };
 
-  return { kind: 'ready', adapted: { model, lineup, preset, observedEntries, ignored: { relayRows } } };
+  return { kind: 'ready', adapted: { model, lineup, preset, observedEntries, ignored: { relayRows }, ...(divisionSeasonNote ? { divisionSeasonNote } : {}) } };
 }
-

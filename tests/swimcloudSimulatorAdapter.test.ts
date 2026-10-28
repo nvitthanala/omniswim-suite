@@ -451,13 +451,43 @@ describe('parityReport: an entry the page left unset', () => {
 });
 
 describe('what the adapter says it does not know', () => {
-  it('every team is an unmapped division, not D1 and not D2', () => {
-    const outcome = adaptSimulatorSnapshot(clone('A'), OPTS);
+  it('resolves mapped teams for the snapshot season and leaves an unmapped team unknown, never D1', () => {
+    const known = adaptSimulatorSnapshot(clone('A'), OPTS);
+    if (known.kind !== 'ready') throw new Error('not ready');
+    expect(known.adapted.model.teams.every((t) => t.division.state === 'known' && t.division.season === '2025-2026')).toBe(true);
+
+    const snap = clone('A');
+    snap.teams.forEach((team: { name: string }) => { team.name = 'Unmapped College'; });
+    const outcome = adaptSimulatorSnapshot(snap, OPTS);
     if (outcome.kind !== 'ready') throw new Error('not ready');
     expect(outcome.adapted.model.teams.length).toBeGreaterThan(0);
     for (const t of outcome.adapted.model.teams) {
       expect(t.division).toEqual({ state: 'unknown', reason: 'unmapped_team' });
     }
+  });
+
+  it('keeps divisions unknown and explains when a specific date window cannot identify one season', () => {
+    const snap = clone('A');
+    snap.settings.dateToUse = 'specific-dates';
+    snap.settings.startDate = '2025-10-01'; snap.settings.endDate = '2026-03-01';
+    const outcome = adaptSimulatorSnapshot(snap, OPTS);
+    if (outcome.kind !== 'ready') throw new Error('not ready');
+    expect(outcome.adapted.divisionSeasonNote).toContain('does not identify one competition season');
+    expect(outcome.adapted.model.teams.every((t) => t.division.state === 'unknown')).toBe(true);
+  });
+
+  it('keeps an unsponsored gender and a discontinued program unknown', () => {
+    const unsponsored = clone('A');
+    unsponsored.teams.forEach((team: { name: string }) => { team.name = 'University of West Florida'; });
+    const men = adaptSimulatorSnapshot(unsponsored, OPTS);
+    if (men.kind !== 'ready') throw new Error('not ready');
+    expect(men.adapted.model.teams.every((t) => t.division.state === 'unknown' && t.division.reason === 'gender_not_sponsored')).toBe(true);
+
+    const discontinued = clone('A');
+    discontinued.teams.forEach((team: { name: string }) => { team.name = 'Lindenwood University'; });
+    const cutProgram = adaptSimulatorSnapshot(discontinued, OPTS);
+    if (cutProgram.kind !== 'ready') throw new Error('not ready');
+    expect(cutProgram.adapted.model.teams.every((t) => t.division.state === 'unknown' && t.division.reason === 'program_discontinued')).toBe(true);
   });
 
   it('every swimmer has an unknown class year, and the model passes validation', () => {
