@@ -100,6 +100,9 @@ Asked after P1. The state file `docs/reference/REDESIGN_2026-10-25_STATE.json` (
 | R76 | A relay with an exhibition leg | The whole relay is exhibition. User, 2026-10-27, answering "a relay with one exhibition-tagged leg is wholly exhibition": "yes". |
 | R77 | Untagged relay leg when legs need not be scorers | When `scorers.relayLegsMustBeScorers` is false, a relay with an untagged leg still scores, and the engine warns. User, 2026-10-27: "sure but also throw a warning for that". |
 | R78 | Tagged swimmer with no entry | A tagged swimmer with no entry in the meet takes a full scoring-roster spot, and the engine warns. User, 2026-10-27: "yes but also throw a warning for that." |
+| R79 | sim-bridge size cap | 10,000 bytes, raised from 5,000 so the simulator settings writer (D4) fits. User, 2026-10-27: "make the cap 10kb, should be more than enough". |
+| R80 | Applying a preset to the simulator (D4 question 1) | Picking a saved preset only previews it. The extension writes the supported settings to the SwimCloud page only when the user clicks a separate Apply. User, 2026-10-27, chose "Separate Apply click". |
+| R81 | In-page panel default (D4 question 2) | The OmniSwim panel beside the simulator results starts open. User, 2026-10-27, chose "Start open". |
 
 NSISC is the New South Intercollegiate Swim Conference. The repo's meet data
 labels its meet "New South Championships". It is not the Northern Sun

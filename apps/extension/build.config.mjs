@@ -40,7 +40,7 @@ export const GENERATED_BANNER =
  * `highs.wasm` is not an entry. It is a static file, copied from the `highs` package (see `staticFiles`).
  *
  * `options` overrides the shared options for one entry. `sim-bridge` removes whitespace, rewrites
- * syntax and renames locals (property names stay) because D3 2.2 caps it at 5 KB. Whitespace and
+ * syntax and renames locals (property names stay) because D3 2.2 caps it (10 KB since README R79). Whitespace and
  * syntax alone, the coordinator-ratified setting, give 5,768 bytes once the bridge checks required
  * keys and reads `rosters`. Renaming locals is the extra step and needs ratification: remove
  * `minifyIdentifiers` and the size test fails. Nothing else is minified (D3 2.2).

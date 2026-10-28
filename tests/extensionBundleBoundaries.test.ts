@@ -11,8 +11,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildAll, buildEntry, entries, extensionRoot, inputFromRepoRoot, outDir, repoRoot, staticFiles, type BuiltEntry } from './helpers/extensionBuild';
 
-/** Largest allowed `sim-bridge.js`, bytes. D3 2.2 says "under 5 KB". */
-const BRIDGE_MAX_BYTES = 5000;
+/** Largest allowed `sim-bridge.js`, bytes. D3 2.2 said "under 5 KB"; README R79 (line 103) raised it to 10,000. */
+const BRIDGE_MAX_BYTES = 10000;
 
 describe('extension bundle boundaries (D3 2.5)', () => {
   let built: BuiltEntry[] = [];
@@ -100,7 +100,7 @@ describe('extension bundle boundaries (D3 2.5)', () => {
     }
   });
 
-  it('sim-bridge.js stays under 5 KB (D3 2.2)', () => {
+  it('sim-bridge.js stays under 10 KB (D3 2.2, README R79)', () => {
     const bytes = Buffer.byteLength(jsOf('sim-bridge'), 'utf8');
     expect(bytes).toBeGreaterThan(1000);
     expect(bytes).toBeLessThan(BRIDGE_MAX_BYTES);

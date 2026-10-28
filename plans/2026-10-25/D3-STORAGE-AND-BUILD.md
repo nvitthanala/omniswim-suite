@@ -74,7 +74,7 @@ Section 9 lists where this spec changed the plan.
 
 | Entry | Source | Output | Format | Loaders | Notes |
 | --- | --- | --- | --- | --- | --- |
-| sim-bridge | `src/bridge/main.ts` | `sim-bridge.js` | iife | — | **P0-dependent** (2.7). Under 5 KB. No globals leaked. |
+| sim-bridge | `src/bridge/main.ts` | `sim-bridge.js` | iife | — | **P0-dependent** (2.7). Under 10 KB (README R79; 5 KB before 2026-10-27). No globals leaked. |
 | sim-overlay | `src/overlay/main.ts` | `sim-overlay.js` | iife | `.css: 'text'` | Engine re-score, light-DOM controls, shadow host for the iframe. |
 | service-worker | `src/sw/main.ts` | `service-worker.js` | iife | — | Classic SW, as in the legacy precedent. |
 | dashboard | `src/dashboard/main.tsx` | `dashboard.js` + `dashboard.css` | iife | `.css: 'css'` | One bundle, two hosts (`?host=tab`, `?host=docked`). |

@@ -34,7 +34,7 @@ Use a shadow root for the new in-page panel so SwimCloud CSS cannot restyle its 
 
 ## 4. MAIN-world byte budget
 
-Do not add dispatch UI, rendering, validation libraries, or result computation to `sim-bridge`. Keep it limited to discovering the page store, copying a strict snapshot, posting it, and the smallest guarded setter adapter. Its entry is required to stay under 5 KB; the prior measured minified bridge was 4,975 bytes (plans/2026-10-25/D3-STORAGE-AND-BUILD.md:77,707-710). Move setting selection, write tokens, signature comparison, result panels, and error presentation to `sim-overlay` and the isolated dashboard. Keep shared protocol constants dependency-free (apps/extension/src/shared/protocol.ts:1-7). If a setter implementation cannot fit within the byte cap, defer writes and use the extension UI to explain the unsupported control; do not relax the cap.
+Do not add dispatch UI, rendering, validation libraries, or result computation to `sim-bridge`. Keep it limited to discovering the page store, copying a strict snapshot, posting it, and the smallest guarded setter adapter. Its entry is required to stay under 10 KB since README R79 (it was 5 KB); the prior measured minified bridge was 4,975 bytes (plans/2026-10-25/D3-STORAGE-AND-BUILD.md:77,707-710). Move setting selection, write tokens, signature comparison, result panels, and error presentation to `sim-overlay` and the isolated dashboard. Keep shared protocol constants dependency-free (apps/extension/src/shared/protocol.ts:1-7). If a setter implementation cannot fit within the byte cap, defer writes and use the extension UI to explain the unsupported control; do not relax the cap.
 
 ## 5. Phases and acceptance
 
@@ -45,5 +45,5 @@ Do not add dispatch UI, rendering, validation libraries, or result computation t
 
 ## Open questions for the user
 
-- Should applying a saved preset immediately update supported SwimCloud settings, or should every write require a separate Apply click?
-- Should the in-page results panel default open, or begin collapsed beside the results?
+- Answered (README R80): picking a preset only previews it. Every write needs a separate Apply click.
+- Answered (README R81): the in-page panel starts open.
