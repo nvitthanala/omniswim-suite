@@ -49,6 +49,11 @@ export function App({ host }: { host: DashboardHost | null }) {
     if (pendingSnapshot) score(pendingSnapshot);
     return () => window.removeEventListener('osx-snapshot', onSnapshot);
   }, [score]);
+  React.useEffect(() => {
+    if (host !== 'docked' || view.kind !== 'scored') return;
+    // The content script accepts this only from its exact docked iframe window and extension origin.
+    window.parent.postMessage({ source: 'osx-docked-dashboard', kind: 'parity-report', report: view.parity }, '*');
+  }, [host, view]);
   return (
     <main className="osx-dashboard">
       <h1>OmniSwim</h1>
