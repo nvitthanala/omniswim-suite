@@ -27,3 +27,4 @@ export type { RosterKey, RosterState } from './rosterState';
 export { readClassYear, resolveClassYear } from './classYear';
 export type { ClassYearInput, ClassYearQuery, ResolvedClassYear } from './classYear';
 export { readScorerOwnTeam, saveScorerOwnTeam } from './scorerOwnTeam';
+export { readScorerRulePreset, saveScorerRulePreset } from './scorerRulePreset';

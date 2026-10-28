@@ -173,6 +173,8 @@ export interface SettingsMap {
   fetchPosture: 'off' | 'on-click';
   /** Coach's selected team, keyed by the simulator's meet key. Absent entries mean no team selected. */
   scorerOwnTeamsByMeet: Readonly<Record<string, SwimCloudId>>;
+  /** Explicit OmniSwim scoring preset per simulator meet; absent means no scorer scoring. */
+  scorerRulePresetsByMeet: Readonly<Record<string, PresetRef>>;
 }
 export interface SettingRecord<K extends keyof SettingsMap = keyof SettingsMap> {
   readonly key: K;

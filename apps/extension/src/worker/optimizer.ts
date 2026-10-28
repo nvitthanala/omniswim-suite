@@ -20,6 +20,7 @@
 import loadHighs from 'highs';
 import type { Highs, HighsOptions } from 'highs';
 import { OPTIMIZER_UNAVAILABLE, type OptimizerRequest, type OptimizerResponse } from '../shared/optimizerProtocol';
+import { optimalColumns } from './optimizerResult';
 
 export { OPTIMIZER_UNAVAILABLE };
 
@@ -53,8 +54,7 @@ async function solve(request: Extract<OptimizerRequest, { kind: 'solve-lp' }>): 
   const t0 = performance.now();
   const solution = highs.solve(request.lp, { output_flag: false, ...(request.options as HighsOptions | undefined) });
   const solveMs = performance.now() - t0;
-  const columns: Record<string, number> = {};
-  for (const [name, col] of Object.entries(solution.Columns)) columns[name] = col.Primal;
+  const columns = optimalColumns(solution.Status, () => solution.Columns as never);
   return { kind: 'solved', id: request.id, status: solution.Status, objective: solution.ObjectiveValue, columns, loadMs, solveMs };
 }
 

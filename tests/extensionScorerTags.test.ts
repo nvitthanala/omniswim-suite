@@ -9,6 +9,7 @@ import type { ScorerTagStateMessage } from '../apps/extension/src/shared/panelPr
 import { readScorerOwnTeam, saveScorerOwnTeam, toSwimCloudId } from '../apps/extension/src/storage';
 import { scoreScorerTags } from '../apps/extension/src/dashboard/scorerTagScoring';
 import { buildSnapshot } from './helpers/simulatorFixtures';
+import { builtinRulePreset } from '@omniswim/engine';
 
 function makeWindow(): { win: HappyWindow; root(): ShadowRoot } {
   const win = new HappyWindow(); let closed: unknown = null;
@@ -19,7 +20,8 @@ function makeWindow(): { win: HappyWindow; root(): ShadowRoot } {
 
 const state = (overrides: Partial<ScorerTagStateMessage> = {}): ScorerTagStateMessage => ({
   kind: 'scorer-tag-state', meetKey: 'meet:1', teams: [{ id: '1', name: 'Sharks' }],
-  swimmers: [{ id: '10', teamId: '1', name: 'A Swimmer', gender: 'Men' }], tags: [], warnings: [], ...overrides,
+  swimmers: [{ id: '10', teamId: '1', name: 'A Swimmer', gender: 'Men' }], tags: [], warnings: [],
+  rulePresetRef: { kind: 'builtin', id: 'nsisc', version: 4 }, rulePresetChoices: [{ ref: { kind: 'builtin', id: 'nsisc', version: 4 }, label: 'NSISC v4' }], ...overrides,
 });
 
 describe('extension scorer tags', () => {
@@ -30,8 +32,8 @@ describe('extension scorer tags', () => {
     panel.onScorerAction(action => sent.push(action)); panel.setScorerState(current);
     let root = fixture.root();
     expect(root.textContent).toContain('Choose your team before tagging scorers');
-    (root.querySelector('select') as HTMLSelectElement).value = '1';
-    root.querySelector('select')?.dispatchEvent(new win.Event('change') as unknown as Event);
+    (root.querySelector('[aria-label="Choose your team"]') as HTMLSelectElement).value = '1';
+    root.querySelector('[aria-label="Choose your team"]')?.dispatchEvent(new win.Event('change') as unknown as Event);
     expect(sent).toEqual([{ kind: 'scorer-tag-action', action: 'choose-team', teamId: '1' }]);
     current = state({ ownTeamId: '1', tags: [{ teamId: '1', swimmerId: '10', role: 'non-scorer' }] });
     panel.setScorerState(current); root = fixture.root();
@@ -76,7 +78,7 @@ describe('extension scorer tags', () => {
     const reloadedDb = await openOmniDb({ factory }); const reloadedRepo = createStorageRepo(reloadedDb);
     const restored = await readScorerOwnTeam(reloadedRepo, meetKey);
     expect(restored).toBe(chosenTeam);
-    const scoring = scoreScorerTags(snapshot, meetKey, restored !== undefined, []);
+    const scoring = scoreScorerTags(snapshot, meetKey, restored !== undefined, snapshot.swimmers!.map(s => ({ teamId: String(s.teamId), swimmerId: String(s.id), role: 'scorer' as const })), builtinRulePreset('nsisc', 4));
     expect(scoring.scored).toBe(true);
     reloadedDb.close();
   });

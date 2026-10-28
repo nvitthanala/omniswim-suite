@@ -12,6 +12,7 @@
 
 import { simSnapshotSchema } from './bridgeSchema';
 import type { SimSnapshot } from './bridgeSchema';
+import type { PresetRef } from '../storage/schema';
 
 export const PANEL_PORT_PREFIX = 'osx-panel:';
 
@@ -52,17 +53,27 @@ export interface ScorerTagStateMessage {
   readonly swimmers: readonly { readonly id: string; readonly teamId: string; readonly name: string; readonly gender: string }[];
   readonly tags: readonly { readonly teamId: string; readonly swimmerId: string; readonly role: 'scorer' | 'non-scorer' | 'exhibition' }[];
   readonly ownTeamId?: string;
+  readonly rulePresetRef?: PresetRef;
+  readonly rulePresetChoices?: readonly { readonly ref: PresetRef; readonly label: string }[];
   readonly scoringTeamSize?: number;
   readonly warnings: readonly string[];
+  readonly suggestions?: readonly {
+    readonly teamId: string; readonly gender: string;
+    readonly result: { readonly kind: 'suggested'; readonly swimmerIds: readonly string[]; readonly points: number;
+      readonly spots: { readonly numerator: number; readonly denominator: number }; readonly method: 'all_entered' | 'ilp' }
+      | { readonly kind: 'absent'; readonly reason: 'pins_over_size' | 'solver_not_optimal' }
+      | { readonly kind: 'error'; readonly code: string; readonly subject: string | null };
+  }[];
   readonly error?: string;
 }
 
 export interface ScorerTagActionMessage {
   readonly kind: 'scorer-tag-action';
-  readonly action: 'choose-team' | 'set-role' | 'clear-role';
-  readonly teamId: string;
+  readonly action: 'choose-team' | 'choose-rule-preset' | 'set-role' | 'clear-role';
+  readonly teamId?: string;
   readonly swimmerId?: string;
   readonly role?: 'scorer' | 'non-scorer' | 'exhibition';
+  readonly rulePresetRef?: PresetRef;
 }
 
 export function isScorerTagState(m: unknown): m is ScorerTagStateMessage {
@@ -74,7 +85,8 @@ export function isScorerTagState(m: unknown): m is ScorerTagStateMessage {
 export function isScorerTagAction(m: unknown): m is ScorerTagActionMessage {
   if (!m || typeof m !== 'object') return false;
   const v = m as ScorerTagActionMessage;
-  return v.kind === 'scorer-tag-action' && ['choose-team', 'set-role', 'clear-role'].includes(v.action) && typeof v.teamId === 'string' && (v.action === 'choose-team' || (typeof v.swimmerId === 'string' && (v.action === 'clear-role' || ['scorer', 'non-scorer', 'exhibition'].includes(String(v.role)))));
+  return v.kind === 'scorer-tag-action' && ['choose-team', 'choose-rule-preset', 'set-role', 'clear-role'].includes(v.action) &&
+    (v.action === 'choose-rule-preset' ? !!v.rulePresetRef : typeof v.teamId === 'string' && (v.action === 'choose-team' || (typeof v.swimmerId === 'string' && (v.action === 'clear-role' || ['scorer', 'non-scorer', 'exhibition'].includes(String(v.role))))));
 }
 
 export function isPanelSnapshot(m: unknown): m is PanelSnapshot {

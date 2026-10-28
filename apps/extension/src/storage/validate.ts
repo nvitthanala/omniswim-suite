@@ -367,6 +367,10 @@ const SETTING_VALUES: { readonly [K in keyof SettingsMap]: (v: unknown, path: st
       swimCloudId(teamId, `${p}.${meetKey}`);
     }
   },
+  scorerRulePresetsByMeet: (v, p) => {
+    const map = isObj(v) ? v : fail(p, 'expected an object keyed by meet key');
+    for (const [meetKey, ref] of Object.entries(map)) { str(meetKey, `${p} key`); presetRef(ref, `${p}.${meetKey}`); }
+  },
 };
 
 function parserInfo(raw: unknown, path: string, withWarnings: boolean): void {

@@ -1,5 +1,6 @@
 import { requireComplete, scoreMeet } from '@omniswim/engine';
 import type { ScorerTag } from '@omniswim/engine';
+import type { RulePreset } from '@omniswim/engine';
 import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 
@@ -10,15 +11,15 @@ export interface ScorerTagScoringState {
 }
 
 /** Runs the normal engine scoring path with saved coach tags and formats its roster warnings. */
-export function scoreScorerTags(snapshot: SimSnapshot, meetKey: string, hasOwnTeam: boolean, tags: readonly ScorerTag[]): ScorerTagScoringState {
+export function scoreScorerTags(snapshot: SimSnapshot, meetKey: string, hasOwnTeam: boolean, tags: readonly ScorerTag[], preset?: RulePreset): ScorerTagScoringState {
   const adapted = adaptSimulatorSnapshot(snapshot, { meetKey, snapshotId: 'live-snapshot' });
   if (adapted.kind !== 'ready') return { scored: false, warnings: [] };
-  const rules = adapted.adapted.preset;
-  const sizeSetting = rules.preset.scorers.scoringTeamSize;
+  if (!preset) return { scored: false, warnings: [] };
+  const sizeSetting = preset.scorers.scoringTeamSize;
   const scoringTeamSize = sizeSetting.state === 'set' && typeof sizeSetting.value === 'number' ? sizeSetting.value : undefined;
-  if (!hasOwnTeam || !rules.complete) return { scored: false, ...(scoringTeamSize === undefined ? {} : { scoringTeamSize }), warnings: [] };
+  if (!hasOwnTeam) return { scored: false, ...(scoringTeamSize === undefined ? {} : { scoringTeamSize }), warnings: [] };
   try {
-    const results = scoreMeet(adapted.adapted.model, adapted.adapted.lineup, tags, requireComplete(rules.preset), { includeConvertedSwims: false, lcmToScy: null });
+    const results = scoreMeet(adapted.adapted.model, adapted.adapted.lineup, tags, requireComplete(preset), { includeConvertedSwims: false, lcmToScy: null });
     const warnings: string[] = [];
     for (const violation of results.violations) {
       if (violation.kind === 'scoring_team_size') warnings.push(`${violation.teamId} ${violation.gender}: ${violation.spots.numerator}/${violation.spots.denominator} scorer spots exceeds ${violation.limit}`);
