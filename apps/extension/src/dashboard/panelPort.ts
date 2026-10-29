@@ -7,7 +7,7 @@
  * side accepts one name only: `osx-panel:<its own nonce>`, where the nonce is the URL fragment it
  * was loaded with. Register it at module top level, before the overlay's connect can arrive.
  */
-import { isPanelPing, isPanelSnapshot, isScorerTagAction, NONCE_PATTERN, panelPortName } from '../shared/panelProtocol';
+import { isPanelPing, isPanelSnapshot, isScorerTagAction, isSessionPresetEdit, NONCE_PATTERN, panelPortName } from '../shared/panelProtocol';
 import type { PanelPong } from '../shared/panelProtocol';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 
@@ -40,7 +40,7 @@ export function readNonce(hash: string): string | null {
   return NONCE_PATTERN.test(nonce) ? nonce : null;
 }
 
-export function listenForPanelPort(runtime: PanelListenerRuntime, nonce: string, onSnapshot: (snapshot: SimSnapshot) => void = () => undefined, onTagAction: (action: import('../shared/panelProtocol').ScorerTagActionMessage) => void = () => undefined, onPort: (port: { postMessage(message: unknown): void }) => void = () => undefined): PanelStats {
+export function listenForPanelPort(runtime: PanelListenerRuntime, nonce: string, onSnapshot: (snapshot: SimSnapshot) => void = () => undefined, onTagAction: (action: import('../shared/panelProtocol').ScorerTagActionMessage) => void = () => undefined, onPort: (port: { postMessage(message: unknown): void }) => void = () => undefined, onSessionPresetEdit: (preset: unknown) => void = () => undefined): PanelStats {
   const stats: PanelStats = { accepted: 0, rejected: 0, pings: 0, snapshots: 0 };
   const ours = panelPortName(nonce);
   runtime.onConnect.addListener((port) => {
@@ -57,6 +57,7 @@ export function listenForPanelPort(runtime: PanelListenerRuntime, nonce: string,
       port.postMessage(pong);
     });
     port.onMessage.addListener((message) => { if (isScorerTagAction(message)) onTagAction(message); });
+    port.onMessage.addListener((message) => { if (isSessionPresetEdit(message)) onSessionPresetEdit(message.preset); });
     port.onMessage.addListener((message) => {
       if (!isPanelSnapshot(message)) return;
       stats.snapshots += 1;

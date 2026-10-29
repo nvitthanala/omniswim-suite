@@ -14,6 +14,7 @@ import { simSnapshotSchema } from './bridgeSchema';
 import type { SimSnapshot } from './bridgeSchema';
 import type { PresetRef } from '../storage/schema';
 import type { RulePreset } from '@omniswim/engine';
+import type { SessionPreset } from '@omniswim/engine';
 
 export const PANEL_PORT_PREFIX = 'osx-panel:';
 
@@ -72,6 +73,7 @@ export interface ScorerTagStateMessage {
     readonly perSwimmer: readonly { readonly swimmerId: string; readonly sessions: readonly { readonly session: { readonly day: number; readonly slot: string }; readonly races: number; readonly eventKeys: readonly string[] }[] }[];
     readonly violations: readonly string[];
   };
+  readonly sessionSchedule?: { readonly ref?: PresetRef; readonly preset?: SessionPreset; readonly error?: string; readonly note?: string };
   readonly error?: string;
 }
 
@@ -84,6 +86,9 @@ export interface ScorerTagActionMessage {
   readonly rulePresetRef?: PresetRef;
 }
 
+export interface SessionPresetEditMessage { readonly kind: 'session-preset-edit'; readonly preset: unknown }
+export type PanelUiActionMessage = ScorerTagActionMessage | SessionPresetEditMessage;
+
 export function isScorerTagState(m: unknown): m is ScorerTagStateMessage {
   if (!m || typeof m !== 'object') return false;
   const v = m as ScorerTagStateMessage;
@@ -95,6 +100,12 @@ export function isScorerTagAction(m: unknown): m is ScorerTagActionMessage {
   const v = m as ScorerTagActionMessage;
   return v.kind === 'scorer-tag-action' && ['choose-team', 'choose-rule-preset', 'set-role', 'clear-role'].includes(v.action) &&
     (v.action === 'choose-rule-preset' ? !!v.rulePresetRef : typeof v.teamId === 'string' && (v.action === 'choose-team' || (typeof v.swimmerId === 'string' && (v.action === 'clear-role' || ['scorer', 'non-scorer', 'exhibition'].includes(String(v.role))))));
+}
+
+export function isSessionPresetEdit(m: unknown): m is SessionPresetEditMessage {
+  if (!m || typeof m !== 'object') return false;
+  const value = m as { kind?: unknown; preset?: unknown };
+  return value.kind === 'session-preset-edit' && typeof value.preset === 'object' && value.preset !== null;
 }
 
 export function isPanelSnapshot(m: unknown): m is PanelSnapshot {

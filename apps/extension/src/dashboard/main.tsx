@@ -12,14 +12,14 @@ import * as React from 'react';
 import { installHarness } from './harness';
 import { listenForPanelPort, readNonce } from './panelPort';
 import { bindTheme } from '../shared/theme';
-import { AdapterError, rescoreSimulator } from '@omniswim/swimcloud/browser';
+import { AdapterError, rescoreSimulator, SIMULATOR_SOURCING } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import type { Results } from '@omniswim/engine';
 import type { ParityReport } from '@omniswim/swimcloud/browser';
 import type { ScorerTag } from '@omniswim/engine';
-import { sessionLoad } from '@omniswim/engine';
-import type { CompleteRulePreset } from '@omniswim/engine';
-import { createChromeChangeBus, createStorageRepo, openOmniDb, readScorerOwnTeam, saveScorerOwnTeam, readScorerRulePreset, saveScorerRulePreset, listRulePresetChoices, resolveRulePreset, watchChanges, toSwimCloudId, readSessionPreset, readSessionLoadPreference } from '../storage';
+import type { RulePreset, LoadPreference, SessionPreset } from '@omniswim/engine';
+import { sessionLoad, relayRepeatsForSchedule, requireComplete, scoreMeet } from '@omniswim/engine';
+import { createChromeChangeBus, createStorageRepo, openOmniDb, readScorerOwnTeam, saveScorerOwnTeam, readScorerRulePreset, saveScorerRulePreset, listRulePresetChoices, resolveRulePreset, watchChanges, toSwimCloudId, readSessionPreset, readSessionLoadPreference, saveEditedSessionPreset } from '../storage';
 import type { StorageRepo } from '../storage';
 import type { ScorerTagActionMessage, ScorerTagStateMessage } from '../shared/panelProtocol';
 import { panelCutTags, scoreScorerTags } from './scorerTagScoring';
@@ -103,9 +103,29 @@ if (!container) throw new Error('dashboard.html has no #root element');
 const host = readHost(location.search);
 let pendingSnapshot: SimSnapshot | null = null;
 let latestPanelPort: { postMessage(message: unknown): void } | null = null;
+let sessionScheduleError: string | undefined;
 let tagRepo: Promise<StorageRepo> | undefined;
 const optimizer = createOptimizerClient();
 const meetKeyFor = (snapshot: SimSnapshot): string => `swimcloud-simulator:${JSON.stringify({ teams: [...new Set(snapshot.teams.map(t => String(t.id)))].sort(), startDate: snapshot.settings.startDate, endDate: snapshot.settings.endDate })}`;
+function buildPlannerState(snapshot: SimSnapshot, meetKey: string, rules: RulePreset | undefined, schedule: SessionPreset | undefined, preference: LoadPreference): ScorerTagStateMessage['planner'] {
+  if (!rules) return { perSwimmer: [], violations: ['Choose the meet\'s OmniSwim rule preset before calculating session load.'] };
+  const rescored = rescoreSimulator(snapshot, { meetKey, snapshotId: 'live-snapshot' });
+  if (rescored.kind === 'not_loaded') return { perSwimmer: [], violations: ['Session load is pending because simulator results are not ready.'] };
+  try {
+    const completeRules = requireComplete(rules);
+    const results = scoreMeet(rescored.adapted.model, rescored.adapted.lineup, [], completeRules, SIMULATOR_SOURCING);
+    const repeated = results.violations.filter(v => v.kind === 'relay_swimmer_repeated');
+    const visibleRepeats = schedule ? relayRepeatsForSchedule(repeated, schedule) : repeated;
+    const repeatWarnings = visibleRepeats.map(v => `Relay rule violation: ${v.swimmerId} appears on multiple relays for ${v.eventKey} (${v.gender}).`);
+    const note = schedule ? [] : ['No schedule chosen; relay event formats are unknown, so relay repeat violations are unfiltered.'];
+    if (!schedule) return { perSwimmer: [], violations: [...repeatWarnings, ...note] };
+    const load = sessionLoad(rescored.adapted.model, rescored.adapted.lineup, results, schedule, preference, completeRules);
+    const loadWarnings = load.violations.map(v => v.kind === 'session_load' ? `Session load: swimmer ${String(v.swimmerId)} has ${v.races} races on day ${v.session.day} (${v.session.slot}); limit ${v.limit}.` : v.kind === 'pending_setting' ? `Pending setting: ${v.setting} for ${v.eventKey}.` : v.kind === 'unscheduled_event' ? `Unscheduled event: ${v.eventKey}.` : `Session load issue: ${v.kind}.`);
+    return { perSwimmer: load.perSwimmer.map(s => ({ swimmerId: String(s.swimmerId), sessions: s.sessions })), violations: [...repeatWarnings, ...loadWarnings] };
+  } catch (cause) {
+    return { perSwimmer: [], violations: [`Session load is pending: ${cause instanceof Error ? cause.message : String(cause)}`] };
+  }
+}
 const repoForTags = (): Promise<StorageRepo> => (tagRepo ??= openOmniDb().then(db => {
   const bus = createChromeChangeBus(chrome.storage as never);
   const repo = createStorageRepo(db, { bus });
@@ -125,17 +145,10 @@ async function publishTagState(error?: string): Promise<void> {
     const choices = await listRulePresetChoices(repo, rulePresetRef);
     const selectedSession = await readSessionPreset(repo, meetKey);
     const loadPreference = await readSessionLoadPreference(repo, meetKey);
-    let planner: ScorerTagStateMessage['planner'];
-    if (!selectedSession.preset) planner = { perSwimmer: [], violations: ['Choose a session preset; no schedule has been selected.'] };
-    else if (!rulePreset.found) planner = { perSwimmer: [], violations: ['Choose the meet\'s OmniSwim rule preset before calculating session load.'] };
-    else {
-      const rescored = rescoreSimulator(snapshot, { meetKey, snapshotId: 'live-snapshot' });
-      if (rescored.kind !== 'scored') planner = { perSwimmer: [], violations: ['Session load is pending because simulator results are not ready.'] };
-      else {
-        const load = sessionLoad(rescored.adapted.model, rescored.adapted.lineup, rescored.results, selectedSession.preset, loadPreference, rulePreset.value as CompleteRulePreset);
-        planner = { perSwimmer: load.perSwimmer.map(s => ({ swimmerId: String(s.swimmerId), sessions: s.sessions })), violations: load.violations.map(v => v.kind === 'session_load' ? `Session load: swimmer ${String(v.swimmerId)} has ${v.races} races on day ${v.session.day} (${v.session.slot}); limit ${v.limit}.` : v.kind === 'pending_setting' ? `Pending setting: ${v.setting} for ${v.eventKey}.` : v.kind === 'unscheduled_event' ? `Unscheduled event: ${v.eventKey}.` : `Session load issue: ${v.kind}.`) };
-      }
-    }
+    const planner = buildPlannerState(snapshot, meetKey, rulePreset.found ? rulePreset.value : undefined, selectedSession.preset, loadPreference);
+    const sessionSchedule: ScorerTagStateMessage['sessionSchedule'] = selectedSession.ref
+      ? { ref: selectedSession.ref, ...(selectedSession.preset ? { preset: selectedSession.preset } : {}), ...(sessionScheduleError ? { error: sessionScheduleError } : {}) }
+      : { note: 'No session preset is chosen for this meet. Choose one in the docked dashboard first.' };
     const tags = rows.map(t => ({ teamId: String(t.teamId), swimmerId: String(t.swimmerId), role: t.role }));
     const selectedOwnTeam = ownTeamId && snapshot.teams.some(team => String(team.id) === String(ownTeamId)) ? String(ownTeamId) : undefined;
     const suggestions = await suggestOpponentRosters(snapshot, meetKey, selectedOwnTeam, tags as ScorerTag[], rulePreset.found ? rulePreset.value : undefined,
@@ -147,7 +160,7 @@ async function publishTagState(error?: string): Promise<void> {
       swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })),
       tags, ownTeamId: selectedOwnTeam, rulePresetRef, rulePreset: rulePreset.found ? rulePreset.value : undefined, rulePresetChoices: choices.map(c => ({ ref: c.ref, label: c.label })),
       scoringTeamSize: scored.scoringTeamSize, warnings: scored.warnings,
-        suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey), planner, ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
+        suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey), planner, sessionSchedule, ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
   } catch (cause) {
     latestPanelPort.postMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
   }
@@ -180,6 +193,18 @@ async function handleTagAction(action: ScorerTagActionMessage): Promise<void> {
     await publishTagState(`Could not save scorer tag: ${cause instanceof Error ? cause.message : String(cause)}`);
   }
 }
+async function handleSessionPresetEdit(raw: unknown): Promise<void> {
+  if (!pendingSnapshot || !latestPanelPort) return;
+  const meetKey = meetKeyFor(pendingSnapshot);
+  try {
+    const repo = await repoForTags();
+    const selected = await readSessionPreset(repo, meetKey);
+    if (!selected.ref) throw new Error('Choose a session preset in the docked dashboard before editing the schedule.');
+    await saveEditedSessionPreset(repo, meetKey, selected.ref, raw);
+    sessionScheduleError = undefined;
+  } catch (cause) { sessionScheduleError = cause instanceof Error ? cause.message : String(cause); }
+  await publishTagState();
+}
 // Top level, before the first render: the overlay connects as soon as the iframe has loaded.
 const nonce = host === 'docked' ? readNonce(location.hash) : null;
 const panel = nonce ? listenForPanelPort(chrome.runtime, nonce, (snapshot) => {
@@ -187,7 +212,7 @@ const panel = nonce ? listenForPanelPort(chrome.runtime, nonce, (snapshot) => {
   window.dispatchEvent(new CustomEvent('osx-snapshot', { detail: snapshot }));
   latestPanelPort?.postMessage({ kind: 'scorer-tags-loading' });
   void publishTagState();
-}, action => { void handleTagAction(action); }, port => { latestPanelPort = port; void publishTagState(); }) : null;
+}, action => { void handleTagAction(action); }, port => { latestPanelPort = port; void publishTagState(); }, raw => { void handleSessionPresetEdit(raw); }) : null;
 // `__OSX_HARNESS__` is false in the production build, so esbuild drops this call and the probe.
 if (__OSX_HARNESS__) installHarness(host ?? 'unknown', panel);
 const root = createRoot(container);

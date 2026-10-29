@@ -1763,6 +1763,7 @@ and `architect` have not accepted them yet. Item 12 decides nothing.
       `relaySwimmerOncePerEvent` absent, because no archived NSISC source says
       NCAA relay rules govern NSISC relays. The picker default moves to
       `nsisc` v5 and `generic` v2.
+    - **Built (2026-10-29).** `relayRepeatsForSchedule(violations, schedule)` removes this violation only for a matching `(eventKey, gender)` scheduled as `prelims-finals`; `gender: 'both'` expands to Men and Women. Timed finals, split finals and events absent from the schedule remain reported because their format is not known to be outside the rule.
 24. **Planner core (P5, 2026-10-29).** `parseSessionPreset` validates
     session ordering, split-format settings and event/gender uniqueness after
     expanding `both`. `sessionLoad` looks up Results with `entryKey`, uses

@@ -122,6 +122,7 @@ export { closeThresholdFromPercent, cutTagForSwim, cutTagFromLegacy, foldEventCu
 export type { EventFormat, LoadPreference, ScheduledEvent, SessionPreset, SessionRef, SessionSlot } from './planner/types';
 export { parseSessionPreset } from './planner/sessionPreset';
 export { sessionLoad } from './planner/sessionLoad';
+export { relayRepeatsForSchedule } from './planner/relayRepeats';
 
 // 3.12 Built-ins
 export type { Builtin, RuleBuiltin } from './rules/builtins';

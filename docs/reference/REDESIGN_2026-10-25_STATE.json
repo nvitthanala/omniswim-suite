@@ -1004,7 +1004,8 @@
       "committed": "a92b6bc0, 2471d341, 816cd9bd, 26b766ee, 1d61a7b8 (engine relay checks, nsisc v5, generic v2)",
       "N": "DONE: 1daca28b planner core (parseSessionPreset, sessionLoad); suppression reason fixed in the next commit.",
       "J4": "DONE: planner UI slice 1 committed (per-meet session preset + load preference, dashboard schedule editor, athlete outlook). Full gates: vitest 2924 (after the suppression fix), npm test 65, golden OK, mutation 413, harness 2/2, lint 0.",
-      "next": "P5 slice 2: Meet schedule editor on the simulator page (F3 acceptance: an order edited on the page shows in the dashboard after reload). Then wire timed-final formats into relay_swimmer_repeated (followUp)."
+      "next": "F3 acceptance met at test level; live UI check in Chrome pending. Next candidates need the user: P4 fetches (LCM swims, wider window, roster season), cap-boundary tie rule, R70 questions.",
+      "J6": "DONE: page Meet schedule editor + relayRepeatsForSchedule. Gates: vitest 2928, npm test 65, golden OK, mutation 413, harness 2/2, lint 0."
     }
   },
   "followUps": [
@@ -1015,7 +1016,7 @@
     "NCAA Rule 5-5-1 (README R72): a preset honors it with entries.exhibitionCounts false (scoreMeet reads it since 2026-10-27). NSISC keeps true (R75).",
     "NCAA Rule 5-7-1-g (README R72): in a timed-final relay a swimmer may swim on only one of the team relays. Add a lineup check.",
     "Conference solve latency (bench 2026-10-29): about 0.7 s for 10 men teams, likely over 1 s with both genders. Show a computing state in the panel, or solve targets in parallel, if the browser measures slower.",
-    "relay_swimmer_repeated (generic v2, Rule 5-7-1-g) fires in prelims-finals relay events too: the engine has no rounds (Codex J3 review, medium; D2 9 item 23). Once sessionLoad schedules exist, pass event formats so the check covers timed finals only."
+    "relay_swimmer_repeated is filtered by relayRepeatsForSchedule only where a session preset is chosen; without one the panel shows it unfiltered with a note."
   ],
   "p3CoreA": {
     "status": "DONE: Codex review accepted (ctx_5b81979038a5, released); advisor audit passed; lead gates green incl. harness 2/2; D2 section 9 records the deviations",

@@ -1,19 +1,19 @@
 import { simulatorSettingsFromRulePreset } from '@omniswim/swimcloud/browser';
 import type { ParityReport, SimulatorRuleSettings } from '@omniswim/swimcloud/browser';
 import type { CompleteRulePreset } from '@omniswim/engine';
-import type { ScorerTagActionMessage, ScorerTagStateMessage } from '../shared/panelProtocol';
+import type { PanelUiActionMessage, ScorerTagStateMessage } from '../shared/panelProtocol';
 
 export interface PagePanel {
   readonly host: HTMLElement;
   update(parity: ParityReport | null, compatibilityError?: string): void;
-  updateScorers(state: ScorerTagStateMessage | null, send: (action: ScorerTagActionMessage) => void): void;
+  updateScorers(state: ScorerTagStateMessage | null, send: (action: PanelUiActionMessage) => void): void;
   setApplyStatus(status: string): void;
   disconnect(): void;
 }
 
 const css = `:host{all:initial;color:var(--osx-fg,CanvasText);font:14px/1.45 system-ui,sans-serif}*{box-sizing:border-box}.panel{border:1px solid var(--osx-border,GrayText);border-radius:8px;background:var(--osx-bg,Canvas);padding:12px;min-width:220px;max-width:300px;color:inherit}.head{display:flex;justify-content:space-between;align-items:center;gap:12px}h2{font-size:16px;margin:0}button,select{font:inherit;color:inherit;background:var(--osx-bg,Canvas);border:1px solid var(--osx-border,GrayText);border-radius:5px;padding:4px 8px;cursor:pointer}.body[hidden]{display:none}.error{color:var(--osx-bad,Mark)}p{margin:10px 0 0}.group{border-top:1px solid var(--osx-border,GrayText);margin-top:10px;padding-top:8px}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;margin:6px 0}.row label{min-width:0}.row select{max-width:140px}.warning{background:var(--osx-warn-bg);color:var(--osx-warn-fg);padding:2px 5px;border-radius:4px}.cut-row{display:grid;grid-template-columns:minmax(55px,1fr) 1fr 1fr;gap:5px;margin:6px 0;font-size:12px}.cut-head{font-weight:600}.cut-tag{overflow-wrap:anywhere}`;
 
-function appendRulePresetPicker(doc: Document, scorer: HTMLElement, state: ScorerTagStateMessage, send: (action: ScorerTagActionMessage) => void, apply: (settings: SimulatorRuleSettings | null) => void, applyStatus: string): void {
+function appendRulePresetPicker(doc: Document, scorer: HTMLElement, state: ScorerTagStateMessage, send: (action: PanelUiActionMessage) => void, apply: (settings: SimulatorRuleSettings | null) => void, applyStatus: string): void {
   const label = doc.createElement('label'); label.textContent = 'OmniSwim scoring rules';
   const select = doc.createElement('select'); select.setAttribute('aria-label', 'Choose OmniSwim scoring rules');
   const blank = doc.createElement('option'); blank.value = ''; blank.textContent = 'Choose a rule preset'; select.append(blank);
@@ -104,6 +104,25 @@ function renderAthleteOutlook(doc: Document, state: ScorerTagStateMessage | null
   return details;
 }
 
+function renderMeetSchedule(doc: Document, state: ScorerTagStateMessage | null, open: boolean, send: (action: PanelUiActionMessage) => void): HTMLElement {
+  const details = doc.createElement('details'); details.open = open; details.dataset.osxMeetSchedule = '';
+  const summary = doc.createElement('summary'); summary.textContent = 'Meet schedule'; details.append(summary);
+  const saved = state?.sessionSchedule;
+  if (saved?.error) { const error = doc.createElement('p'); error.className = 'error'; error.setAttribute('role', 'alert'); error.textContent = saved.error; details.append(error); }
+  if (!saved?.preset) {
+    const prompt = doc.createElement('p'); prompt.textContent = saved?.note ?? 'Choose a session preset in the docked dashboard before editing the schedule.'; details.append(prompt); return details;
+  }
+  const editor = doc.createElement('textarea'); editor.setAttribute('aria-label', 'Edit meet schedule JSON'); editor.rows = 9; editor.style.cssText = 'display:block;width:100%;max-width:100%;font:12px/1.4 monospace;color:inherit;background:var(--osx-bg,Canvas);border:1px solid var(--osx-border,GrayText);';
+  editor.value = JSON.stringify(saved.preset, null, 2); details.append(editor);
+  const save = doc.createElement('button'); save.type = 'button'; save.textContent = 'Save meet schedule';
+  save.addEventListener('click', () => {
+    try { send({ kind: 'session-preset-edit', preset: JSON.parse(editor.value) as unknown }); }
+    catch (error) { const message = doc.createElement('p'); message.className = 'error'; message.setAttribute('role', 'alert'); message.textContent = error instanceof Error ? error.message : String(error); details.querySelector('[data-osx-schedule-local-error]')?.remove(); message.dataset.osxScheduleLocalError = ''; details.append(message); }
+  });
+  details.append(save);
+  return details;
+}
+
 function attach(doc: Document, anchor: Element, apply: (settings: SimulatorRuleSettings | null) => void): PagePanel {
   const host = doc.createElement('aside');
   host.dataset.osxPagePanel = '';
@@ -120,16 +139,19 @@ function attach(doc: Document, anchor: Element, apply: (settings: SimulatorRuleS
   const scorer = doc.createElement('section'); scorer.dataset.osxScorerTags = '';
   let applyStatus = '';
   let lastState: ScorerTagStateMessage | null = null;
-  let lastSend: (action: ScorerTagActionMessage) => void = () => undefined;
+  let lastSend: (action: PanelUiActionMessage) => void = () => undefined;
   toggle.addEventListener('click', () => { const open = toggle.getAttribute('aria-expanded') !== 'true'; toggle.setAttribute('aria-expanded', String(open)); toggle.textContent = open ? 'Collapse' : 'Expand'; body.hidden = !open; });
   heading.append(title, toggle); body.append(parity, error, scorer); panel.append(heading, body); root.append(style, panel);
-  const renderScorers = (state: ScorerTagStateMessage | null, send: (action: ScorerTagActionMessage) => void): void => {
+  // eslint-disable-next-line complexity -- reason: one render pass keeps all existing panel sections synchronized with one trusted state.
+  const renderScorers = (state: ScorerTagStateMessage | null, send: (action: PanelUiActionMessage) => void): void => {
     lastState = state; lastSend = send;
     const cutTagsOpen = scorer.querySelector<HTMLDetailsElement>('[data-osx-cut-tags]')?.open ?? true;
     const outlookOpen = scorer.querySelector<HTMLDetailsElement>('[data-osx-athlete-outlook]')?.open ?? true;
+    const scheduleOpen = scorer.querySelector<HTMLDetailsElement>('[data-osx-meet-schedule]')?.open ?? true;
     scorer.replaceChildren();
     scorer.append(renderCutTags(doc, state, cutTagsOpen));
     scorer.append(renderAthleteOutlook(doc, state, outlookOpen));
+    scorer.append(renderMeetSchedule(doc, state, scheduleOpen, send));
     const title = doc.createElement('h3'); title.textContent = 'Scorer tags'; title.style.cssText = 'font-size:14px;margin:14px 0 6px'; scorer.append(title);
     if (!state) { const waiting = doc.createElement('p'); waiting.textContent = 'Loading saved swimmer tags…'; scorer.append(waiting); return; }
     if (state.error) { const msg = doc.createElement('p'); msg.className = 'error'; msg.dataset.osxTagError = ''; msg.setAttribute('role', 'alert'); msg.textContent = state.error; scorer.append(msg); }
@@ -181,11 +203,11 @@ function attach(doc: Document, anchor: Element, apply: (settings: SimulatorRuleS
 }
 
 /** Watches only the simulator results table; keeps at most one closed-root panel across React replacement. */
-export function mountPagePanel(doc: Document, getState: () => { parity: ParityReport | null; error?: string }, selector = '#simulator table'): { refresh(): void; setScorerState(state: ScorerTagStateMessage): void; onScorerAction(send: (action: ScorerTagActionMessage) => void): void; onApplyRule(apply: (settings: SimulatorRuleSettings | null) => void): void; setApplyStatus(status: string): void; disconnect(): void } {
+export function mountPagePanel(doc: Document, getState: () => { parity: ParityReport | null; error?: string }, selector = '#simulator table'): { refresh(): void; setScorerState(state: ScorerTagStateMessage): void; onScorerAction(send: (action: PanelUiActionMessage) => void): void; onApplyRule(apply: (settings: SimulatorRuleSettings | null) => void): void; setApplyStatus(status: string): void; disconnect(): void } {
   let currentAnchor: Element | null = null;
   let panel: PagePanel | null = null;
   let scorerState: ScorerTagStateMessage | null = null;
-  let scorerAction: (action: ScorerTagActionMessage) => void = () => undefined;
+  let scorerAction: (action: PanelUiActionMessage) => void = () => undefined;
   let applyRule: (settings: SimulatorRuleSettings | null) => void = () => undefined;
   let applyStatus = '';
   const sync = (): void => {
