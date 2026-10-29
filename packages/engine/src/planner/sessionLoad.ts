@@ -17,8 +17,7 @@ const genderList = (g: ScheduledEvent['gender']): readonly Gender[] => g === 'bo
 const sessionKey = (s: SessionRef): string => `${s.day}/${s.slot}`;
 const scheduleKey = (e: EventKey, g: Gender): string => `${e}\u0000${g}`;
 
-// The public accounting path coordinates schedule lookup, rounds, pending settings, and per-session totals.
-// eslint-disable-next-line complexity
+// eslint-disable-next-line complexity -- one pass coordinates schedule lookup, rounds, pending settings and per-session totals (D2 3.11)
 export function sessionLoad(model: MeetModel, lineup: Lineup, results: Results, schedule: SessionPreset, pref: LoadPreference, rules: CompleteRulePreset): SessionLoadResult {
   const violations: Violation[] = [];
   let resolvedByKey: Map<string, { readonly value: number | null }> | undefined;
