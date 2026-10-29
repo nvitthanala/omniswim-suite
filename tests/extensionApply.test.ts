@@ -17,7 +17,8 @@ describe('page rule Apply preview', () => {
     const state: ScorerTagStateMessage = { kind: 'scorer-tag-state', meetKey: 'test', teams: [], swimmers: [], tags: [], warnings: [], rulePresetRef: { kind: 'builtin', id: 'nsisc', version: 4 }, rulePreset: preset };
     panel.setScorerState(state);
     const root = closed as ShadowRoot;
-    expect(root.querySelector('[data-osx-apply-preview]')?.textContent).toContain('Cannot apply');
+    expect(root.querySelector('[data-osx-apply-preview]')?.textContent).toContain('Cannot apply: maxScorersPerTeam: SwimCloud uses the same cap for individual events and relays, but the preset caps differ or one is pending. scorers.relayOverCap: R67 relay exhibition behavior has no page setting.');
+    expect(root.querySelector('[data-osx-apply-preview]')?.textContent).not.toContain('numeric limits only');
     expect(writes).toBe(0);
     (root.querySelector('[aria-label="Apply rule preset to SwimCloud"]') as HTMLButtonElement).click();
     expect(writes).toBe(1);
