@@ -118,8 +118,10 @@ export { convertLcmToScy, LCM_SCY_DIVISOR_SCALE } from './sourcing/lcmToScy';
 export type { CloseThreshold, CutGap, CutTag, CutTier, CutUnknownReason } from './sourcing/cutTag';
 export { closeThresholdFromPercent, cutTagForSwim, cutTagFromLegacy, foldEventCutTags } from './sourcing/cutTag';
 
-// 3.11 Planner (types only in P1)
+// 3.11 Planner
 export type { EventFormat, LoadPreference, ScheduledEvent, SessionPreset, SessionRef, SessionSlot } from './planner/types';
+export { parseSessionPreset } from './planner/sessionPreset';
+export { sessionLoad } from './planner/sessionLoad';
 
 // 3.12 Built-ins
 export type { Builtin, RuleBuiltin } from './rules/builtins';

@@ -661,7 +661,9 @@ export type Violation =
       readonly limit: number }   // P3.core-b, roster eligibility
   | { readonly kind: 'unscheduled_event'; readonly eventKey: EventKey; readonly gender: Gender }
   | { readonly kind: 'pending_setting'; readonly eventKey: EventKey; readonly gender: Gender;
-      readonly setting: 'fastHeatSize' | 'smallFieldSession' | 'cFinal' };   // R35, R44
+      readonly setting: 'fastHeatSize' | 'smallFieldSession' | 'cFinal' | 'abFinalsScorersOnly'
+        | 'individualPoints' | 'relayPoints' | 'diving' }   // R35, R44, pending planner inputs
+  | { readonly kind: 'seed_time_missing'; readonly entryKey: string; readonly eventKey: EventKey; readonly gender: Gender };
 export interface Results {
   readonly payloadVersion: 1;
   readonly teams: readonly { readonly teamId: TeamId; readonly points: number; readonly rank: number }[]; // TeamScore types.ts:231
@@ -847,10 +849,10 @@ export type LoadPreference =
   | { readonly mode: 'off' };
 export function parseSessionPreset(json: unknown): SessionPreset;
 export function sessionLoad(model: MeetModel, lineup: Lineup, results: Results, schedule: SessionPreset,
-  pref: LoadPreference): { readonly violations: readonly Violation[];
+  pref: LoadPreference, rules?: CompleteRulePreset): { readonly violations: readonly Violation[];
   readonly perSwimmer: readonly { readonly swimmerId: SwimmerId;
     readonly sessions: readonly { readonly session: SessionRef; readonly races: number;
-      readonly eventKeys: readonly EventKey[] }[] }[] };
+      readonly eventKeys: readonly EventKey[] }[] }[]; readonly penaltyPoints: number };
 ```
 
 Rules:
@@ -869,7 +871,10 @@ Rules:
     non-scorers only swims the C final.
 - A split timed final (R20, R35) counts 1 race: in `fastHeat` when the
   swimmer's seed rank among all entries, scorers and non-scorers alike, is
-  within `fastHeatSize`, else in `slowHeats`. Do not filter the fast heat by
+  within `fastHeatSize`, else in `slowHeats`. Rank by the lineup's selected
+  seed swim or best matching model swim (relays use their four leg seeds), with
+  lineup order breaking ties. An entry with no seed time emits
+  `seed_time_missing` and receives no guessed heat. Do not filter the fast heat by
   scorer status (R40: the 2026 meet had both in it). When the entries number
   `fastHeatSize` or fewer, the one heat swims in `smallFieldSession`. While a
   needed setting is pending, `sessionLoad` emits a `pending_setting` violation
@@ -879,6 +884,18 @@ Rules:
   `'excluded'`, user-stated (paraphrase), R22.
 - An event in the lineup missing from the schedule gives an
   `unscheduled_event` violation, never zero races.
+- If `rules` is absent, or a needed `abFinalsScorersOnly` / point-table setting
+  is pending, count the prelims but do not guess finals; emit `pending_setting`.
+  A pending diving load preference likewise emits `pending_setting` and does
+  not count that dive. Finals use the matching event's point table (individual,
+  relay or diving). With `abFinalsScorersOnly`, ranks are recalculated among
+  scorers when non-scorers hold places.
+- `penaltyPoints` is an additive return field: in `prefer` mode it is the sum of
+  extra races times `penaltyPointsPerExtraRace`; otherwise it is zero. Relay
+  legs identify swimmers, but one relay entry is one race per swimmer.
+- The optional `rules` argument supplies `scoring.cFinal`, which is not present
+  in `Results`. If non-scorers need a C-final placement and this setting is
+  omitted or pending, emit `pending_setting`; never infer its size.
 
 ### 3.12 Built-ins (`rules/builtins.ts`, `planner/builtins.ts`, `sourcing/builtins.ts`), P1
 
@@ -1746,3 +1763,13 @@ and `architect` have not accepted them yet. Item 12 decides nothing.
       `relaySwimmerOncePerEvent` absent, because no archived NSISC source says
       NCAA relay rules govern NSISC relays. The picker default moves to
       `nsisc` v5 and `generic` v2.
+24. **Planner core (P5, 2026-10-29).** `parseSessionPreset` validates
+    session ordering, split-format settings and event/gender uniqueness after
+    expanding `both`. `sessionLoad` looks up Results with `entryKey`, uses
+    selected/best seed values for split heats, and reports `seed_time_missing`
+    instead of assigning an unseeded entry a heat. Missing or pending scoring
+    settings stay pending; event finals use their matching individual, relay or
+    diving point table, and scorer-only ranks remove held non-scorers. The
+    optional scoring argument supplies settings not carried in `Results`.
+    Added violations: `pending_setting` values for planner scoring inputs and
+    `seed_time_missing`. `penaltyPoints` remains an additive return field.

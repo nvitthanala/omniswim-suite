@@ -364,8 +364,8 @@ New. Nothing in core models days or sessions today (scout finding).
   has one round in one session. Each event's format comes from the session
   preset; every format is editable. Note: Table C lists the 1000 and 1650
   under both prelims and finals, although R17 says distance events are
-  usually timed finals. The `nsisc-table-c` preset follows Table C as written
-  until the user answers Q-D3 (`D2-ENGINE-API.md` section 4).
+  usually timed finals. Q-D3 was answered by README R20: the NSISC 1000 and
+  1650 are split timed finals (D2-ENGINE-API.md sections 3.11, 4 and 6).
 - **Session presets**: saved and reusable. The default is the NSISC order from
   the user's Table C, marked `user-stated`. Every meet's order is editable
   (R16): add, remove or move an event, change its day, slot or format.

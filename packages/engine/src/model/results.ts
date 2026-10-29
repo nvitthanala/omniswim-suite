@@ -244,8 +244,9 @@ export type Violation =
       readonly kind: 'pending_setting';
       readonly eventKey: EventKey;
       readonly gender: Gender;
-      readonly setting: 'fastHeatSize' | 'smallFieldSession' | 'cFinal';
-    };
+      readonly setting: 'fastHeatSize' | 'smallFieldSession' | 'cFinal' | 'abFinalsScorersOnly' | 'individualPoints' | 'relayPoints' | 'diving';
+    }
+  | { readonly kind: 'seed_time_missing'; readonly entryKey: string; readonly eventKey: EventKey; readonly gender: Gender };
 
 export interface Results {
   readonly payloadVersion: 1;
