@@ -68,6 +68,10 @@ export interface ScorerTagStateMessage {
       | { readonly kind: 'absent'; readonly reason: 'pins_over_size' | 'solver_not_optimal' }
       | { readonly kind: 'error'; readonly code: string; readonly subject: string | null };
   }[];
+  readonly planner?: {
+    readonly perSwimmer: readonly { readonly swimmerId: string; readonly sessions: readonly { readonly session: { readonly day: number; readonly slot: string }; readonly races: number; readonly eventKeys: readonly string[] }[] }[];
+    readonly violations: readonly string[];
+  };
   readonly error?: string;
 }
 

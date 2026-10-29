@@ -13,7 +13,7 @@
  * has no row. No type here has a default that stands in for a missing competition value.
  */
 import type { DBSchema, IndexNames, StoreKey, StoreNames, StoreValue } from 'idb';
-import type { Gender, IsoTime as EngineIsoTime, Lineup, MeetSwimmer, RulePreset, SessionPreset } from '@omniswim/engine';
+import type { Gender, IsoTime as EngineIsoTime, Lineup, LoadPreference, MeetSwimmer, RulePreset, SessionPreset } from '@omniswim/engine';
 
 export const DB_NAME = 'omniswim';
 export const DB_VERSION = 2;
@@ -175,6 +175,10 @@ export interface SettingsMap {
   scorerOwnTeamsByMeet: Readonly<Record<string, SwimCloudId>>;
   /** Explicit OmniSwim scoring preset per simulator meet; absent means no scorer scoring. */
   scorerRulePresetsByMeet: Readonly<Record<string, PresetRef>>;
+  /** Explicit session preset choice per simulator meet; absent means no schedule is chosen. */
+  sessionPresetsByMeet: Readonly<Record<string, PresetRef>>;
+  /** Session load preference per simulator meet. */
+  sessionLoadPreferencesByMeet: Readonly<Record<string, LoadPreference>>;
 }
 export interface SettingRecord<K extends keyof SettingsMap = keyof SettingsMap> {
   readonly key: K;

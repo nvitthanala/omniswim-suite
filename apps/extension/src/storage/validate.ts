@@ -23,8 +23,9 @@
  * and `validateLineup` below check shape only (keys, types, enums). Replace them with the engine
  * parsers when P5 lands.
  */
-import { parseProvenance, parseRulePreset, parseSetting, parseTimeText, RulePresetError } from '@omniswim/engine';
+import { parseRulePreset, parseSessionPreset, parseTimeText, RulePresetError } from '@omniswim/engine';
 import type { RulePreset, SessionPreset } from '@omniswim/engine';
+import { parseLoadPreference } from './sessionPreference';
 import { InvalidRecordError } from './errors';
 import type { ValidationIssue } from './errors';
 import { publishedSourceProblem, toolArchiveProblem } from './sourceManifests';
@@ -233,45 +234,10 @@ function rulePresetPayload(raw: unknown, path: string): RulePreset {
 /* SessionPreset (interim shape check, see the file header)                   */
 /* -------------------------------------------------------------------------- */
 
-function sessionRef(raw: unknown, path: string): void {
-  const o = keys(raw, path, ['day', 'slot']);
-  int(o.day, `${path}.day`, 1);
-  oneOf(o.slot, `${path}.slot`, ['morning', 'afternoon', 'evening'] as const);
-}
-
-function eventFormat(raw: unknown, path: string): void {
-  if (!isObj(raw)) return fail(path, 'expected an object');
-  if (raw.kind === 'timed-final') {
-    const o = keys(raw, path, ['kind', 'session']);
-    sessionRef(o.session, `${path}.session`);
-  } else if (raw.kind === 'prelims-finals') {
-    const o = keys(raw, path, ['kind', 'prelims', 'finals']);
-    sessionRef(o.prelims, `${path}.prelims`);
-    sessionRef(o.finals, `${path}.finals`);
-  } else if (raw.kind === 'timed-final-split') {
-    const o = keys(raw, path, ['kind', 'slowHeats', 'fastHeat', 'fastHeatSize', 'smallFieldSession']);
-    sessionRef(o.slowHeats, `${path}.slowHeats`);
-    sessionRef(o.fastHeat, `${path}.fastHeat`);
-    viaEngine(path, () => parseSetting(o.fastHeatSize, `${path}.fastHeatSize`, (v, p) => int(v, p, 1)));
-    viaEngine(path, () => parseSetting(o.smallFieldSession, `${path}.smallFieldSession`, (v, p) => sessionRef(v, p)));
-  } else {
-    fail(`${path}.kind`, 'expected "timed-final", "prelims-finals" or "timed-final-split"');
-  }
-}
-
 export function validateSessionPreset(raw: unknown, path: string): SessionPreset {
-  const o = keys(raw, path, ['payloadVersion', 'provenance', 'events']);
-  payloadVersion(o.payloadVersion, `${path}.payloadVersion`);
-  checkProvenanceSources(o, path);
-  viaEngine(path, () => parseProvenance(o.provenance, `${path}.provenance`));
-  list(o.events, `${path}.events`).forEach((event, i) => {
-    const p = `${path}.events[${i}]`;
-    const e = keys(event, p, ['eventKey', 'gender', 'format']);
-    str(e.eventKey, `${p}.eventKey`);
-    oneOf(e.gender, `${p}.gender`, ['Men', 'Women', 'both'] as const);
-    eventFormat(e.format, `${p}.format`);
-  });
-  return raw as SessionPreset;
+  const parsed = viaEngine(path, () => parseSessionPreset(raw));
+  checkProvenanceSources(parsed, path);
+  return parsed;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -370,6 +336,17 @@ const SETTING_VALUES: { readonly [K in keyof SettingsMap]: (v: unknown, path: st
   scorerRulePresetsByMeet: (v, p) => {
     const map = isObj(v) ? v : fail(p, 'expected an object keyed by meet key');
     for (const [meetKey, ref] of Object.entries(map)) { str(meetKey, `${p} key`); presetRef(ref, `${p}.${meetKey}`); }
+  },
+  sessionPresetsByMeet: (v, p) => {
+    const map = isObj(v) ? v : fail(p, 'expected an object keyed by meet key');
+    for (const [meetKey, ref] of Object.entries(map)) { str(meetKey, `${p} key`); presetRef(ref, `${p}.${meetKey}`); }
+  },
+  sessionLoadPreferencesByMeet: (v, p) => {
+    const map = isObj(v) ? v : fail(p, 'expected an object keyed by meet key');
+    for (const [meetKey, preference] of Object.entries(map)) {
+      str(meetKey, `${p} key`);
+      try { parseLoadPreference(preference); } catch (error) { fail(`${p}.${meetKey}`, error instanceof Error ? error.message : String(error)); }
+    }
   },
 };
 

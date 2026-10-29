@@ -628,6 +628,7 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
+    "RESUME (if interrupted 2026-10-29 afternoon): read N2 and J4 reports (orca orchestration inbox); review sessionLoad.ts against D2 3.11; rebuild + full gates; commit planner core, then planner UI.",
     "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
     "step 2: git status. Delete tmp-flake-load*.txt (Cursor K scratch, untracked) once K reports. Leave omniswim-suite/data/ out of commits.",
     "step 3: npm run build:extension, then the full gates (lint, vitest --maxWorkers=4, npm test, golden, mutation, harness). extensionBuildFreshness should go green after the rebuild.",
@@ -1000,7 +1001,10 @@
         "ANSWERED: nsisc v5 yes; archive rule book (already archived b905e878); Apply writes 0 for unlimited.",
         "R70 questions asked again 2026-10-29."
       ],
-      "committed": "a92b6bc0 (J extension + lead fixes), 2471d341 (K flake), 816cd9bd (J2 Apply 0=unlimited), 26b766ee (bench + Cursor routing), engine L next"
+      "committed": "a92b6bc0, 2471d341, 816cd9bd, 26b766ee, 1d61a7b8 (engine relay checks, nsisc v5, generic v2)",
+      "N": "DONE: 1daca28b planner core (parseSessionPreset, sessionLoad); suppression reason fixed in the next commit.",
+      "J4": "DONE: planner UI slice 1 committed (per-meet session preset + load preference, dashboard schedule editor, athlete outlook). Full gates: vitest 2924 (after the suppression fix), npm test 65, golden OK, mutation 413, harness 2/2, lint 0.",
+      "next": "P5 slice 2: Meet schedule editor on the simulator page (F3 acceptance: an order edited on the page shows in the dashboard after reload). Then wire timed-final formats into relay_swimmer_repeated (followUp)."
     }
   },
   "followUps": [

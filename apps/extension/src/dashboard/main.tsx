@@ -17,7 +17,9 @@ import type { SimSnapshot } from '../shared/bridgeSchema';
 import type { Results } from '@omniswim/engine';
 import type { ParityReport } from '@omniswim/swimcloud/browser';
 import type { ScorerTag } from '@omniswim/engine';
-import { createChromeChangeBus, createStorageRepo, openOmniDb, readScorerOwnTeam, saveScorerOwnTeam, readScorerRulePreset, saveScorerRulePreset, listRulePresetChoices, resolveRulePreset, watchChanges, toSwimCloudId } from '../storage';
+import { sessionLoad } from '@omniswim/engine';
+import type { CompleteRulePreset } from '@omniswim/engine';
+import { createChromeChangeBus, createStorageRepo, openOmniDb, readScorerOwnTeam, saveScorerOwnTeam, readScorerRulePreset, saveScorerRulePreset, listRulePresetChoices, resolveRulePreset, watchChanges, toSwimCloudId, readSessionPreset, readSessionLoadPreference } from '../storage';
 import type { StorageRepo } from '../storage';
 import type { ScorerTagActionMessage, ScorerTagStateMessage } from '../shared/panelProtocol';
 import { panelCutTags, scoreScorerTags } from './scorerTagScoring';
@@ -25,6 +27,7 @@ import { createOptimizerClient } from './optimizerClient';
 import { suggestOpponentRosters, suggestedTags } from './suggestedRosters';
 import './dashboard.css';
 import { postDockedParityReport } from './parity';
+import { SessionPlannerEditor } from './sessionPlannerEditor';
 
 export type DashboardHost = 'tab' | 'docked';
 
@@ -88,6 +91,7 @@ export function App({ host }: { host: DashboardHost | null }) {
             }))}</ul></div>)}
         </>}
       </section>}
+      {host === 'docked' && view.kind === 'scored' && <SessionPlannerEditor snapshot={view.snapshot} repoForMeet={repoForTags} />}
     </main>
   );
 }
@@ -119,6 +123,19 @@ async function publishTagState(error?: string): Promise<void> {
     const rulePresetRef = await readScorerRulePreset(repo, meetKey);
     const rulePreset = rulePresetRef ? await resolveRulePreset(repo, rulePresetRef) : { found: false as const };
     const choices = await listRulePresetChoices(repo, rulePresetRef);
+    const selectedSession = await readSessionPreset(repo, meetKey);
+    const loadPreference = await readSessionLoadPreference(repo, meetKey);
+    let planner: ScorerTagStateMessage['planner'];
+    if (!selectedSession.preset) planner = { perSwimmer: [], violations: ['Choose a session preset; no schedule has been selected.'] };
+    else if (!rulePreset.found) planner = { perSwimmer: [], violations: ['Choose the meet\'s OmniSwim rule preset before calculating session load.'] };
+    else {
+      const rescored = rescoreSimulator(snapshot, { meetKey, snapshotId: 'live-snapshot' });
+      if (rescored.kind !== 'scored') planner = { perSwimmer: [], violations: ['Session load is pending because simulator results are not ready.'] };
+      else {
+        const load = sessionLoad(rescored.adapted.model, rescored.adapted.lineup, rescored.results, selectedSession.preset, loadPreference, rulePreset.value as CompleteRulePreset);
+        planner = { perSwimmer: load.perSwimmer.map(s => ({ swimmerId: String(s.swimmerId), sessions: s.sessions })), violations: load.violations.map(v => v.kind === 'session_load' ? `Session load: swimmer ${String(v.swimmerId)} has ${v.races} races on day ${v.session.day} (${v.session.slot}); limit ${v.limit}.` : v.kind === 'pending_setting' ? `Pending setting: ${v.setting} for ${v.eventKey}.` : v.kind === 'unscheduled_event' ? `Unscheduled event: ${v.eventKey}.` : `Session load issue: ${v.kind}.`) };
+      }
+    }
     const tags = rows.map(t => ({ teamId: String(t.teamId), swimmerId: String(t.swimmerId), role: t.role }));
     const selectedOwnTeam = ownTeamId && snapshot.teams.some(team => String(team.id) === String(ownTeamId)) ? String(ownTeamId) : undefined;
     const suggestions = await suggestOpponentRosters(snapshot, meetKey, selectedOwnTeam, tags as ScorerTag[], rulePreset.found ? rulePreset.value : undefined,
@@ -130,7 +147,7 @@ async function publishTagState(error?: string): Promise<void> {
       swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })),
       tags, ownTeamId: selectedOwnTeam, rulePresetRef, rulePreset: rulePreset.found ? rulePreset.value : undefined, rulePresetChoices: choices.map(c => ({ ref: c.ref, label: c.label })),
       scoringTeamSize: scored.scoringTeamSize, warnings: scored.warnings,
-        suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey), ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
+        suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey), planner, ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
   } catch (cause) {
     latestPanelPort.postMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
   }

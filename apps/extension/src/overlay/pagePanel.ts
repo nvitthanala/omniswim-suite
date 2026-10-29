@@ -87,6 +87,23 @@ function renderCutTags(doc: Document, state: ScorerTagStateMessage | null, open:
   return details;
 }
 
+function renderAthleteOutlook(doc: Document, state: ScorerTagStateMessage | null, open: boolean): HTMLElement {
+  const details = doc.createElement('details'); details.open = open; details.dataset.osxAthleteOutlook = '';
+  const summary = doc.createElement('summary'); summary.textContent = 'Athlete outlook'; details.append(summary);
+  const planner = state?.planner;
+  if (!planner) { const pending = doc.createElement('p'); pending.textContent = 'Choose a session preset and scoring rules to calculate the outlook.'; details.append(pending); return details; }
+  for (const warning of planner.violations) { const row = doc.createElement('p'); row.className = 'warning'; row.textContent = warning; details.append(row); }
+  for (const item of planner.perSwimmer) {
+    const swimmer = state?.swimmers.find(s => s.id === item.swimmerId);
+    const group = doc.createElement('div'); group.className = 'group';
+    const heading = doc.createElement('strong'); heading.textContent = swimmer?.name ?? item.swimmerId; group.append(heading);
+    if (item.sessions.length === 0) { const pending = doc.createElement('p'); pending.textContent = 'No scheduled sessions are available for this swimmer.'; group.append(pending); }
+    for (const session of item.sessions) { const row = doc.createElement('p'); row.textContent = `Day ${session.session.day}, ${session.session.slot}: ${session.races} races · ${session.eventKeys.join(', ')}`; group.append(row); }
+    details.append(group);
+  }
+  return details;
+}
+
 function attach(doc: Document, anchor: Element, apply: (settings: SimulatorRuleSettings | null) => void): PagePanel {
   const host = doc.createElement('aside');
   host.dataset.osxPagePanel = '';
@@ -109,8 +126,10 @@ function attach(doc: Document, anchor: Element, apply: (settings: SimulatorRuleS
   const renderScorers = (state: ScorerTagStateMessage | null, send: (action: ScorerTagActionMessage) => void): void => {
     lastState = state; lastSend = send;
     const cutTagsOpen = scorer.querySelector<HTMLDetailsElement>('[data-osx-cut-tags]')?.open ?? true;
+    const outlookOpen = scorer.querySelector<HTMLDetailsElement>('[data-osx-athlete-outlook]')?.open ?? true;
     scorer.replaceChildren();
     scorer.append(renderCutTags(doc, state, cutTagsOpen));
+    scorer.append(renderAthleteOutlook(doc, state, outlookOpen));
     const title = doc.createElement('h3'); title.textContent = 'Scorer tags'; title.style.cssText = 'font-size:14px;margin:14px 0 6px'; scorer.append(title);
     if (!state) { const waiting = doc.createElement('p'); waiting.textContent = 'Loading saved swimmer tags…'; scorer.append(waiting); return; }
     if (state.error) { const msg = doc.createElement('p'); msg.className = 'error'; msg.dataset.osxTagError = ''; msg.setAttribute('role', 'alert'); msg.textContent = state.error; scorer.append(msg); }
