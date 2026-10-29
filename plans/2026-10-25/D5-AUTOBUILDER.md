@@ -669,3 +669,70 @@ A run button, the result kinds, the diff, the explanations, and the proof (prove
 3. D2 3.11 shows `rules?` as optional and describes the behavior when it is absent. `sessionLoad.ts:21` requires `rules`. The `rules ?`/`!rules` branches at `:75-77` and `:93` cannot run under the type.
 4. `optimizerResult.ts:2-3` discards incumbents by design. A gap needs the Model API (section 11).
 5. Simulator swims carry no date, so robust mode depends on the history fetch (R50, R68).
+
+## D5 amendment 1 (2026-10-29): budget, solve order, A1 rulings
+
+This amendment replaces D5 6.3 items 3 to 5. It adds 6.4 and 6.5, and it changes `AUTOBUILD_DEFAULT_LIMITS`.
+
+### 6.3 (replacement) Solve sequence
+
+`timeLimitSeconds` is **wall time**. It runs from entry to `autoBuild` until it returns, and it includes column evaluation, every solve and the gate. Measure it with `req.clock` (milliseconds, monotonic; default `performance.now`). Set the deadline to `start + timeLimitSeconds·1000`, and keep a gate reserve `R_g = 1000 ms`. Let `left()` be `deadline − R_g − clock()`. HiGHS overshoots its own limit (13.2 s on a 9.6 s limit), so every solve gets `time_limit = 0.75 · allotment / 1000`. Skip any stage whose allotment is below 200 ms.
+
+1. **Restricted solve first: the safety net.** It uses the K-columns and fixes `o` and `oR` at 0. Its allotment is `0.5 · left()`. The current column is present, so any Optimal result or incumbent is a real lineup. A verified incumbent passes the gate with `method: 'mip-incumbent'`. That is allowed from A1 on. The local search stays in A5.
+2. **Relaxed solve.** Its allotment is `left()`.
+   - Optimal with no outside term active: the result is proven. If its objective is above the restricted solve's, its solution replaces it.
+   - Otherwise: `UB` is the objective, or `dualBound` at the time limit.
+3. **Refinement round.** It runs only if the estimate fits. The estimate is (new columns × measured milliseconds per column so far) + 1 s, and it must be below `left()`.
+   - Each refined event gains at most 2 of its active outside swimmers, up to `K_max`, or doubles T up to `T_max`.
+   - Then repeat steps 1 and 2 on the grown model: restricted first, then relaxed.
+   - A round never discards the best real lineup found so far.
+4. **Tie-break.** It runs only if `left() ≥ 2000 ms`, with allotment `left()`. On a time limit, keep the lineup from before the tie-break and record the stage.
+5. **Gate and guard** (section 8) on the best real lineup. With no real lineup, return `unchanged` with `none_found_within_limits`.
+
+Order of preference for the final lineup: the proven relaxed solution, then the best restricted Optimal result, then the best verified incumbent.
+
+### 6.4 Default limits
+
+`AUTOBUILD_DEFAULT_LIMITS = { candidatesPerEvent: 8, maxCandidatesPerEvent: 10, relaySquadsPerEvent: 12, maxRelaySquadsPerEvent: 24, refineRounds: 1, timeLimitSeconds: 10 }`
+
+Why each value changed:
+- **The order.** On config C (team 58, Men, 22 events, 42 own swimmers), `refineRounds: 0` returned `improved` (43 to 1214) in 2.3 s of wall time. The restricted-first order therefore secures a real lineup early, and the rest of the budget goes to the bound.
+- **One round.** One refinement round proved 1251, but only with a 30 s budget. Two rounds used up 19 s and returned nothing. So the default is one round, run only when it fits.
+- **`K_max` 10.** It caps a refined event at 1,024 columns, against 4,096 at 12. Growth to `K_max` 12 drove the roughly 5 s of evaluation.
+
+The F4 target of "a 10-team, 20-event meet under 10 s" stays. With these defaults, a positive gap within the limit is acceptable, and the result reports it.
+
+### 6.5 Rulings on the A1 deviations
+
+- **(a) Accepted.** Z2 becomes `z[s] − Σ_e x[s,e] − Σ_e o[s,e] − Σ_e w[s,e] ≤ 0`. Without the `o` and `w` terms, a free swimmer with only outside pairs is forced to `z = 0`. The relaxation would then not be a relaxation, and `UB` would be invalid. Add the case to `boundCoversOptimum`.
+- **(b) Accepted.** The witness checks (6.3.6 infeasible means mismatch; 6.3.7 optimum below current means mismatch) apply only when the current lineup is gate-feasible and also fits the strict diver weight (4.4). A lineup that is gate-feasible but breaks the strict rule is guarded normally. If the MIP best is not above it, return `unchanged` with `none_found_within_limits`. The proof then lists `strict_diver_weight` as binding (a new boolean `binding` on the restriction entry, which is additive).
+- **(c) Accepted.** The 4.9 tie-break is minimal within the columns actually built. It is a tie-break, not a guarantee, so say so in the proof doc comment. The current column is never pruned, so a zero-change tie is always reachable.
+- **(d) Accepted.** This is D5 12.1 as written. A2 removes it.
+- **(e) Keep D5's limit: at most 4 decimals (`decScale ≤ 10^4`).** `rosterSuggest.ts:163` multiplies while `decScale ≤ 10000`, so it accepts 5 decimals (scale 10^5), while its error message says "more than 4". That is a `rosterSuggest` finding, not a reason to change D5. The lead should record it, and `rosterSuggest` stays untouched in P6.
+- **(f) Accepted, all additive:**
+  - `MipSolution.seconds?`: the solver-reported time, diagnostic only. Budgeting uses the clock.
+  - `AutoBuildRequest.clock?: () => number`.
+  - Proof timing fields are null only for a stage that did not run.
+  - Restriction `'fixed_relays'`: A1 only, and removed in A2.
+
+### 8.5 (added acceptance)
+
+6. `defaultLimitsConfigC`: config C through `buildSnapshot` and `adaptSimulatorSnapshot`, `nsisc` v5, own team 58, Men, max-own, `AUTOBUILD_DEFAULT_LIMITS`, the real clock, and the Node `MipSolve`. Expect:
+   - kind `improved`;
+   - `evaluation.ownPoints` at least the own points of the same request with `refineRounds: 0`, run with `timeLimitSeconds: 60` in the same test;
+   - `proof.bestFound ≤ proof.upperBound`;
+   - wall time `≤ (timeLimitSeconds + 1) · 1000` ms.
+7. `restrictedFirstSafetyNet`: a stub solver returns `Optimal` for the restricted solve and `'Time limit reached'` with no incumbent for the relaxed solve. Expect `improved`, with proof status `unknown` or `gap`.
+8. `clockBudget`: a fake clock advances 1 s per evaluated event and 2 s per solve. Expect:
+   - every `time_limit` passed is at most `0.75 · allotment`;
+   - stages past the deadline are skipped, in the order refinement, then tie-break;
+   - the result still holds the restricted lineup.
+9. `tieBreakSkippedWhenLate`: with `left() < 2000` ms after the relaxed solve, no tie-break solve is issued, and `proof.solves` shows no `'tie-break'` stage.
+10. `incumbentGated`: a stub restricted solve returns `'Time limit reached'` with an incumbent. Expect `method: 'mip-incumbent'`. A tampered incumbent throws `model_mismatch`.
+
+### D5 amendment 1a (2026-10-29, lead rulings on the A1 build)
+
+- **Clock.** The engine stays pure: the purity gate bans `performance.now` in `packages/engine`. `req.clock` is injected by the caller, and the extension passes `performance.now`. With no clock, the budget counts only the solver-reported seconds (`MipSolution.seconds`). The proof's evaluation and gate timings are then null, which is the one other case where a timing may be null.
+- **Final lineup.** The highest objective that passes the gate wins. The order in 6.3 (proven relaxed, then restricted Optimal, then verified incumbent) breaks ties only. A verified incumbent passes the same gate (8.3) as an optimum, so returning a lower-scoring Optimal lineup would throw away points.
+- **`binding`.** It lives in `proof.searchSpace.restrictionStatus: { restriction, binding }[]`. `restrictions` stays a string array.
+- **Proof of a gated incumbent.** A verified incumbent whose objective equals a valid upper bound is proven optimal, with `proof.status` `'proven_optimal'` and `method` still `'mip-incumbent'`. The bound, not the solver status, carries the proof (section 0 item 3). "An incumbent is never an optimum" means the engine never trusts a timed-out solve's status. It does not rule out a certificate. (Codex J9 review raised the case; the lead ruled it correct.)

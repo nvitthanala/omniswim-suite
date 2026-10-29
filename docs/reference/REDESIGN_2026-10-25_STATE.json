@@ -582,7 +582,7 @@
     {
       "id": "P6",
       "name": "AutoBuilder (F4)",
-      "status": "spec written: plans/2026-10-25/D5-AUTOBUILDER.md (architect). Slices A1-A9 + U1. Next: A1 (max-own, individual+diving, caps, size)."
+      "status": "A1 DONE (this commit): max-own AutoBuilder, D5 amendment 1 and 1a. Config C defaults: improved in 7.4-8.0 s, 1219-1243 points, UB 1299. Gates: vitest 2960, npm test 65, golden OK, mutation 413, harness 2/2, lint 0. Codex J8 + J9 reviews. Next: A2 relays."
     },
     {
       "id": "P7",
@@ -628,6 +628,7 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
+    "RESUME after the limit: 1) git status; diff packages/engine/src/autobuilder, tests/engineAutoBuild.test.ts, tests/helpers/nodeMipSolve.ts, plans/2026-10-25/D5-AUTOBUILDER.md (amendment 1 appended, uncommitted). 2) If the executor report is missing, resume it with SendMessage (A1 agent) rather than re-briefing. 3) npm run build:extension, then full gates; check defaultLimitsConfigC returns improved within 11 s, 3 runs. 4) Commit A1 + amendment as one commit (Codex J8 review: no defect, on the pre-amendment diff; re-review the amendment diff with Codex J terminal term_a6fd5787 first). 5) Next: D5 slice A2 (relays). Open user questions: D5 14.1-14.5, R70 x3, P4 fetch approval, cap-boundary tie rule.",
     "RESUME (if interrupted 2026-10-29 afternoon): read N2 and J4 reports (orca orchestration inbox); review sessionLoad.ts against D2 3.11; rebuild + full gates; commit planner core, then planner UI.",
     "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
     "step 2: git status. Delete tmp-flake-load*.txt (Cursor K scratch, untracked) once K reports. Leave omniswim-suite/data/ out of commits.",
@@ -866,11 +867,10 @@
     "d22375ee Show simulator parity in the docked panel"
   ],
   "lowPriority": {
-    "since": "2026-10-27",
-    "trigger": "Budget tier critical: 7d 91% used, resets in about 37h; 5h 28%, resets in 54m",
-    "plan": "no new Claude agents; Codex via Orca only for builds; lead commits and verifies only",
-    "resumePoint": "D4.apply committed; waiting on the user for the partial-apply or 0=unlimited answer, then R70 questions and followUps",
-    "endedAt": "2026-10-29: user reported the Claude limits reset; Cursor quota full"
+    "since": "2026-10-29 evening",
+    "trigger": "Claude usage limit reached mid-turn",
+    "resumePoint": "A1 + D5 amendment 1 uncommitted. Executor (agent A1) was applying the amendment and running mutation checks when the limit hit; it may have finished in the tree.",
+    "endedAt": "2026-10-29: limit reset; executor resumed and finished A1"
   },
   "codexRuns": [
     {
@@ -1019,7 +1019,8 @@
     "relay_swimmer_repeated is filtered by relayRepeatsForSchedule only where a session preset is chosen; without one the panel shows it unfiltered with a note.",
     "D5 15.1: results.ts:980 comment vs :1002 code disagree on who counts as a diver (rosterSuggest.ts:726 copies the code). User question D5 14.4.",
     "D5 15.2: sessionLoad penaltyPoints sums every team (sessionLoad.ts:130-139). Never show it as the own team penalty.",
-    "D5 15.3: D2 3.11 still shows rules? optional; sessionLoad requires rules. Dead rules? branches at sessionLoad.ts:75-77, :93."
+    "D5 15.3: D2 3.11 still shows rules? optional; sessionLoad requires rules. Dead rules? branches at sessionLoad.ts:75-77, :93.",
+    "rosterSuggest.ts:163 accepts 5-decimal point tables (scale 10^5) while its message says more than 4 (D5 amendment 1 (e)). Not reproduced."
   ],
   "p3CoreA": {
     "status": "DONE: Codex review accepted (ctx_5b81979038a5, released); advisor audit passed; lead gates green incl. harness 2/2; D2 section 9 records the deviations",

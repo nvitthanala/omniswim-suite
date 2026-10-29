@@ -98,6 +98,25 @@ export { ScoreMeetError, scoreMeet, stripResultsDisplay } from './model/results'
 export type { LpSolution, LpSolve, RosterSuggestErrorCode, RosterSuggestRequest, RosterSuggestion } from './model/rosterSuggest';
 export { RosterSuggestError, suggestScoringRosters } from './model/rosterSuggest';
 
+// 3.15 AutoBuilder (D5), slice A1: the `max-own` objective. The solver is injected: the engine takes no `highs` dependency.
+export type {
+  AutoBuildErrorCode,
+  AutoBuildEvaluation,
+  AutoBuildExplanation,
+  AutoBuildLimits,
+  AutoBuildObjective,
+  AutoBuildProof,
+  AutoBuildProposal,
+  AutoBuildRequest,
+  AutoBuildRestriction,
+  AutoBuildResult,
+  EntryChange,
+  MipSolution,
+  MipSolve,
+  RivalRef,
+} from './autobuilder';
+export { AUTOBUILD_DEFAULT_LIMITS, AUTOBUILD_DEFAULT_ROBUST, AutoBuildError, autoBuild } from './autobuilder';
+
 // 3.10 Table D types. Retired from use (R58): no function reads them.
 export type { TableDPreset, TableDRow } from './sourcing/tableD';
 
