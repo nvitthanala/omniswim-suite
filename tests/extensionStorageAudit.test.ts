@@ -21,7 +21,13 @@ import { buildOldDb, freshFactory, readFixture, steppingClock } from './helpers/
 import type { DbFixture } from './helpers/extensionDb';
 import { fixtureRecord, setAt, seedFromFixture, withoutRev } from './helpers/extensionRecords';
 
-const tick = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
+// fake-indexeddb finishes the upgrade via setImmediate. A bare setTimeout(0) races that
+// queue under load: the timer can resume while the versionchange tx is still active (or only
+// inactive), so createObjectStore may succeed or abort may roll the version back.
+const tick = (): Promise<void> =>
+  new Promise(resolve => {
+    setImmediate(() => setTimeout(resolve, 0));
+  });
 
 describe('audit 1: a broken migration never yields an open database', () => {
   const lateStep: Migration = {
@@ -38,7 +44,9 @@ describe('audit 1: a broken migration never yields an open database', () => {
   it('a migration that awaits a timer makes openOmniDb reject, and every later open rejects too', async () => {
     const factory = freshFactory();
     const chain = [...MIGRATIONS, lateStep];
-    await expect(openOmniDb({ factory, version: DB_VERSION + 1, migrations: chain, now: steppingClock() })).rejects.toThrow();
+    await expect(openOmniDb({ factory, version: DB_VERSION + 1, migrations: chain, now: steppingClock() })).rejects.toMatchObject({
+      name: 'InvalidStateError',
+    });
     // The database is now at the late version with meta.db one behind. It is never repaired and never deleted, so it never opens.
     await expect(openOmniDb({ factory, version: DB_VERSION + 1, migrations: chain })).rejects.toThrow(/schemaVersion/);
   });
