@@ -562,27 +562,27 @@
     {
       "id": "P2",
       "name": "Read-only overlay + parity",
-      "status": "pending"
+      "status": "done: overlay, parity, in-page panel (d22375ee, ecb9960f)"
     },
     {
       "id": "P3",
       "name": "Rules (F2)",
-      "status": "pending"
+      "status": "mostly done: presets incl. nsisc v5/generic v2, scorer tags, suggested rosters, Apply (refuses NSISC: one page cap, R67). Open: R70 questions, cap-boundary tie rule"
     },
     {
       "id": "P4",
       "name": "Data sourcing (F1)",
-      "status": "pending"
+      "status": "partial: cut tags (51ab931e), LCM to SCY engine (8d188a27). Blocked on user fetch approval: LCM swims, wider window, roster season, relay splits"
     },
     {
       "id": "P5",
       "name": "Meet planner (F3)",
-      "status": "pending"
+      "status": "done at test level: 1daca28b, bad0de6f, 6ce422bd. Live UI check pending"
     },
     {
       "id": "P6",
       "name": "AutoBuilder (F4)",
-      "status": "pending"
+      "status": "spec written: plans/2026-10-25/D5-AUTOBUILDER.md (architect). Slices A1-A9 + U1. Next: A1 (max-own, individual+diving, caps, size)."
     },
     {
       "id": "P7",
@@ -1016,7 +1016,10 @@
     "NCAA Rule 5-5-1 (README R72): a preset honors it with entries.exhibitionCounts false (scoreMeet reads it since 2026-10-27). NSISC keeps true (R75).",
     "NCAA Rule 5-7-1-g (README R72): in a timed-final relay a swimmer may swim on only one of the team relays. Add a lineup check.",
     "Conference solve latency (bench 2026-10-29): about 0.7 s for 10 men teams, likely over 1 s with both genders. Show a computing state in the panel, or solve targets in parallel, if the browser measures slower.",
-    "relay_swimmer_repeated is filtered by relayRepeatsForSchedule only where a session preset is chosen; without one the panel shows it unfiltered with a note."
+    "relay_swimmer_repeated is filtered by relayRepeatsForSchedule only where a session preset is chosen; without one the panel shows it unfiltered with a note.",
+    "D5 15.1: results.ts:980 comment vs :1002 code disagree on who counts as a diver (rosterSuggest.ts:726 copies the code). User question D5 14.4.",
+    "D5 15.2: sessionLoad penaltyPoints sums every team (sessionLoad.ts:130-139). Never show it as the own team penalty.",
+    "D5 15.3: D2 3.11 still shows rules? optional; sessionLoad requires rules. Dead rules? branches at sessionLoad.ts:75-77, :93."
   ],
   "p3CoreA": {
     "status": "DONE: Codex review accepted (ctx_5b81979038a5, released); advisor audit passed; lead gates green incl. harness 2/2; D2 section 9 records the deviations",
