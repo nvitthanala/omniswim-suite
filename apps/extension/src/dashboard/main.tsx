@@ -24,6 +24,7 @@ import { panelCutTags, scoreScorerTags } from './scorerTagScoring';
 import { createOptimizerClient } from './optimizerClient';
 import { suggestOpponentRosters, suggestedTags } from './suggestedRosters';
 import './dashboard.css';
+import { postDockedParityReport } from './parity';
 
 export type DashboardHost = 'tab' | 'docked';
 
@@ -59,7 +60,7 @@ export function App({ host }: { host: DashboardHost | null }) {
   React.useEffect(() => {
     if (host !== 'docked' || view.kind !== 'scored') return;
     // The content script accepts this only from its exact docked iframe window and extension origin.
-    window.parent.postMessage({ source: 'osx-docked-dashboard', kind: 'parity-report', report: view.parity }, '*');
+    postDockedParityReport(window.parent, view.parity);
   }, [host, view]);
   return (
     <main className="osx-dashboard">
@@ -117,7 +118,7 @@ async function publishTagState(error?: string): Promise<void> {
     const ownTeamId = await readScorerOwnTeam(repo, meetKey);
     const rulePresetRef = await readScorerRulePreset(repo, meetKey);
     const rulePreset = rulePresetRef ? await resolveRulePreset(repo, rulePresetRef) : { found: false as const };
-    const choices = await listRulePresetChoices(repo);
+    const choices = await listRulePresetChoices(repo, rulePresetRef);
     const tags = rows.map(t => ({ teamId: String(t.teamId), swimmerId: String(t.swimmerId), role: t.role }));
     const selectedOwnTeam = ownTeamId && snapshot.teams.some(team => String(team.id) === String(ownTeamId)) ? String(ownTeamId) : undefined;
     const suggestions = await suggestOpponentRosters(snapshot, meetKey, selectedOwnTeam, tags as ScorerTag[], rulePreset.found ? rulePreset.value : undefined,

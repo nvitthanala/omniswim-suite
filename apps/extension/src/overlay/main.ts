@@ -10,6 +10,7 @@ import { mountShadowHost, startOverlay, writeSimulatorSettings } from './overlay
 import { mountPagePanel } from './pagePanel';
 import { isScorerTagState } from '../shared/panelProtocol';
 import type { ParityReport } from '@omniswim/swimcloud/browser';
+import { trustedParityReport } from './parity';
 
 const overlayHost = mountShadowHost(document);
 const panel = mountDockedPanel(overlayHost, chrome.runtime);
@@ -34,12 +35,9 @@ pagePanel.onApplyRule((settings) => {
 const syncCompatibilityError = (): void => { latestError = overlayHost.dataset.osxCompatibilityError; pagePanel.refresh(); };
 new MutationObserver(syncCompatibilityError).observe(overlayHost, { attributes: true, attributeFilter: ['data-osx-compatibility-error'] });
 window.addEventListener('message', (event: MessageEvent) => {
-  if (event.source !== panel.iframe.contentWindow || event.origin !== new URL(panel.url).origin) return;
-  const data = event.data as { source?: unknown; kind?: unknown; report?: unknown } | null;
-  if (!data || data.source !== 'osx-docked-dashboard' || data.kind !== 'parity-report' || typeof data.report !== 'object' || data.report === null) return;
-  const report = data.report as { kind?: unknown; matches?: unknown; differingEvents?: unknown };
-  if (report.kind !== 'not_observed' && !(report.kind === 'compared' && typeof report.matches === 'boolean' && Array.isArray(report.differingEvents))) return;
-  latestParity = data.report as ParityReport;
+  const report = trustedParityReport(event.source, event.origin, panel.iframe.contentWindow, new URL(chrome.runtime.getURL('/')).origin, event.data);
+  if (!report) return;
+  latestParity = report;
   pagePanel.refresh();
 });
 startOverlay(window, console, (snapshot) => panel.sendSnapshot(snapshot), () => pagePanel.setApplyStatus('Acknowledged: simulator settings match the requested values.'));

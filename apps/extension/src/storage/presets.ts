@@ -16,7 +16,7 @@ import type { PresetRef, RulePresetRecord, SessionPresetRecord } from './schema'
 
 /** One row of a preset picker. Built-ins come first, then the user's presets by name. */
 export type PresetChoice =
-  | { readonly source: 'builtin'; readonly ref: Extract<PresetRef, { kind: 'builtin' }>; readonly label: string }
+  | { readonly source: 'builtin'; readonly ref: Extract<PresetRef, { kind: 'builtin' }>; readonly label: string; readonly retired?: boolean }
   | { readonly source: 'user'; readonly ref: Extract<PresetRef, { kind: 'user' }>; readonly label: string; readonly rev: number };
 
 /**
@@ -28,11 +28,23 @@ export function latestBuiltins<B extends { readonly id: string; readonly version
   return registry.filter(b => !registry.some(o => o.id === b.id && o.version > b.version));
 }
 
+export function ruleBuiltinChoices(registry: readonly { readonly id: string; readonly version: number; readonly label: string; readonly retired?: unknown }[], selected?: PresetRef): PresetChoice[] {
+  const choices = latestBuiltins(registry).filter(b => !b.retired).map((b): PresetChoice => ({ source: 'builtin', ref: { kind: 'builtin', id: b.id, version: b.version }, label: b.label }));
+  // A meet keeps the version it was saved with. Show that choice even when it is retired or a newer version exists,
+  // so the picker never looks empty while scoring still uses it.
+  if (selected?.kind === 'builtin' && !choices.some(c => c.ref.kind === 'builtin' && c.ref.id === selected.id && c.ref.version === selected.version)) {
+    const saved = registry.find(b => b.id === selected.id && b.version === selected.version);
+    if (saved?.retired) choices.push({ source: 'builtin', ref: selected, label: `${saved.label} (retired)`, retired: true });
+    else if (saved) choices.push({ source: 'builtin', ref: selected, label: `${saved.label} (older version ${saved.version})` });
+  }
+  return choices;
+}
+
 /** The newest version of every built-in rule preset, then every stored user rule preset. A fresh install lists only built-ins. */
-export async function listRulePresetChoices(repo: StorageRepo): Promise<PresetChoice[]> {
-  const builtins = latestBuiltins(BUILTIN_RULE_PRESETS).map((b): PresetChoice => ({ source: 'builtin', ref: { kind: 'builtin', id: b.id, version: b.version }, label: b.label }));
+export async function listRulePresetChoices(repo: StorageRepo, selected?: PresetRef): Promise<PresetChoice[]> {
+  const active = ruleBuiltinChoices(BUILTIN_RULE_PRESETS, selected);
   const users = (await repo.list('rulePresets', undefined)) as RulePresetRecord[];
-  return [...builtins, ...users.sort((a, b) => a.name.localeCompare(b.name)).map((u): PresetChoice => ({ source: 'user', ref: { kind: 'user', id: u.id }, label: u.name, rev: u.rev }))];
+  return [...active, ...users.sort((a, b) => a.name.localeCompare(b.name)).map((u): PresetChoice => ({ source: 'user', ref: { kind: 'user', id: u.id }, label: u.name, rev: u.rev }))];
 }
 
 export async function listSessionPresetChoices(repo: StorageRepo): Promise<PresetChoice[]> {

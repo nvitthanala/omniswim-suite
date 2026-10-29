@@ -47,6 +47,20 @@ const PANEL = `${PANEL_FRAME_SELECTOR} {
   height: 240px;
   z-index: 2147483000;
 }
+[data-osx-panel-error] {
+  position: fixed;
+  right: 16px;
+  bottom: 260px;
+  z-index: 2147483001;
+  max-width: 340px;
+  padding: 8px 12px;
+  border: 1px solid var(--osx-bad);
+  border-radius: 6px;
+  background: var(--osx-bg);
+  color: var(--osx-bad);
+  font: 14px/1.4 var(--osx-font);
+}
+[data-osx-panel-error][hidden] { display: none; }
 @media (max-width: ${NARROW_MAX_WIDTH_PX}px) {
   ${PANEL_FRAME_SELECTOR} {
     right: auto;

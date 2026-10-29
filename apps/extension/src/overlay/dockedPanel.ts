@@ -80,6 +80,11 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
   // stylesheet (./shadowStyle.ts), where a media query moves the panel clear of SwimCloud's
   // narrow-layout "Options" button. An inline value would beat that rule.
   iframe.style.cssText = 'border: 1px solid var(--osx-border); background: var(--osx-bg);';
+  const status = host.ownerDocument.createElement('p');
+  status.dataset.osxPanelError = '';
+  status.setAttribute('role', 'alert');
+  status.hidden = true;
+  status.textContent = 'OmniSwim panel disconnected. Reload the SwimCloud page to retry.';
   const syncScheme = (): void => {
     iframe.style.colorScheme = root.getAttribute(THEME_ATTRIBUTE) === 'dark' ? 'dark' : 'light';
   };
@@ -90,21 +95,24 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
   host.dataset.osxPanel = 'mounted' satisfies PanelState;
 
   let attempt = 0;
+  // Connects since the last pong. A pong resets it, so a working panel whose port drops now and then keeps reconnecting.
+  let unanswered = 0;
   let pings = 0;
   let activePort: PanelPort | null = null;
   let latest: PanelSnapshot | null = null;
   const messageListeners = new Set<(message: unknown) => void>();
   const connect = (): void => {
     attempt += 1;
-    let answered = false;
+    unanswered += 1;
     const port = runtime.connect({ name: panelPortName(nonce) });
     activePort = port;
     if (latest) port.postMessage(latest);
     port.onMessage.addListener((message) => {
       // Only our own iframe holds our nonce, so only it can answer with it.
       if (!isPanelPong(message) || message.nonce !== nonce) return;
-      answered = true;
+      unanswered = 0;
       host.dataset.osxPanel = 'connected' satisfies PanelState;
+      status.hidden = true;
       host.dataset.osxPanelVia = 'direct';
       host.dataset.osxPanelAttempts = String(attempt);
       host.dataset.osxPanelPongs = String(Number(host.dataset.osxPanelPongs ?? '0') + 1);
@@ -113,9 +121,11 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
     port.onDisconnect.addListener(() => {
       if (activePort === port) activePort = null;
       void runtime.lastError;
-      if (answered) return;
-      if (attempt < maxAttempts) setTimeout(connect, retryDelayMs);
-      else host.dataset.osxPanel = 'unreachable' satisfies PanelState;
+      if (unanswered < maxAttempts) setTimeout(connect, retryDelayMs);
+      else {
+        host.dataset.osxPanel = 'unreachable' satisfies PanelState;
+        status.hidden = false;
+      }
     });
     pings += 1;
     const ping: PanelPing = { kind: 'ping', n: pings };
@@ -124,7 +134,7 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
 
   iframe.addEventListener('load', connect, { once: true });
   iframe.src = url;
-  root.append(iframe);
+  root.append(iframe, status);
   return {
     iframe, nonce, url,
     sendMessage(message) { activePort?.postMessage(message); },
