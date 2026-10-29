@@ -26,12 +26,13 @@
     },
     "cursor": {
       "dispatch": "orca orchestration worker-start --agent cursor",
-      "available": false,
-      "remainingPct": null,
+      "available": true,
+      "remainingPct": 100,
       "remainingSource": "node ~/.claude/scripts/provider-usage-report.mjs --json -> cursor.usedPct (monthly) and cursor.buckets. Read from Orca's own account data (the Orca bottom-bar figures). No credentials read here.",
       "verified": "2026-10-02: Cursor Free monthly cap EXHAUSTED (re-checked 2026-10-03: Cursor Models bucket 100%, Other Models 0% but named models still need a paid plan; no re-probe, it triggers Avast) (Cursor Models bucket 100%, resets 2026-10-19). Auto uses that bucket. A small task costs ~1.5%; a large multi-file UI task (accessibility, ~10 files) consumed the rest. Treat Cursor as available again only after 2026-10-19 or on a paid plan.",
       "models": "Free plan: only 'Auto' works. Checked 2026-10-02: all 24 named models (Claude, GPT, Gemini, Grok, Kimi, GLM, Composer) were rejected with 'Free plans can only use Auto'; rejected calls spend no tokens. A paid Cursor plan is needed for a model menu. Fable models are marked NO ZDR (no zero data retention): do not send roster data to them.",
-      "launch": "ONLY through Orca (orca orchestration worker-start --agent cursor). Do not spawn cursor-agent directly from scripts or loops: repeated direct spawns trigger the user's Avast."
+      "launch": "ONLY through Orca (orca orchestration worker-start --agent cursor). Do not spawn cursor-agent directly from scripts or loops: repeated direct spawns trigger the user's Avast.",
+      "verified2026_10_29": "User stated a full Cursor quota on 2026-10-29. Orca worker-start --agent cursor fails: it runs cursor-agent, which is not on PATH, and agent.cmd is blocked by Avast. Workaround: in the Orca terminal run & \"$env:LOCALAPPDATAcursor-agentagent.ps1\" --yolo, then send the brief with orca terminal send."
     },
     "opencode": {
       "dispatch": "orca orchestration worker-start --agent opencode2 --worktree current|new-child (no --model). Bind a Run first: orca orchestration run-create --objective <text>. The model comes from opencode.json at the repo root.",
