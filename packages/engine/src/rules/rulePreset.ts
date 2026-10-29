@@ -118,12 +118,33 @@ export interface RulePresetV2 {
   readonly entries: RulePresetV1['entries'];
 }
 
-/** Payload version 3: version 2 plus `scorers.relayOverCap`. */
+/**
+ * Two optional relay entry rules, on payload version 3 only (README R72 and R42). An absent key means the rule is
+ * not checked: no preset is read as having one, and `migrateRulePresetV2` adds neither. They report violations
+ * and never change a score or trim a lineup. A pending value stops `requireComplete`, like any setting.
+ */
+export interface RelayEntryRules {
+  /**
+   * `true`: a swimmer may swim on only one of a team's relays in one event (NCAA Rule 5-7-1-g, README R72).
+   * `scoreMeet` reports a `relay_swimmer_repeated` violation. The model has no rounds (D2 section 9, item 17),
+   * so every relay entry counts as a timed-final relay.
+   */
+  readonly relaySwimmerOncePerEvent?: Setting<boolean>;
+  /**
+   * `false`: a team enters only relays that can score (README R42, NSISC), so every relay beyond
+   * `scorers.scoringRelaysPerTeamPerEvent` is an entry violation: `scoreMeet` reports `relay_entries_over_limit`.
+   * It does nothing while that limit is `'unlimited'`. `true`: relays beyond the limit are allowed, and
+   * `scorers.relayOverCap` alone decides how they score.
+   */
+  readonly nonScoringRelaysAllowed?: Setting<boolean>;
+}
+
+/** Payload version 3: version 2 plus `scorers.relayOverCap`, and the optional `RelayEntryRules`. */
 export interface RulePreset {
   readonly payloadVersion: 3;
   readonly scoring: RulePresetV2['scoring'];
   readonly scorers: RulePresetV1['scorers'] & { readonly relayOverCap: Setting<RelayOverCapRule> };
-  readonly entries: RulePresetV1['entries'];
+  readonly entries: RulePresetV1['entries'] & RelayEntryRules;
 }
 
 /** A preset with no pending setting that applies to its eligibility mode. Only `requireComplete` makes one. */
@@ -299,7 +320,18 @@ export function parseRulePreset(json: unknown): RulePreset {
   if (root.payloadVersion !== 3) throw invalid('payloadVersion', 'expected 1, 2 or 3');
   const so = expectKeys(root.scorers, 'scorers', [...SCORER_KEYS, 'relayOverCap']);
   const { relayOverCap, ...v2Scorers } = so;
-  const v2 = readVersion2Body({ ...root, scorers: v2Scorers });
+  const en = expectKeys(root.entries, 'entries', ENTRY_KEYS, RELAY_ENTRY_RULE_KEYS);
+  const { relaySwimmerOncePerEvent, nonScoringRelaysAllowed, ...v2Entries } = en;
+  const v2 = readVersion2Body({ ...root, scorers: v2Scorers, entries: v2Entries });
+  // A key is added only when present: an absent rule stays absent, and never becomes `undefined`.
+  const relayRules: RelayEntryRules = {
+    ...(relaySwimmerOncePerEvent === undefined
+      ? {}
+      : { relaySwimmerOncePerEvent: parseSetting(relaySwimmerOncePerEvent, 'entries.relaySwimmerOncePerEvent', parseBoolean) }),
+    ...(nonScoringRelaysAllowed === undefined
+      ? {}
+      : { nonScoringRelaysAllowed: parseSetting(nonScoringRelaysAllowed, 'entries.nonScoringRelaysAllowed', parseBoolean) }),
+  };
   return {
     payloadVersion: 3,
     scoring: v2.scoring,
@@ -307,7 +339,7 @@ export function parseRulePreset(json: unknown): RulePreset {
       ...v2.scorers,
       relayOverCap: parseSetting(relayOverCap, 'scorers.relayOverCap', (v, p) => parseOneOf(v, p, ['holds-place', 'exhibition'] as const)),
     },
-    entries: v2.entries,
+    entries: { ...v2.entries, ...relayRules },
   };
 }
 
@@ -414,17 +446,22 @@ const SCORER_KEYS = [
   'relayLegsMustBeScorers',
 ] as const;
 
+const ENTRY_KEYS = [
+  'maxIndividualPerSwimmer',
+  'maxRelayPerSwimmer',
+  'maxTotalPerSwimmer',
+  'timeTrialsCount',
+  'exhibitionCounts',
+  'relayLegsAllowTimeTrials',
+] as const;
+
+/** The optional `entries` keys of payload version 3 (`RelayEntryRules`). Versions 1 and 2 reject them. */
+const RELAY_ENTRY_RULE_KEYS = ['relaySwimmerOncePerEvent', 'nonScoringRelaysAllowed'] as const;
+
 function parseBody(root: Record<string, unknown>): RulePresetV1 {
   const sc = expectKeys(root.scoring, 'scoring', SCORING_KEYS);
   const so = expectKeys(root.scorers, 'scorers', SCORER_KEYS);
-  const en = expectKeys(root.entries, 'entries', [
-    'maxIndividualPerSwimmer',
-    'maxRelayPerSwimmer',
-    'maxTotalPerSwimmer',
-    'timeTrialsCount',
-    'exhibitionCounts',
-    'relayLegsAllowTimeTrials',
-  ]);
+  const en = expectKeys(root.entries, 'entries', ENTRY_KEYS);
 
   const preset: RulePresetV1 = {
     payloadVersion: 1,

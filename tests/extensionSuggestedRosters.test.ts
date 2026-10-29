@@ -65,7 +65,7 @@ describe('extension suggested rosters', () => {
     const factory = freshFactory();
     const db = await openOmniDb({ factory });
     const repo = createStorageRepo(db);
-    const ref: PresetRef = { kind: 'builtin', id: 'nsisc', version: 4 };
+    const ref: PresetRef = { kind: 'builtin', id: 'nsisc', version: 5 };
     await saveScorerRulePreset(repo, 'fixture-A', ref);
     db.close();
     const reopened = await openOmniDb({ factory });

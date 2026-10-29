@@ -60,6 +60,15 @@ const PINNED: Readonly<Record<string, string>> = {
   'rule3|nsisc|4': '5f1cbe51e7e9e10f3bc06f1eb8213012981714998d443ccde79607a7ec9e0d51',
   'rule2|nsisc|4': '3fce6204305ea2f0e91c9d262c6403e3a3151bdfa9782b992fd7bc80a20726c1',
   'rule|nsisc|4': '3a5b13dccaad26b73475b2b6a03311f512e23f40413638fdd071eaa335673d46',
+  // nsisc v5 is v4 plus entries.nonScoringRelaysAllowed (README R42); generic v2 is v1 plus entries.relaySwimmerOncePerEvent
+  // (NCAA Rule 5-7-1-g). Each reuses its predecessor's version 1 body and version 2 view, so those hashes repeat. Only the
+  // version 3 hash is new.
+  'rule3|nsisc|5': 'd37621a9ce4a5083a7244bb702f3e3977c48b433424575a9b37b9c45a98eef39',
+  'rule2|nsisc|5': '3fce6204305ea2f0e91c9d262c6403e3a3151bdfa9782b992fd7bc80a20726c1',
+  'rule|nsisc|5': '3a5b13dccaad26b73475b2b6a03311f512e23f40413638fdd071eaa335673d46',
+  'rule3|generic|2': '76268c1966c439ba468229863d63207f50f6b06f553f8ca803e1c6104d12b9db',
+  'rule2|generic|2': '23847dfed79cb372043ff2d0afa24a8561fffa4ce38156c2cd343164e1c855b4',
+  'rule|generic|2': '56d58f3ed13b00de5732039b3f40da7f5117c9562fdce0df3bfb7f0829668ac4',
   'rule3|generic|1':'b42d9f8eec4785b03e3c7dd29f6f6b520cbb5fc8dee31084bba636cb55d6f3c4',
   'rule2|nsisc|1': '7670e51fcdb704b0dce2ff899fa2a0d13d443d5bb66bf02936e1cadb73213358',
   'rule2|nsisc|2': '2b72f5a6bc2982aceef0342e3566e42e5cf23ef0cd610f21b6fbc8e2947e638d',
@@ -74,10 +83,14 @@ const PINNED: Readonly<Record<string, string>> = {
   'lcmToScy|lcm-scy-swimswam|1': '76d9b570e06aed33b90bd64d48bbd3653e0816b0c0a88a398b9fce8e43986c7c',
 };
 
-/** The payload version 2 view of a built-in: no `scorers.relayOverCap`. The hashes of the shipped views must not move. */
+/**
+ * The payload version 2 view of a built-in: no `scorers.relayOverCap`, and none of the optional relay entry rules
+ * (README R42 and R72, version 3 only). The hashes of the shipped views must not move.
+ */
 function payloadV2View(preset: RulePreset): unknown {
   const { relayOverCap: _relayOverCap, ...scorers } = preset.scorers;
-  return { ...preset, payloadVersion: 2, scorers };
+  const { relaySwimmerOncePerEvent: _once, nonScoringRelaysAllowed: _allowed, ...entries } = preset.entries;
+  return { ...preset, payloadVersion: 2, scorers, entries };
 }
 
 const SHIPPED: readonly { key: string; preset: unknown }[] = [
@@ -117,7 +130,8 @@ describe('built-in versions', () => {
     for (const b of BUILTIN_RULE_PRESETS) {
       const { ties: _ties, ...scoring } = b.preset.scoring;
       const { relayOverCap: _relayOverCap, ...scorers } = b.preset.scorers;
-      expect({ ...b.preset, payloadVersion: 1, scoring, scorers }, `${b.id} v${b.version}`).toStrictEqual(b.frozen);
+      const { relaySwimmerOncePerEvent: _once, nonScoringRelaysAllowed: _allowed, ...entries } = b.preset.entries;
+      expect({ ...b.preset, payloadVersion: 1, scoring, scorers, entries }, `${b.id} v${b.version}`).toStrictEqual(b.frozen);
       expect(b.frozen.payloadVersion).toBe(1);
       expect(b.preset.payloadVersion).toBe(3);
     }
@@ -206,7 +220,10 @@ describe('built-in versions', () => {
     expect(builtinRulePreset('nsisc', 2)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc' && b.version === 2)?.preset);
     expect(builtinRulePreset('nsisc', 3)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc' && b.version === 3)?.preset);
     expect(builtinRulePreset('nsisc', 4)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc' && b.version === 4)?.preset);
-    expect(builtinRulePreset('nsisc', 5)).toBeUndefined();
+    expect(builtinRulePreset('nsisc', 5)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'nsisc' && b.version === 5)?.preset);
+    expect(builtinRulePreset('generic', 2)).toBe(BUILTIN_RULE_PRESETS.find(b => b.id === 'generic' && b.version === 2)?.preset);
+    expect(builtinRulePreset('nsisc', 6)).toBeUndefined();
+    expect(builtinRulePreset('generic', 3)).toBeUndefined();
     expect(builtinRulePreset('nsisc', 0)).toBeUndefined();
     expect(builtinRulePreset('ncaa', 1)).toBeUndefined();
     expect(builtinRulePreset('', 1)).toBeUndefined();
@@ -331,6 +348,79 @@ describe('built-in provenance', () => {
 /* -------------------------------------------------------------------------- */
 /* generic v1: published tables                                               */
 /* -------------------------------------------------------------------------- */
+
+describe('nsisc v5 and generic v2: the relay entry rules', () => {
+  const RULEBOOK = 'data/scoring_rules/sources/ncaa-rulebook-2025-27.txt';
+  const without = (p: RulePreset, ...keys: ('relaySwimmerOncePerEvent' | 'nonScoringRelaysAllowed')[]): unknown => {
+    const entries: Record<string, unknown> = { ...p.entries };
+    for (const k of keys) delete entries[k];
+    return { ...p, entries };
+  };
+
+  it('nsisc v5 is v4 plus entries.nonScoringRelaysAllowed false, citing README R42, and nothing else', () => {
+    const v4 = builtinRulePreset('nsisc', 4)!;
+    const v5 = builtinRulePreset('nsisc', 5)!;
+    expect(without(v5, 'nonScoringRelaysAllowed')).toStrictEqual(v4);
+    expect(v5.entries.nonScoringRelaysAllowed).toMatchObject({
+      state: 'set',
+      value: false,
+      provenance: { kind: 'user-stated', statedOn: '2026-10-25', where: 'plans/2026-10-25/README.md:59', verbatim: false },
+    });
+    const row = linesOf('plans/2026-10-25/README.md')[58] as string;
+    expect(row).toMatch(/^\| R42 \|/);
+    expect(row).toContain('NSISC has no non-scoring relays: a team enters only relays that score.');
+    expect(row).toContain('For NSISC a 3rd relay is an entry violation.');
+  });
+
+  it('nsisc v5 leaves relaySwimmerOncePerEvent absent: no archived NSISC source says NCAA relay rules govern NSISC', () => {
+    expect(Object.hasOwn(builtinRulePreset('nsisc', 5)!.entries, 'relaySwimmerOncePerEvent')).toBe(false);
+  });
+
+  it('generic v2 is generic v1 plus entries.relaySwimmerOncePerEvent true, and nothing else', () => {
+    const v1 = builtinRulePreset('generic', 1)!;
+    const v2 = builtinRulePreset('generic', 2)!;
+    expect(without(v2, 'relaySwimmerOncePerEvent')).toStrictEqual(v1);
+    expect(v2.entries.relaySwimmerOncePerEvent).toMatchObject({ state: 'set', value: true });
+    // Every other entry rule is still pending, and the new key is not pending.
+    expect(pendingPaths(v2)).toStrictEqual(pendingPaths(v1));
+  });
+
+  it('generic v2 cites the archived rule book: same sha256 and url as the manifest, and the rule text says what it is read for', () => {
+    const manifest = JSON.parse(readFileSync(path.join(ROOT, 'data/scoring_rules/sources/manifest.json'), 'utf8')) as {
+      sources: { id: string; sha256: string; url: string; textExtraction: string; coversSections: string[] }[];
+    };
+    const v2 = builtinRulePreset('generic', 2)!;
+    const once = v2.entries.relaySwimmerOncePerEvent as Extract<Setting<boolean>, { state: 'set' }>;
+    expect(once.provenance.kind).toBe('published');
+    if (once.provenance.kind !== 'published') throw new Error('expected a published source');
+    const ref = once.provenance.source;
+    const entry = manifest.sources.find(s => s.id === ref.sourceId);
+    expect(ref.sourceId).toBe('ncaa-rulebook-2025-27');
+    expect(entry).toBeDefined();
+    expect(ref.sha256).toBe(entry!.sha256);
+    expect(ref.url).toBe(entry!.url);
+    expect(ref.manifest).toBe('data/scoring_rules/sources/manifest.json');
+    expect(ref.locator).toBe('Rule 5-7-1-g');
+    expect(entry!.coversSections).toContain('Rule 5-7-1-g Relay participation in a timed final');
+    expect(`data/scoring_rules/sources/${entry!.textExtraction}`).toBe(RULEBOOK);
+    // The archived text, whitespace folded: the rule limits a swimmer in a timed final of a relay.
+    const lines = linesOf(RULEBOOK);
+    const text = lines.join(' ').replace(/\s+/g, ' ');
+    expect(text).toContain(
+      "In a timed final of a relay, a swimmer is limited to participating in only one of the team's relays (i.e., A relay or B relay, etc.)."
+    );
+    expect(lines[2885]).toContain('In a timed final of a relay, a');
+    expect(lines[2886]).toContain("swimmer is limited to participating in only one of the team's relays");
+  });
+
+  it('no other built-in sets either relay entry rule', () => {
+    for (const b of BUILTIN_RULE_PRESETS) {
+      const has = (k: string) => Object.hasOwn(b.preset.entries, k);
+      expect(has('nonScoringRelaysAllowed'), `${b.id} v${b.version}`).toBe(b.id === 'nsisc' && b.version === 5);
+      expect(has('relaySwimmerOncePerEvent'), `${b.id} v${b.version}`).toBe(b.id === 'generic' && b.version === 2);
+    }
+  });
+});
 
 describe('generic v1', () => {
   const generic = BUILTIN_RULE_PRESETS.find(b => b.id === 'generic')!.preset;

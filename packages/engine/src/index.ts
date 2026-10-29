@@ -35,6 +35,7 @@ export type {
   EngineScorerAutoRules,
   PerEventScorerCap,
   PlaceTreatment,
+  RelayEntryRules,
   RelayOverCapRule,
   RelayPointRule,
   RulePreset,

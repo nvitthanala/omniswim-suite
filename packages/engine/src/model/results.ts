@@ -197,6 +197,35 @@ export type Violation =
       readonly swimmerId: SwimmerId;
     }
   /**
+   * `entries.relaySwimmerOncePerEvent` is `true` (NCAA Rule 5-7-1-g, README R72): a swimmer is on more than one of a team's
+   * relay entries in one event. `entryKeys` lists those relays in lineup order. The relays still score as entered.
+   * The model has no rounds, so every relay counts as a timed-final relay. Two legs of one relay are `relay_leg`
+   * `duplicate_swimmer`, not this.
+   */
+  | {
+      readonly kind: 'relay_swimmer_repeated';
+      readonly teamId: TeamId;
+      readonly swimmerId: SwimmerId;
+      readonly eventKey: EventKey;
+      readonly gender: Gender;
+      readonly entryKeys: readonly string[];
+    }
+  /**
+   * `entries.nonScoringRelaysAllowed` is `false` (README R42, NSISC): a team has more relay entries in one event than
+   * `scorers.scoringRelaysPerTeamPerEvent`. One violation per team, event and gender. `entryKeys` lists every relay of
+   * the team in that event in lineup order, so nothing picks which one is "the 3rd". `count` is more than `limit`. How
+   * the extra relays score is `scorers.relayOverCap`, and is not changed.
+   */
+  | {
+      readonly kind: 'relay_entries_over_limit';
+      readonly teamId: TeamId;
+      readonly eventKey: EventKey;
+      readonly gender: Gender;
+      readonly entryKeys: readonly string[];
+      readonly count: number;
+      readonly limit: number;
+    }
+  /**
    * Roster eligibility: a team's tagged scorers take more than `scorers.scoringTeamSize` spots. The roster is scored as
    * tagged. `scorers` are the tagged swimmers who take a full spot, `divers` those who take `scorers.diverWeight` of
    * one. `spots` is `scorers + divers * diverWeight` as an exact fraction (not reduced). It is more than `limit`.
@@ -519,6 +548,60 @@ function entryCapViolations(
     check('total', ind + rel, caps.total);
   }
   return out;
+}
+
+/**
+ * The relay entry rules (README R72, R42). Both read every resolved relay entry: an exhibition relay, a relay without a
+ * time and a relay that `scorers.relayOverCap: 'exhibition'` removes all count, whatever `entries.exhibitionCounts` says.
+ * Without that, R42 could never fire under `relayOverCap: 'exhibition'`, because the over-limit relays are the removed ones.
+ * An absent rule is not checked. Lineups are never trimmed.
+ */
+function relayEntryViolations(resolved: readonly Resolved[], rules: CompleteRulePreset): Violation[] {
+  const { relaySwimmerOncePerEvent, nonScoringRelaysAllowed } = rules.entries;
+  const once = relaySwimmerOncePerEvent === undefined ? false : settled(relaySwimmerOncePerEvent, 'entries.relaySwimmerOncePerEvent');
+  const allowed = nonScoringRelaysAllowed === undefined ? true : settled(nonScoringRelaysAllowed, 'entries.nonScoringRelaysAllowed');
+  const limit = settled(rules.scorers.scoringRelaysPerTeamPerEvent, 'scorers.scoringRelaysPerTeamPerEvent');
+  const checkLimit = !allowed && limit !== 'unlimited';
+  if (!once && !checkLimit) return [];
+
+  const groups = new Map<string, { teamId: TeamId; eventKey: EventKey; gender: Gender; keys: string[]; bySwimmer: Map<SwimmerId, string[]> }>();
+  for (const r of resolved) {
+    if (r.entry.kind !== 'relay') continue;
+    const id = JSON.stringify([r.entry.teamId, r.entry.eventKey, r.entry.gender]);
+    let group = groups.get(id);
+    if (!group) {
+      group = { teamId: r.entry.teamId, eventKey: r.entry.eventKey, gender: r.entry.gender, keys: [], bySwimmer: new Map() };
+      groups.set(id, group);
+    }
+    group.keys.push(r.key);
+    // One relay lists a swimmer once here: two legs of one relay are `duplicate_swimmer`, not a repeat across relays.
+    for (const swimmerId of new Set(r.swimmerIds)) {
+      const list = group.bySwimmer.get(swimmerId);
+      if (list) list.push(r.key);
+      else group.bySwimmer.set(swimmerId, [r.key]);
+    }
+  }
+
+  const repeated: Extract<Violation, { kind: 'relay_swimmer_repeated' }>[] = [];
+  const over: Extract<Violation, { kind: 'relay_entries_over_limit' }>[] = [];
+  for (const { teamId, eventKey, gender, keys, bySwimmer } of groups.values()) {
+    if (checkLimit && keys.length > (limit as number)) {
+      over.push({ kind: 'relay_entries_over_limit', teamId, eventKey, gender, entryKeys: keys, count: keys.length, limit: limit as number });
+    }
+    if (once) {
+      for (const [swimmerId, entryKeys] of bySwimmer) {
+        if (entryKeys.length > 1) repeated.push({ kind: 'relay_swimmer_repeated', teamId, swimmerId, eventKey, gender, entryKeys });
+      }
+    }
+  }
+  const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+  const byGroup = (
+    a: { teamId: TeamId; eventKey: EventKey; gender: Gender },
+    b: { teamId: TeamId; eventKey: EventKey; gender: Gender }
+  ): number => compare(a.teamId, b.teamId) || compare(a.eventKey, b.eventKey) || compare(a.gender, b.gender);
+  repeated.sort((a, b) => byGroup(a, b) || compare(a.swimmerId, b.swimmerId));
+  over.sort(byGroup);
+  return [...over, ...repeated];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1019,7 +1102,7 @@ export function scoreMeet(
     payloadVersion: 1,
     teams: rankTeams(model, events),
     events,
-    violations: [...violations, ...entryCapViolations(counted, entryCaps), ...rosterViolations(roster, overCap)],
+    violations: [...violations, ...entryCapViolations(counted, entryCaps), ...relayEntryViolations(resolved, rules), ...rosterViolations(roster, overCap)],
     rosterUnknown,
   };
 }

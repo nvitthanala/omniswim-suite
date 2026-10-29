@@ -23,7 +23,7 @@
  */
 import { settingsForBuiltInScoringPreset } from '../lib/scoringDefaults';
 import { migrateRulePresetV1, migrateRulePresetV2 } from './rulePreset';
-import type { RelayOverCapRule, RulePreset, RulePresetV1, TieRule } from './rulePreset';
+import type { RelayEntryRules, RelayOverCapRule, RulePreset, RulePresetV1, TieRule } from './rulePreset';
 import type { Setting } from '../model/provenance';
 import { pending, readmeRow, recorded, setting, userPlan } from './builtinSupport';
 import type { Builtin } from './builtinSupport';
@@ -48,6 +48,23 @@ const NCAA_RULE7: Provenance = {
     url: 'https://meets.swimdna.org/media/ncaascoring.pdf',
     publisher: 'NCAA',
     locator: 'Rule 7-6-4',
+  },
+};
+
+/**
+ * NCAA Rule 5-7-1-g, in the full rule book (README R72). The sha256 and url are copied from
+ * `data/scoring_rules/sources/manifest.json` (id `ncaa-rulebook-2025-27`); `tests/engineBuiltinVersions.test.ts` matches them
+ * and reads the quoted scope in `ncaa-rulebook-2025-27.txt`.
+ */
+const NCAA_RULEBOOK_5_7_1_G: Provenance = {
+  kind: 'published',
+  source: {
+    sourceId: 'ncaa-rulebook-2025-27',
+    manifest: 'data/scoring_rules/sources/manifest.json',
+    sha256: '3c32eace52e1d9c01300cbf23ff0ea102fd5248ef2c4ae807246864fdedda9ea',
+    url: 'https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/rules/PRXSW_RulesBook.pdf',
+    publisher: 'NCAA',
+    locator: 'Rule 5-7-1-g',
   },
 };
 
@@ -279,6 +296,11 @@ function buildNsiscV4(): RulePresetV1 {
  *   v2's body and the two share a hash. The new hash is in the `rule3|` pins.
  * - `nsisc` v4: v3 with `entries.maxTotalPerSwimmer` 7 (README R73) and `exhibitionCounts` citing R75. Its
  *   body is new, so all three of its hashes are new.
+ * - `nsisc` v5: v4 plus `entries.nonScoringRelaysAllowed` false, from README R42 (line 59). Its `frozen` body is v4's, so
+ *   the two share the `rule|` and `rule2|` hashes, as v3 shares v2's. `relaySwimmerOncePerEvent` stays absent: no archived
+ *   NSISC source says NCAA relay rules govern NSISC relays.
+ * - `generic` v2: v1 plus `entries.relaySwimmerOncePerEvent` true, from NCAA Rule 5-7-1-g in the archived rule book
+ *   (`ncaa-rulebook-2025-27`). `frozen` is v1's body. Every other setting is v1's, still pending.
  * - `nsisc` v2: `ties: 'split'`. The user's statement of the points (README R45, line 69) ends "Ties split."
  *   The legacy scorer split ties for this preset before the setting existed, so scoring is unchanged.
  * - `nsisc` v1: `ties` pending. Its points are pending too, and R45 was stated for the confirmed points of v2.
@@ -329,24 +351,53 @@ const NSISC_V3_RELAY_OVER_CAP: Setting<RelayOverCapRule> = setting(
   recorded('2026-10-27', 'plans/2026-10-25/README.md:91', 'A relay entered beyond the scoring-relay limit is tagged exhibition.')
 );
 
+/**
+ * README R42, line 59: "NSISC has no non-scoring relays: a team enters only relays that score. For NSISC a 3rd relay is
+ * an entry violation." `false` reports a relay beyond `scorers.scoringRelaysPerTeamPerEvent` (D2 section 9, item 23).
+ */
+const NSISC_V5_NON_SCORING_RELAYS: Setting<boolean> = setting(
+  false,
+  readmeRow('59', 'NSISC has no non-scoring relays: a team enters only relays that score.')
+);
+
+/**
+ * NCAA Rule 5-7-1-g, text lines 2886-2887 of the archived rule book: "In a timed final of a relay, a swimmer is limited to
+ * participating in only one of the team's relays (i.e., A relay or B relay, etc.)." The rule is about a timed final, and
+ * the model has no rounds, so the engine checks every relay event (D2 section 9, item 23).
+ */
+const GENERIC_V2_RELAY_ONCE: Setting<boolean> = setting(true, NCAA_RULEBOOK_5_7_1_G);
+
 function builtin(
   id: string,
   version: number,
   label: string,
   frozen: RulePresetV1,
   tie: Setting<TieRule>,
-  relayOverCap: Setting<RelayOverCapRule>
+  relayOverCap: Setting<RelayOverCapRule>,
+  relayEntryRules: RelayEntryRules = {}
 ): RuleBuiltin {
-  return { id, version, label, frozen, preset: tiesOf(frozen, tie, relayOverCap) };
+  const base = tiesOf(frozen, tie, relayOverCap);
+  // `frozen` is the version 1 body and holds neither relay entry rule: a key is added to `preset` only when named.
+  return { id, version, label, frozen, preset: { ...base, entries: { ...base.entries, ...relayEntryRules } } };
 }
 
-/** `'nsisc'` v1 to v4, plus `'generic'` v1. */
+/** `'nsisc'` v1 to v5, plus `'generic'` v1 and v2. */
 export const BUILTIN_RULE_PRESETS: readonly RuleBuiltin[] = [
   builtin('nsisc', 1, 'NSISC', buildNsisc(), pending(TIES_PENDING_NSISC_V1, TIES_BLOCKS), pending(RELAY_OVER_CAP_PENDING, TIES_BLOCKS)),
   builtin('nsisc', 2, 'NSISC', buildNsiscV2(), NSISC_V2_TIES, pending(RELAY_OVER_CAP_PENDING, TIES_BLOCKS)),
   builtin('nsisc', 3, 'NSISC', buildNsiscV2(), NSISC_V2_TIES, NSISC_V3_RELAY_OVER_CAP),
   builtin('nsisc', 4, 'NSISC', buildNsiscV4(), NSISC_V2_TIES, NSISC_V3_RELAY_OVER_CAP),
+  builtin('nsisc', 5, 'NSISC', buildNsiscV4(), NSISC_V2_TIES, NSISC_V3_RELAY_OVER_CAP, { nonScoringRelaysAllowed: NSISC_V5_NON_SCORING_RELAYS }),
   builtin('generic', 1, 'Generic NCAA championship', buildGeneric(), pending(TIES_PENDING_GENERIC, TIES_BLOCKS), pending(RELAY_OVER_CAP_PENDING_GENERIC, TIES_BLOCKS)),
+  builtin(
+    'generic',
+    2,
+    'Generic NCAA championship',
+    buildGeneric(),
+    pending(TIES_PENDING_GENERIC, TIES_BLOCKS),
+    pending(RELAY_OVER_CAP_PENDING_GENERIC, TIES_BLOCKS),
+    { relaySwimmerOncePerEvent: GENERIC_V2_RELAY_ONCE }
+  ),
 ];
 
 /** The built-in with this id and version, or `undefined`. Never a fallback to another id or version. */

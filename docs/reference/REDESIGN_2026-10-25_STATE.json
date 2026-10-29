@@ -628,6 +628,11 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
+    "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
+    "step 2: git status. Delete tmp-flake-load*.txt (Cursor K scratch, untracked) once K reports. Leave omniswim-suite/data/ out of commits.",
+    "step 3: npm run build:extension, then the full gates (lint, vitest --maxWorkers=4, npm test, golden, mutation, harness). extensionBuildFreshness should go green after the rebuild.",
+    "step 4: review and commit separately: (a) L engine relay checks after an architect review (rule schema change); (b) J extension followups (parity.ts files new); (c) K flake fix; (d) scripts/bench/rosterSuggestTiming.ts + PROVIDER_ROUTING.json (Cursor available, agent.ps1 workaround). Release dispatches ctx_1e5b5591c135 and ctx_68371d15afd3.",
+    "step 5: ask the user the inFlight[2026-10-29 round].userDecisions questions.",
     "DONE: answers backlog (NSISC v2, storage fields, zod/mini, colors, conversion capture).",
     "DONE: engine LCM->SCY (8d188a27)",
     "DONE: P2 risk. profile_fastest_times answers without a challenge (bests only; see p2Risk).",
@@ -863,7 +868,8 @@
     "since": "2026-10-27",
     "trigger": "Budget tier critical: 7d 91% used, resets in about 37h; 5h 28%, resets in 54m",
     "plan": "no new Claude agents; Codex via Orca only for builds; lead commits and verifies only",
-    "resumePoint": "D4.apply committed; waiting on the user for the partial-apply or 0=unlimited answer, then R70 questions and followUps"
+    "resumePoint": "D4.apply committed; waiting on the user for the partial-apply or 0=unlimited answer, then R70 questions and followUps",
+    "endedAt": "2026-10-29: user reported the Claude limits reset; Cursor quota full"
   },
   "codexRuns": [
     {
@@ -886,7 +892,7 @@
   "liveCheckNext": [
     "Storage: nothing to check until a UI feature opens the database (preset editor, P3.ui)."
   ],
-  "budget": "2026-10-27: 5h 28% (resets in 54m), 7d 91% (resets in ~37h, pace 117%), tier critical",
+  "budget": "2026-10-29: Claude windows reset (user-stated); Codex and Cursor available",
   "conversionCapture": {
     "done": "2026-10-26",
     "archive": "data/conversions/swimswam/lcm-to-scy-2026-10-26.json (53 captures) + README.md (fitted model)",
@@ -982,6 +988,19 @@
     "D4.apply": {
       "status": "DONE 2026-10-27: Codex I (run_828e7a9bf424) built the R80 Apply button and simulatorSettingsFromRulePreset (exact or nothing). Lead reviewed the diff and ran full gates on this tree: vitest 2863, golden unchanged, harness 2/2, lint 0. Advisor audit skipped (Claude quota). Finding: no built-in preset maps fully today. NSISC v3/v4 refuse unlimited caps, relay cap != scorer cap, R67 exhibition; v1/v2/generic have pending rules.",
       "next": "Ask the user: (a) allow a partial apply that writes mapped settings and lists skipped ones, or (b) write 0 for unlimited. simulatorCap (simulatorRules.ts:98) and recon 02-SIMULATOR-RECON.md:255 both record that the page stores 0 = unlimited, so (b) is exact for entry caps."
+    },
+    "2026-10-29 round": {
+      "J": "Codex run_da9d5ce0db6f ctx_1e5b5591c135: parity postMessage origin, dockedPanel reconnect, pickers hide retired built-ins (apps/extension/src)",
+      "K": "Cursor run_cb454d21a62d ctx_68371d15afd3: storage audit timer flake (tests/extensionStorageAudit.test.ts only)",
+      "L": "BUILT, UNCOMMITTED, NOT REVIEWED (Claude executor). Files: packages/engine/src/rules/rulePreset.ts (RelayEntryRules: entries.relaySwimmerOncePerEvent?, entries.nonScoringRelaysAllowed?, payload v3 only, absent=not checked), model/results.ts (violations relay_swimmer_repeated, relay_entries_over_limit; read all resolved relays; nothing trimmed), index.ts export, D2 3.8 unions + 9 item 23, tests/engineRelayEntryRules*.test.ts (25). Executor gates: lint clean, npm test 65, golden unchanged, mutation 413, vitest 2893 pass / 1 fail = extensionBuildFreshness (dist stale; rebuild after J settles). No built-in turns either rule on.",
+      "waiting": "user: Apply option (0=unlimited, partial apply, both); R70 questions",
+      "M": "DONE: scripts/bench/rosterSuggestTiming.ts (Claude worker). No real fixture reaches conference size; largest is simulator config-C (3 men teams, 110 swimmers). Real: all-target call 88-128 ms warm. Synthetic 10 teams (copies of config-C teams, times unchanged), men only: all-target call 656-741 ms, per-LP max 44 ms, LP ~250x425. Both genders likely >1 s total, sequential; runs in the optimizer worker, so latency not a main-thread block. Node timing, not browser.",
+      "status": "Resumed 2026-10-29 after reconnect.",
+      "userDecisions": [
+        "ANSWERED: nsisc v5 yes; archive rule book (already archived b905e878); Apply writes 0 for unlimited.",
+        "R70 questions asked again 2026-10-29."
+      ],
+      "committed": "a92b6bc0 (J extension + lead fixes), 2471d341 (K flake), 816cd9bd (J2 Apply 0=unlimited), 26b766ee (bench + Cursor routing), engine L next"
     }
   },
   "followUps": [
@@ -990,7 +1009,9 @@
     "P4: converted swims and estimated-cut tags must run checkProvenanceSources when they are first stored, or they bypass the tool-archive check.",
     "Deferred to P4: pickers hide retired built-ins (no live picker shows one today). dockedPanel reconnect after an answered port drops: low severity (an iframe reload leaves an empty panel, not a wrong number).",
     "NCAA Rule 5-5-1 (README R72): a preset honors it with entries.exhibitionCounts false (scoreMeet reads it since 2026-10-27). NSISC keeps true (R75).",
-    "NCAA Rule 5-7-1-g (README R72): in a timed-final relay a swimmer may swim on only one of the team relays. Add a lineup check."
+    "NCAA Rule 5-7-1-g (README R72): in a timed-final relay a swimmer may swim on only one of the team relays. Add a lineup check.",
+    "Conference solve latency (bench 2026-10-29): about 0.7 s for 10 men teams, likely over 1 s with both genders. Show a computing state in the panel, or solve targets in parallel, if the browser measures slower.",
+    "relay_swimmer_repeated (generic v2, Rule 5-7-1-g) fires in prelims-finals relay events too: the engine has no rounds (Codex J3 review, medium; D2 9 item 23). Once sessionLoad schedules exist, pass event formats so the check covers timed finals only."
   ],
   "p3CoreA": {
     "status": "DONE: Codex review accepted (ctx_5b81979038a5, released); advisor audit passed; lead gates green incl. harness 2/2; D2 section 9 records the deviations",

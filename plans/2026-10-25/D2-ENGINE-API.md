@@ -651,6 +651,11 @@ export type Violation =
         | 'off_scoring_roster' }   // a warning, README R77 (section 9 item 20)
   | { readonly kind: 'scorer_without_entry'; readonly teamId: TeamId; readonly gender: Gender;
       readonly swimmerId: SwimmerId }   // a warning, README R78 (section 9 item 20)
+  | { readonly kind: 'relay_swimmer_repeated'; readonly teamId: TeamId; readonly swimmerId: SwimmerId;
+      readonly eventKey: EventKey; readonly gender: Gender; readonly entryKeys: readonly string[] }   // NCAA 5-7-1-g, R72 (section 9 item 23)
+  | { readonly kind: 'relay_entries_over_limit'; readonly teamId: TeamId; readonly eventKey: EventKey;
+      readonly gender: Gender; readonly entryKeys: readonly string[]; readonly count: number;
+      readonly limit: number }   // README R42, only when entries.nonScoringRelaysAllowed is false (section 9 item 23)
   | { readonly kind: 'scoring_team_size'; readonly teamId: TeamId; readonly gender: Gender; readonly scorers: number;
       readonly divers: number; readonly spots: { readonly numerator: number; readonly denominator: number };   // not reduced
       readonly limit: number }   // P3.core-b, roster eligibility
@@ -1700,3 +1705,44 @@ and `architect` have not accepted them yet. Item 12 decides nothing.
     relays with identical swimmers and times remain separate entries. This keeps
     split-tie scoring and relay-cap accounting aligned without changing the
     frozen legacy scorer or adding an API error.
+23. **Relay entry rules (2026-10-29, README R72 and R42).** This supersedes
+    item 7. `RulePreset` stays payload version 3. It gains two optional
+    `entries` keys, `RelayEntryRules`, on version 3 only. An absent key means
+    the rule is not checked. Nothing migrates one in. Versions 1 and 2 refuse
+    the keys. Two violations join `Results.violations`. Both only report: no
+    lineup is trimmed and no score moves.
+    - `entries.relaySwimmerOncePerEvent: Setting<boolean>`. `true` checks NCAA
+      Rule 5-7-1-g (R72): a swimmer on more than one of a team's relays in one
+      event. The violation is `relay_swimmer_repeated`, with `teamId`,
+      `swimmerId`, `eventKey`, `gender` and `entryKeys` (the relays, in lineup
+      order). The model has no rounds (item 17), so every relay counts as a
+      timed-final relay. Two legs of one relay stay `relay_leg`
+      `duplicate_swimmer`.
+    - `entries.nonScoringRelaysAllowed: Setting<boolean>`. `false` is R42: a
+      team enters only relays that can score, so every relay beyond
+      `scorers.scoringRelaysPerTeamPerEvent` is an entry violation. The
+      violation is `relay_entries_over_limit`, one per team, event and gender,
+      with every relay in `entryKeys`, `count` and `limit`. Nothing picks which
+      relay is "the 3rd". It does nothing while the limit is `'unlimited'`.
+    - R42 and R67 do not conflict. `relayOverCap` still decides how an extra
+      relay scores (NSISC v3 and v4: `'exhibition'`). The new violation is the
+      entry report on top of that.
+    - Both checks read every resolved relay entry, not the entries that count
+      toward entry limits. With `exhibitionCounts: false` and
+      `relayOverCap: 'exhibition'`, the over-limit relays are the removed
+      ones, and a count over the limit-counted entries could never fire. A
+      relay with no time and an exhibition relay count.
+    - **Built-ins (2026-10-29).** A built-in is pinned by hash, so each rule
+      sits in a new version. `nsisc` v5 is v4 plus
+      `nonScoringRelaysAllowed: false`, cited to README R42 (line 59). Its
+      `frozen` body is v4's. `generic` v2 is v1 plus
+      `relaySwimmerOncePerEvent: true`, a published source: NCAA Rule 5-7-1-g in
+      the archived rule book (`ncaa-rulebook-2025-27`, text lines 2886-2887).
+      The rule reads: "In a timed final of a relay, a swimmer is limited to
+      participating in only one of the team's relays (i.e., A relay or B relay,
+      etc.)." It is about a timed final. The engine has no rounds, so it checks
+      every relay event: in an event swum as prelims and finals, a repeat the
+      rule does not cover is reported too. `nsisc` v5 leaves
+      `relaySwimmerOncePerEvent` absent, because no archived NSISC source says
+      NCAA relay rules govern NSISC relays. The picker default moves to
+      `nsisc` v5 and `generic` v2.
