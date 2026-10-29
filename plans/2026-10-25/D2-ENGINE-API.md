@@ -848,11 +848,13 @@ export type LoadPreference =
       readonly penaltyPointsPerExtraRace: Setting<number> }   // no default
   | { readonly mode: 'off' };
 export function parseSessionPreset(json: unknown): SessionPreset;
-export function sessionLoad(model: MeetModel, lineup: Lineup, results: Results, schedule: SessionPreset,
-  pref: LoadPreference, rules?: CompleteRulePreset): { readonly violations: readonly Violation[];
+export interface SessionLoadResult { readonly violations: readonly Violation[];
   readonly perSwimmer: readonly { readonly swimmerId: SwimmerId;
     readonly sessions: readonly { readonly session: SessionRef; readonly races: number;
-      readonly eventKeys: readonly EventKey[] }[] }[]; readonly penaltyPoints: number };
+      readonly eventKeys: readonly EventKey[] }[] }[];
+  readonly penaltyPoints: number };
+export function sessionLoad(model: MeetModel, lineup: Lineup, results: Results, schedule: SessionPreset,
+  pref: LoadPreference, rules: CompleteRulePreset): SessionLoadResult;
 ```
 
 Rules:
@@ -882,20 +884,25 @@ Rules:
   either way. Relay legs
   count. Diving counts per the `diving` setting; the NSISC preference is
   `'excluded'`, user-stated (paraphrase), R22.
+- A split entry without a seed emits the `seed_time_missing` violation and is
+  not assigned to a heat. A pending planner input emits `pending_setting`; its
+  `setting` is one of `'fastHeatSize' | 'smallFieldSession' | 'cFinal' |
+  'abFinalsScorersOnly' | 'individualPoints' | 'relayPoints' | 'diving'`.
 - An event in the lineup missing from the schedule gives an
   `unscheduled_event` violation, never zero races.
-- If `rules` is absent, or a needed `abFinalsScorersOnly` / point-table setting
-  is pending, count the prelims but do not guess finals; emit `pending_setting`.
+- If a needed `abFinalsScorersOnly` / point-table setting is pending, count the
+  prelims but do not guess finals; emit `pending_setting`.
   A pending diving load preference likewise emits `pending_setting` and does
   not count that dive. Finals use the matching event's point table (individual,
   relay or diving). With `abFinalsScorersOnly`, ranks are recalculated among
   scorers when non-scorers hold places.
-- `penaltyPoints` is an additive return field: in `prefer` mode it is the sum of
-  extra races times `penaltyPointsPerExtraRace`; otherwise it is zero. Relay
-  legs identify swimmers, but one relay entry is one race per swimmer.
-- The optional `rules` argument supplies `scoring.cFinal`, which is not present
-  in `Results`. If non-scorers need a C-final placement and this setting is
-  omitted or pending, emit `pending_setting`; never infer its size.
+- `penaltyPoints` is the sum for every swimmer across every team represented in
+  the lineup, not just the user's own team. In `prefer` mode it sums extra races
+  times `penaltyPointsPerExtraRace`; otherwise it is zero. Relay legs identify
+  swimmers, but one relay entry is one race per swimmer.
+- `rules` is required and supplies `scoring.cFinal`, which is not present in
+  `Results`. If non-scorers need a C-final placement and this setting is
+  pending, emit `pending_setting`; never infer its size.
 
 ### 3.12 Built-ins (`rules/builtins.ts`, `planner/builtins.ts`, `sourcing/builtins.ts`), P1
 

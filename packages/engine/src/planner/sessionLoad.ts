@@ -9,7 +9,7 @@ import type { LoadPreference, ScheduledEvent, SessionPreset, SessionRef } from '
 type SessionLoadResult = {
   readonly violations: readonly Violation[];
   readonly perSwimmer: readonly { readonly swimmerId: SwimmerId; readonly sessions: readonly { readonly session: SessionRef; readonly races: number; readonly eventKeys: readonly EventKey[] }[] }[];
-  /** Total preference cost for `prefer`; zero in the other modes. */
+  /** Total preference cost across every swimmer of every team in the lineup; not limited to the own team. Zero outside `prefer`. */
   readonly penaltyPoints: number;
 };
 
