@@ -38,8 +38,17 @@ schedule refuses config C:
   small field);
 - there is no row for the men's 100 IM.
 
-Give the session for the small 1650 field and the day and session of the
-100 IM, or point me to a published meet schedule. Nothing was guessed.
+The schedule copies Table C of your plan (`00-USER-PLAN.md` lines 55-76).
+Table C has no 100 IM, which suggests NSISC does not swim it at the
+championship. Config C comes from SwimCloud's simulator, which does.
+Pick one:
+- (a) drop the 100 IM from config C when load is on;
+- (b) give the day and session of the 100 IM;
+- (c) let me download the 2026 NSISC final results PDF (Ouachita Baptist's
+  site, sidearm S3) to confirm the order of events.
+
+Also give the session for a 1650 field of 8 or fewer (morning or evening).
+Nothing was guessed.
 
 ## B. Opponent scoring rosters (R70, D2 section 3.14)
 
