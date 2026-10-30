@@ -30,7 +30,9 @@ option: refuse until the coach fixes the current lineup.
 **A4. Diver weight (14.4).** `scoreMeet` counts a swimmer who dives and swims
 no relay at 1/3 (`results.ts:1002`). Its comment says only all-diving
 swimmers count at 1/3 (`results.ts:980`). The AutoBuilder uses the strict
-rule. Which rule is correct for NSISC?
+rule. Which rule is correct for NSISC? Until you answer, an explanation can
+say a better event was skipped for "strict_diver_rule": the AutoBuilder's
+own cautious count, not a meet rule.
 
 **A5. Legs 2 to 4 without a flying split (14.5).** Default: not built until
 the flyover setting (R14) lands. Current relays that use flat starts on
