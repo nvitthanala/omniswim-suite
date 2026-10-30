@@ -11,6 +11,8 @@ of their 5 most recent dated SCY swims, with at least 3 swims. A pair with
 fewer swims is frozen: never added, never dropped, shown as "not enough
 swims". Other option: value those pairs at their best time. That makes the
 solver prefer swimmers with no history.
+The robust mode (slice A7) is built on the default; an answer changes
+only how thin histories are valued.
 
 **A2. One swimmer on both the A and B relays (14.2).** NSISC v5 does not
 forbid it. Default: never. No archived NSISC source allows it, and NCAA
@@ -121,3 +123,9 @@ race count, for example by moving one of them up into a final. Default:
 allow it and show a warning. Other option: refuse any proposal that puts
 a fixed swimmer of yours over the limit (opponents always get only a
 warning).
+
+**A8. Goal seek with the "prefer" load setting (new, A6).** Goal seek finds
+the fewest changes that reach a target score. Under "prefer", extra races
+in one session cost penalty points. Should the target count the penalty
+(reach the target after the penalty) or ignore it (raw points only)?
+Default today: the AutoBuilder refuses goal seek with "prefer" and says so.
