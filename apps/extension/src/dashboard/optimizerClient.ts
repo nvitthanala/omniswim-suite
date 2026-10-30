@@ -6,10 +6,15 @@
  * resolved against dashboard.html. The worker starts on the first request and lives as long as the
  * page. No blob worker, no offscreen document.
  */
-import type { OptimizerResponse, SolveLpRequest, SolvedResponse } from '../shared/optimizerProtocol';
+import type { OptimizerResponse, SolveLpRequest, SolveMipRequest, SolvedMipResponse, SolvedResponse } from '../shared/optimizerProtocol';
 
 export interface OptimizerClient {
   solveLp(lp: string, options?: SolveLpRequest['options']): Promise<SolvedResponse>;
+  /**
+   * Solve a MIP through the worker's Model API (D5 section 11). The reply has the shape of the engine's `MipSolve` result, so this
+   * method is a `MipSolve`. `columns` is `{}` unless the status is 'Optimal'.
+   */
+  solveMip(lp: string, options?: SolveMipRequest['options']): Promise<SolvedMipResponse>;
   /** Send a request type the worker does not implement. Resolves with the worker's error text. */
   probeUnsupported(): Promise<string>;
   terminate(): void;
@@ -18,16 +23,20 @@ export interface OptimizerClient {
 export function createOptimizerClient(): OptimizerClient {
   let worker: Worker | undefined;
   let nextId = 1;
-  const pending = new Map<number, { resolve(r: SolvedResponse): void; reject(e: Error): void }>();
+  /** One entry per request in flight. `kind` is the reply kind the request expects: a reply of another kind is an error, not a result. */
+  const pending = new Map<number, { kind: 'solved' | 'solved-mip'; resolve(r: never): void; reject(e: Error): void }>();
 
   const start = (): Worker => {
     if (worker) return worker;
     const w = new Worker('optimizer.worker.js');
     w.addEventListener('message', (event: MessageEvent<OptimizerResponse>) => {
       const m = event.data;
-      if (m.kind === 'solved') {
-        pending.get(m.id)?.resolve(m);
+      if (m.kind === 'solved' || m.kind === 'solved-mip') {
+        const waiting = pending.get(m.id);
+        if (waiting === undefined) return;
         pending.delete(m.id);
+        if (waiting.kind === m.kind) waiting.resolve(m as never);
+        else waiting.reject(new Error(`optimizer worker answered a ${waiting.kind} request with ${m.kind}`));
       } else if (m.id !== undefined) {
         pending.get(m.id)?.reject(new Error(m.error));
         pending.delete(m.id);
@@ -47,7 +56,15 @@ export function createOptimizerClient(): OptimizerClient {
       const id = nextId++;
       const request: SolveLpRequest = options ? { kind: 'solve-lp', id, lp, options } : { kind: 'solve-lp', id, lp };
       return new Promise<SolvedResponse>((resolve, reject) => {
-        pending.set(id, { resolve, reject });
+        pending.set(id, { kind: 'solved', resolve, reject });
+        start().postMessage(request);
+      });
+    },
+    solveMip(lp, options) {
+      const id = nextId++;
+      const request: SolveMipRequest = options ? { kind: 'solve-mip', id, lp, options } : { kind: 'solve-mip', id, lp };
+      return new Promise<SolvedMipResponse>((resolve, reject) => {
+        pending.set(id, { kind: 'solved-mip', resolve, reject });
         start().postMessage(request);
       });
     },

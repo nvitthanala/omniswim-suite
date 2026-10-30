@@ -46,11 +46,38 @@ export function makeScale(support: Support, tieSizes: Iterable<number>): Scale {
   };
 }
 
-type Term = readonly [string, number];
-interface Row {
+export type Term = readonly [string, number];
+export interface Row {
   readonly terms: readonly Term[];
   readonly op: '<=' | '>=' | '=';
   readonly rhs: number;
+}
+
+/**
+ * A variable that is a function of the column choices (the `y` variables), with the value that makes its rows loosest. The local search
+ * (D5 10) reads these to derive a whole assignment from one column per event, so it needs no cap, load or diver logic of its own.
+ * They are listed in dependency order: a definition reads only `y` variables and earlier definitions.
+ * - `sum`: `x` and `g`, equal to the weighted sum of the `y` terms (the equality rows of 4.1 and 4.5).
+ * - `any`: `z`, 1 exactly when some `x` of the swimmer is above 0 (Z1 and Z2).
+ * - `diver`: `d`, 1 exactly when the swimmer is on the roster, dives, and has no other entry (D1 to D3). A larger `d` only loosens T1.
+ * - `excess`: `v`, the least value the row of 4.5 allows: the races above the maximum, or 0.
+ */
+export type Derived =
+  | { readonly kind: 'sum'; readonly name: string; readonly terms: readonly Term[] }
+  | { readonly kind: 'any'; readonly name: string; readonly inputs: readonly string[] }
+  | { readonly kind: 'diver'; readonly name: string; readonly z: string | null; readonly dives: readonly string[]; readonly others: readonly string[] }
+  | { readonly kind: 'excess'; readonly name: string; readonly k0: number; readonly max: number; readonly terms: readonly Term[] };
+
+/** The integer model behind an LP text: what the local search of D5 10 climbs over, and what it checks a solver incumbent against. */
+export interface LpModel {
+  readonly rows: readonly Row[];
+  readonly objective: readonly Term[];
+  readonly constant: number;
+  readonly binaries: readonly string[];
+  readonly generals: readonly { readonly name: string; readonly ub: number }[];
+  /** The events that have a choice of column, in `model.events` order. `ys[i]` is the variable of `columns[i]`. */
+  readonly events: readonly { readonly id: string; readonly ys: readonly string[]; readonly columns: readonly Column[] }[];
+  readonly derived: readonly Derived[];
 }
 
 function formatInt(n: number): string {
@@ -123,6 +150,8 @@ export interface LpBuild {
   readonly rows: number;
   readonly cols: number;
   readonly relaxed: boolean;
+  /** The integer model of the text, for the local search (D5 10). */
+  readonly model: LpModel;
   /** The objective this LP maximizes, as whole numbers. */
   objectiveOf(columns: Readonly<Record<string, number>>): number;
   /** The own points (scaled, constant included) of the chosen columns: the `y` terms only. */
@@ -187,6 +216,8 @@ class Builder {
   private constantExtra = 0;
   /** Every `g` and `v` variable, read back to fail on a fractional value. */
   private readonly loadVars: string[] = [];
+  /** Definitions of the variables that follow the column choices (see `Derived`), in dependency order. */
+  private readonly derived: Derived[] = [];
   readonly points: Term[] = [];
   readonly objective: Term[] = [];
   constant = 0;
@@ -236,6 +267,7 @@ class Builder {
       const g = top === 1 ? this.bin(name) : this.general(name, top);
       this.loadVars.push(g);
       this.row([[g, 1], ...holding.map(({ name: y, column }) => [y, -(column.eval.races.get(id)?.get(session) ?? 0)] as Term).filter(([, k]) => k !== 0)], '=', 0);
+      this.derived.push({ kind: 'sum', name: g, terms: holding.map(({ name: y, column }) => [y, column.eval.races.get(id)?.get(session) ?? 0] as Term).filter(([, k]) => k !== 0) });
       this.addRace(id, session, { name: g, coef: 1, ub: top });
     }
   }
@@ -269,6 +301,7 @@ class Builder {
       xs.set(id, x);
       const holding = ys.filter(({ column }) => column.members.includes(id)).map(({ name, column }) => [name, mult(column)] as Term);
       this.row([...holding, [x, -1]], '=', 0);
+      this.derived.push({ kind: 'sum', name: x, terms: holding });
       this.pairVars.set(id, [...(this.pairVars.get(id) ?? []), { name: x, event: es.event, kind: 'x', ub: maxMult }]);
       if (this.problem.support.load !== null && this.problem.decision.has(id)) this.addEventRaces(es, ei, ys, id, x);
     }
@@ -332,6 +365,7 @@ class Builder {
       // Z3 (D5 4.6): a held split entry stays whatever `z` is, so `x = z`.
       for (const v of vars) if (v.kind === 'x' && this.problem.held.has(pairKey(id, v.event.eventKey))) this.row([[v.name, 1], [z, -1]], '=', 0);
       this.row([[z, 1], ...vars.map((v) => [v.name, -1] as Term)], '<=', 0);
+      this.derived.push({ kind: 'any', name: z, inputs: vars.map((v) => v.name) });
     }
   }
 
@@ -380,6 +414,7 @@ class Builder {
           const v = this.general(`v${this.si(id)}_${session.replace('/', '')}`, reach + k0 - load.max);
           this.loadVars.push(v);
           this.row([[v, 1], ...list.map((t) => [t.name, -t.coef] as Term)], '>=', k0 - load.max);
+          this.derived.push({ kind: 'excess', name: v, k0, max: load.max, terms: list.map((t) => [t.name, t.coef] as Term) });
           this.penTerms.push([v, -penalty]);
           this.penaltyRows.push({ k0, terms: list });
         }
@@ -399,6 +434,8 @@ class Builder {
       if (this.problem.freeSet.has(id) && z !== undefined) this.row([[d, 1], [z, -1]], '<=', 0);
       this.row([[d, 1], ...dives.map((v) => [v.name, -1] as Term)], '<=', 0);
       for (const v of vars) if (v.event.kind !== 'diving') this.row([[d, 1], [v.name, 1]], '<=', 1);
+      const zOfRow = this.problem.freeSet.has(id) && z !== undefined ? z : null;
+      this.derived.push({ kind: 'diver', name: d, z: zOfRow, dives: dives.map((v) => v.name), others: vars.filter((v) => v.event.kind !== 'diving').map((v) => v.name) });
     }
   }
 
@@ -501,11 +538,24 @@ class Builder {
     const text = render(objective, constant, this.rows, this.binaries, this.generals);
     const sumTerms = (terms: readonly Term[], columns: Readonly<Record<string, number>>): number =>
       terms.reduce((s, [name, k]) => s + k * readColumn(columns, name), 0);
+    const order = new Map<string, number>(problem.req.model.events.map((e, i) => [`${e.gender}\u0000${e.eventKey}`, i]));
+    const model: LpModel = {
+      rows: this.rows,
+      objective,
+      constant,
+      binaries: this.binaries,
+      generals: this.generals,
+      events: [...this.eventVars]
+        .sort((a, b) => (order.get(a.es.id) as number) - (order.get(b.es.id) as number))
+        .map((ev) => ({ id: ev.es.id, ys: ev.ys.map(({ name }) => name), columns: ev.ys.map(({ column }) => column) })),
+      derived: this.derived,
+    };
     return {
       text,
       rows: this.rows.length,
       cols: this.binaries.length + this.generals.length + 1,
       relaxed: this.opts.relaxed,
+      model,
       objectiveOf: (columns) => constant + sumTerms(objective, columns),
       // The least `v` of the solution: an incumbent may carry a larger `v`, and the gate re-scores the lineup itself.
       pointsOf: (columns) => {

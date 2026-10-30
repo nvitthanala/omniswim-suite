@@ -890,14 +890,20 @@ describe('autoBuild (D5, slice A1)', () => {
     const accepted = await improvedLineup(fx);
     const proven = await autoBuild(request({ ...fx, lineup: accepted.lineup, tags: accepted.tags }), nodeMipSolve());
     expect(proven).toMatchObject({ kind: 'unchanged', reason: 'proven_no_better' });
-    // A solver that times out has proven nothing: the current lineup stays, and the reason says so.
-    const slow: MipSolve = () => Promise.resolve({ status: 'Time limit reached', objective: 0, columns: {}, incumbent: null, dualBound: 500 });
-    const timedOut = await autoBuild(request(fx), slow);
+    // A solver that times out has proven nothing: a current lineup that no move improves stays, and the reason says so. (With a
+    // current lineup the local search can improve, a time-limited solver with no incumbent gives that lineup: D5 section 10.)
+    const settled = request({ ...fx, lineup: accepted.lineup, tags: accepted.tags });
+    // The dual bound is the true optimum of the LP it is asked for (a valid bound: never below what a lineup can reach).
+    const exact = nodeMipSolve();
+    const slow: MipSolve = async (lp, options) => ({ status: 'Time limit reached', objective: 0, columns: {}, incumbent: null, dualBound: (await exact(lp, options)).objective });
+    const timedOut = await autoBuild(settled, slow);
     expect(timedOut).toMatchObject({ kind: 'unchanged', reason: 'none_found_within_limits' });
     expect(timedOut.proof.status).toBe('gap');
-    const unknown = await autoBuild(request(fx), () => Promise.resolve({ status: 'Time limit reached', objective: 0, columns: {}, incumbent: null, dualBound: null }));
+    const unknown = await autoBuild(settled, () => Promise.resolve({ status: 'Time limit reached', objective: 0, columns: {}, incumbent: null, dualBound: null }));
     expect(unknown).toMatchObject({ kind: 'unchanged', reason: 'none_found_within_limits' });
     expect(unknown.proof.status).toBe('unknown');
+    const searched = await autoBuild(request(fx), slow);
+    expect(searched).toMatchObject({ kind: 'improved', proposal: { method: 'local-search' } });
     // The current lineup is a witness: an infeasible MIP is a model error, not "unchanged".
     const infeasible: MipSolve = () => Promise.resolve({ status: 'Infeasible', objective: 0, columns: {}, incumbent: null, dualBound: null });
     expect((await autoError(() => autoBuild(request(fx), infeasible))).code).toBe('model_mismatch');

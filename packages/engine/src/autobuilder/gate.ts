@@ -27,12 +27,13 @@ export const ownPointsOf = (results: Results, own: TeamId): number => (results.t
 
 /**
  * A violation the gate refuses to add. The others are warnings or settings the engine only reports. A `session_load` violation
- * is hard in `respect` mode only: in `prefer` mode it is the cost the penalty prices.
+ * is hard in `respect` mode only: in `prefer` mode it is the cost the penalty prices. The limit binds own decision swimmers only
+ * (D5 amendment 2): with `decision` given, a `session_load` violation of any other swimmer, an opponent, is never hard.
  */
-export function isHard(v: Violation, respect: boolean): boolean {
+export function isHard(v: Violation, respect: boolean, decision?: ReadonlySet<SwimmerId>): boolean {
   switch (v.kind) {
     case 'session_load':
-      return respect;
+      return respect && (decision === undefined || decision.has(v.swimmerId));
     case 'entry_cap':
     case 'scoring_team_size':
     case 'relay_swimmer_repeated':
@@ -46,8 +47,12 @@ export function isHard(v: Violation, respect: boolean): boolean {
   }
 }
 
-const isWarning = (v: Violation): boolean =>
-  v.kind === 'scorer_without_entry' || v.kind === 'seed_time_missing' || (v.kind === 'relay_leg' && v.reason === 'off_scoring_roster');
+const isWarning = (v: Violation, problem: Problem): boolean =>
+  v.kind === 'scorer_without_entry' ||
+  v.kind === 'seed_time_missing' ||
+  (v.kind === 'relay_leg' && v.reason === 'off_scoring_roster') ||
+  // A swimmer outside the decision set, an opponent, is not bound by the own load limit: a new violation of theirs is reported, not refused.
+  (v.kind === 'session_load' && !problem.decision.has(v.swimmerId));
 
 /** Hard violations of a lineup that name a decision swimmer or an own built side: what the solver can repair. */
 export function repairable(problem: Problem): Violation[] {
@@ -167,7 +172,7 @@ function checkViolations(problem: Problem, built: Built, violations: readonly Vi
   const before = new Set(problem.currentViolations.map((v) => JSON.stringify(v)));
   const respect = problem.support.load !== null && !problem.support.load.prefer;
   for (const v of violations) {
-    if (!isHard(v, respect)) continue;
+    if (!isHard(v, respect, problem.decision)) continue;
     if (v.kind === 'entry_cap' && problem.decision.has(v.swimmerId) && (isPinned(problem, v.swimmerId) || built.joined.has(v.swimmerId))) {
       autoBuildFail('model_mismatch', `swimmer "${v.swimmerId}" is over the ${v.which} entry cap in the built lineup (${v.count} of ${v.limit})`, v.swimmerId);
     }
@@ -179,11 +184,11 @@ function checkViolations(problem: Problem, built: Built, violations: readonly Vi
     }
     if (!before.has(JSON.stringify(v))) autoBuildFail('model_mismatch', `the built lineup adds a ${v.kind} violation that the current lineup lacks`, v.kind);
   }
-  return violations.filter((v) => isWarning(v) && !before.has(JSON.stringify(v)));
+  return violations.filter((v) => isWarning(v, problem) && !before.has(JSON.stringify(v)));
 }
 
 /** Build, re-score and check. Throws `model_mismatch` on any difference. */
-export function gate(problem: Problem, space: Space, selection: Selection, scale: Scale, mipPoints: number, method: 'mip' | 'mip-incumbent' = 'mip'): AutoBuildProposal {
+export function gate(problem: Problem, space: Space, selection: Selection, scale: Scale, mipPoints: number, method: AutoBuildProposal['method'] = 'mip'): AutoBuildProposal {
   const { req } = problem;
   const built = buildLineup(problem, space, selection);
   const results = scoreMeet(req.model, built.lineup, built.tagsForScoring, req.rules, req.sourcing);

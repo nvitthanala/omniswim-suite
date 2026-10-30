@@ -793,3 +793,28 @@ Before squad generation, drop from every position's options any decision swimmer
 This is exact. C2 and C3 already forbid `x[s,e] = 1` for such a swimmer, so no feasible lineup uses a squad that holds them. Compute `tau_out` over the remaining universe; the bound stays valid because the removed squads are infeasible. The current squads stay in `Q_e` even when they hold such a swimmer, so the current state remains representable.
 
 Test `cappedLegsDoNotCrowdQ`: the top 12 squads of an event all hold a swimmer whose relay cap is used up by a fixed relay. A feasible relay exists among the other swimmers. With default limits, the result is `improved` and holds that relay. The same fixture before this rule returned `unchanged` with `none_found_within_limits`.
+
+## Amendment 3 (lead rulings, 2026-10-30, slice A5)
+
+1. **Local search seed.** Section 10 stands. Seed from the verified
+   incumbent, else from the current lineup when it is feasible. There is
+   no opt-in flag. A test stub that reports a dual bound below a reachable
+   objective is an invalid fixture and may be corrected.
+2. **Session load outside the decision set under `respect`.** The load
+   limit binds decision swimmers only: the own swimmers the AutoBuilder may
+   move. Opponents and fixed own swimmers (non-members, non-scorer roles,
+   free swimmers on fixed relay events) are outside it. A build can still
+   change their race counts, so a fixed own swimmer can go over the limit
+   with only a warning. User question A7 asks whether that is acceptable. Own entries can move an opponent between
+   sessions, for example into or out of a final (section 8.2). A
+   `session_load` violation that names a swimmer outside the decision set
+   is never hard and never a `model_mismatch`. If the current lineup does
+   not have it, the result lists it as a new warning.
+3. **Scale changes.** When refinement changes the scale, every stored
+   objective that is compared across solves (the incumbent, `beaten`) is
+   rescaled first.
+4. **A bounded local search with no clock** (Codex J14). With no
+   `req.clock` the engine cannot measure the 2 s allotment (section 13
+   "Clock"). The local search therefore also stops at a fixed evaluation
+   cap, in every mode, so the stage is always bounded. A cap stop reports
+   the same `budget` stop as a clock stop.

@@ -50,9 +50,19 @@ const ASSETS: Record<string, { file: string; type: string }> = {
   'fixture.js': { file: 'fixture.js', type: 'text/javascript; charset=utf-8' },
 };
 
+interface MipReply {
+  status: string;
+  objective: number;
+  columns: Record<string, number>;
+  incumbent: { objective: number; columns: Record<string, number> } | null;
+  dualBound: number | null;
+  solveMs: number;
+}
+
 /** What the test reads from the dashboard's `globalThis.osxHarness` (apps/extension/src/dashboard/harness.ts). */
 interface Harness {
   solveLp(lp: string): Promise<{ status: string; objective: number; columns: Record<string, number>; loadMs: number; solveMs: number }>;
+  solveMip(lp: string, options?: Record<string, string | number | boolean>): Promise<MipReply>;
   probeUnsupported(): Promise<string>;
   putSetting(key: 'cutCloseThresholdPct', value: number): Promise<unknown>;
   getSetting(key: 'cutCloseThresholdPct'): Promise<{ found: boolean; value?: { key: string; value: number; rev: number; updatedAt: string } }>;
@@ -64,6 +74,24 @@ const MODEL_HEAD = 'Maximize\n obj: x + y\nSubject To\n c1: 2 x + 2 y <= 5\nBoun
 /** The relaxation peaks at 2.5. With x and y integer the optimum is 2. */
 const LP = `${MODEL_HEAD}End\n`;
 const MIP = `${MODEL_HEAD}General\n x y\nEnd\n`;
+
+/**
+ * A packing model (140 binaries, 12 rows, from a fixed generator) that HiGHS cannot finish in 50 ms: the time limit must stop it.
+ * The numbers are synthetic and carry no competition meaning.
+ */
+function hardMip(): string {
+  let seed = 12345;
+  const next = (n: number): number => {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    return seed % n;
+  };
+  const n = 140;
+  const vars = Array.from({ length: n }, (_, i) => `v${i}`);
+  const lines = ['Maximize', ` obj: ${vars.map((v) => `+ ${20 + next(80)} ${v}`).join(' ')}`, 'Subject To'];
+  for (let r = 0; r < 12; r++) lines.push(` c${r}: ${vars.map((v) => `+ ${10 + next(60)} ${v}`).join(' ')} <= ${n * 11}`);
+  lines.push('Binary', ` ${vars.join(' ')}`, 'End');
+  return lines.join('\n');
+}
 
 const STYLE_PROBE = () => {
   const props = ['color', 'backgroundColor', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'marginTop', 'marginLeft', 'paddingTop', 'display', 'borderTopWidth'] as const;
@@ -196,7 +224,18 @@ test.describe('S3 workers and the docked iframe', () => {
           expect(mip.objective).toBeCloseTo(2, 6);
           expect(Number.isInteger(mip.columns.x) && Number.isInteger(mip.columns.y)).toBe(true);
           expect(refused).toMatch(/^optimizer not available/);
-          return `LP ${lp.objective}, MIP ${mip.objective} (x=${mip.columns.x}, y=${mip.columns.y}); wasm load ${lp.loadMs.toFixed(0)} ms, solve ${lp.solveMs.toFixed(1)} ms (LP) and ${mip.solveMs.toFixed(1)} ms (MIP); unsupported request refused`;
+          // solve-mip (D5 section 11): the Model API in the same worker. An Optimal MIP returns its columns; a run cut by a 50 ms
+          // time limit returns the status, no columns, and a finite dual bound.
+          const mipOptimal = await frame.evaluate((model) => (globalThis as unknown as WithHarness).osxHarness.solveMip(model), MIP);
+          expect(mipOptimal.status).toBe('Optimal');
+          expect(mipOptimal.objective).toBeCloseTo(2, 6);
+          expect(Number.isInteger(mipOptimal.columns.x) && Number.isInteger(mipOptimal.columns.y)).toBe(true);
+          expect(mipOptimal.incumbent).toBeNull();
+          const limited = await frame.evaluate((model) => (globalThis as unknown as WithHarness).osxHarness.solveMip(model, { time_limit: 0.05 }), hardMip());
+          expect(limited.status).toBe('Time limit reached');
+          expect(limited.columns).toEqual({});
+          expect(limited.solveMs).toBeLessThan(5000);
+          return `LP ${lp.objective}, MIP ${mip.objective} (x=${mip.columns.x}, y=${mip.columns.y}); wasm load ${lp.loadMs.toFixed(0)} ms, solve ${lp.solveMs.toFixed(1)} ms (LP) and ${mip.solveMs.toFixed(1)} ms (MIP); unsupported request refused; solve-mip Optimal (objective ${mipOptimal.objective}) and cut at 50 ms (${limited.status}, ${limited.solveMs.toFixed(0)} ms, incumbent ${limited.incumbent === null ? 'none' : limited.incumbent.objective}, dual bound ${limited.dualBound})`;
         });
 
         await record(3, 'iframe and tab read the same IndexedDB record', async () => {

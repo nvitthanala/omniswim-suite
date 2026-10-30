@@ -12,7 +12,7 @@
  */
 import { createStorageRepo, openOmniDb } from '../storage';
 import type { GetResult, SettingsMap, StorageRepo } from '../storage';
-import type { SolveLpRequest, SolvedResponse } from '../shared/optimizerProtocol';
+import type { SolveLpRequest, SolveMipRequest, SolvedMipResponse, SolvedResponse } from '../shared/optimizerProtocol';
 import { createOptimizerClient } from './optimizerClient';
 import type { PanelStats } from './panelPort';
 
@@ -21,6 +21,8 @@ export type HarnessSetting = 'cutCloseThresholdPct';
 export interface OsxHarness {
   readonly host: string;
   solveLp(lp: string, options?: SolveLpRequest['options']): Promise<SolvedResponse>;
+  /** The `solve-mip` request (D5 section 11): the Model API, with the dual bound and, at a time limit, the incumbent. */
+  solveMip(lp: string, options?: SolveMipRequest['options']): Promise<SolvedMipResponse>;
   /** The worker's reply to a request type it does not implement. */
   probeUnsupported(): Promise<string>;
   /** Create the setting, or update it at the stored `rev`. Returns the stored record. */
@@ -38,6 +40,7 @@ export function installHarness(host: string, panel: PanelStats | null): OsxHarne
   const harness: OsxHarness = {
     host,
     solveLp: (lp, options) => optimizer.solveLp(lp, options),
+    solveMip: (lp, options) => optimizer.solveMip(lp, options),
     probeUnsupported: () => optimizer.probeUnsupported(),
     async putSetting(key, value) {
       const r = await repo();

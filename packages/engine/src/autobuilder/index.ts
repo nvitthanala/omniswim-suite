@@ -109,7 +109,8 @@ function proofOf(
     const { D, best, upper } = outcome.bound;
     const bestFound = best / D;
     if (upper === null) return { status: 'unknown', bestFound, upperBound: null, gap: null, ...base };
-    return { status: upper === best ? 'proven_optimal' : 'gap', bestFound, upperBound: upper / D, gap: (upper - best) / D, ...base };
+    // The local search never claims a proof (D5 10), even when its points meet the bound: that stays a gap of 0.
+    return { status: upper === best && outcome.method !== 'local-search' ? 'proven_optimal' : 'gap', bestFound, upperBound: upper / D, gap: (upper - best) / D, ...base };
   }
   // No lineup was found: the best known is the current one, and a dual bound (when the solver gave one) is the only bound.
   const upper = outcome.kind === 'non_result' ? outcome.upperScaled : null;

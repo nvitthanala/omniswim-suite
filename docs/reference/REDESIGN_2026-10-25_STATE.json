@@ -628,7 +628,7 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
-    "RESUME: A4 in flight (executor ad2051c440db6ce85). 1) git status. 2) If no report, SendMessage the executor. 3) Codex review in term_a6fd5787, full gates, commit. User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md.",
+    "RESUME: A5 committed. Next A6 (margin and goal seek, D5 12.6) via SendMessage to executor ad2051c440db6ce85. User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md (A1-A7, B1-B3, C1, D1-D5, E1-E4).",
     "RESUME after the limit: 1) git status; diff packages/engine/src/autobuilder, tests/engineAutoBuild.test.ts, tests/helpers/nodeMipSolve.ts, plans/2026-10-25/D5-AUTOBUILDER.md (amendment 1 appended, uncommitted). 2) If the executor report is missing, resume it with SendMessage (A1 agent) rather than re-briefing. 3) npm run build:extension, then full gates; check defaultLimitsConfigC returns improved within 11 s, 3 runs. 4) Commit A1 + amendment as one commit (Codex J8 review: no defect, on the pre-amendment diff; re-review the amendment diff with Codex J terminal term_a6fd5787 first). 5) Next: D5 slice A2 (relays). Open user questions: D5 14.1-14.5, R70 x3, P4 fetch approval, cap-boundary tie rule.",
     "RESUME (if interrupted 2026-10-29 afternoon): read N2 and J4 reports (orca orchestration inbox); review sessionLoad.ts against D2 3.11; rebuild + full gates; commit planner core, then planner UI.",
     "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
@@ -1040,6 +1040,17 @@
         "evalTime": "~0.4 s per run, down from 4-5 s"
       },
       "gap": "Not narrowed. Config C unscaled finds 1435; the relaxed-MIP bound varies with the wall clock (1714/1731/1786), so the gap is 279-351. Sweep: K10/Kmax12 -> 736 found; 2 refine rounds -> 1435; 30 s -> 1498 (over budget). Defaults unchanged (D5 6.4)."
+    },
+    "D5.A5": {
+      "status": "COMMITTED 2026-10-30 (commit follows this state edit). Lead gates green on the final tree: lint, vitest 3077, npm test 65, golden, mutation 413, build, harness 2/2 (now incl. solve-mip Optimal + time limit in Chromium), no autobuilder/ or osxHarness in dist, bridge 5643 B. Codex J14 (one medium finding, fixed by the evaluation cap) and J15 (cap: no findings). Advisor audit items done.",
+      "owns": [
+        "apps/extension/src/shared/optimizerProtocol.ts (additive)",
+        "apps/extension/src/worker/optimizer.ts",
+        "apps/extension/src/dashboard/optimizerClient.ts",
+        "packages/engine/src/autobuilder/localSearch.ts",
+        "tests"
+      ],
+      "next": "A6 margin and goal seek (D5 12.6)"
     }
   },
   "followUps": [
@@ -1087,6 +1098,18 @@
     {
       "id": "A3-A15-A20-survivors",
       "note": "A3 mutation survivors A15 (lp.ts unit guard) and A20 (gate.ts session_load tripwire) argued unreachable/defensive, not proven."
+    },
+    {
+      "id": "mutation-runner-timeouts",
+      "note": "Mutation runners need a per-mutant timeout (a >= mutant loops localSearch forever) and must not run as orphaned background jobs (they corrupt each other's source)."
+    },
+    {
+      "id": "A5-main-thread",
+      "note": "D5 11 does not say where autoBuild runs; the worker header says lineup building happens in the page. ~0.4 s evaluation plus up to 2 s synchronous local search would block the dashboard or docked panel main thread. Decide in U1 (e.g. run autoBuild in a worker)."
+    },
+    {
+      "id": "A5-cap-machine-speed",
+      "note": "LOCAL_SEARCH_MAX_EVALUATIONS 80000 is ~2 s on this machine; slower machines take longer with no clock. Production always passes a clock."
     }
   ],
   "p3CoreA": {
@@ -1120,5 +1143,6 @@
       "toLegacyScoringSettings drops relayOverCap; only scoreMeet calls it."
     ]
   },
-  "questionsFile": "plans/2026-10-25/QUESTIONS_FOR_USER.md (all open user questions, numbered A1-E4, 2026-10-29)"
+  "questionsFile": "plans/2026-10-25/QUESTIONS_FOR_USER.md (all open user questions, numbered A1-E4, 2026-10-29)",
+  "codexJTerminal": "J15: term_d6e74d3f-fb0f-45ff-98e6-634f4e2edb0c (run_a2e09d4827fd). Old J run run_da9d5ce0db6f stopped."
 }

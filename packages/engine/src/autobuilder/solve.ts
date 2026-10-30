@@ -6,10 +6,12 @@
  * clock. The restricted MIP runs first: any Optimal result or verified incumbent is a real lineup, so a lineup exists before
  * the slow stages start. Then the relaxed MIP (a valid upper bound), at most `refineRounds` refinement rounds when the
  * estimate fits, and the tie-break that minimizes changes when time is left. Every result is checked against its own columns
- * before it is used. Only an `'Optimal'` status, or a verified incumbent, yields columns.
+ * before it is used. Only an `'Optimal'` status, or a verified incumbent, yields columns. When the last solve ends at its time
+ * limit, the local search of D5 section 10 (slice A5) tries to improve on the verified incumbent, or on the current state when the request asks for it and no incumbent exists.
  */
 import { buildLp, makeScale } from './lp';
 import type { LpBuild, Scale, Selection } from './lp';
+import { choiceOfChosen, choiceOfCurrent, localSearch, rowsHold } from './localSearch';
 import type { Space } from './space';
 import { autoBuildFail } from './types';
 import type { AutoBuildLimits, MipSolution, MipSolve } from './types';
@@ -29,9 +31,14 @@ export const TIE_BREAK_MIN_MS = 2000;
 export const REFINE_PER_EVENT = 2;
 /** The share of `left()` the restricted solve may take. */
 export const RESTRICTED_SHARE = 0.5;
+/** The local search stops at a local optimum or after this long, or when the budget is gone (D5 10), whichever comes first (milliseconds). */
+export const LOCAL_SEARCH_MAX_MS = 2000;
+/** The status text of the local search record in `proof.solves`. */
+export const LOCAL_OPTIMUM = 'Local optimum';
+export const SEARCH_BUDGET = 'Budget reached';
 
 export interface SolveRecord {
-  readonly stage: 'relaxed' | 'restricted' | 'tie-break';
+  readonly stage: 'relaxed' | 'restricted' | 'tie-break' | 'local-search';
   readonly status: string;
   readonly ms: number | null;
   readonly rows: number;
@@ -42,7 +49,7 @@ export type SolveOutcome =
   | {
       readonly kind: 'found';
       readonly selection: Selection;
-      readonly method: 'mip' | 'mip-incumbent';
+      readonly method: 'mip' | 'mip-incumbent' | 'local-search';
       /** The scale and own points (scaled) of the lineup found: what the gate checks. */
       readonly scale: Scale;
       readonly bestScaled: number;
@@ -113,8 +120,10 @@ interface Found {
   readonly selection: Selection;
   readonly scale: Scale;
   readonly points: number;
-  readonly rank: 1 | 2 | 3;
-  readonly method: 'mip' | 'mip-incumbent';
+  readonly rank: 0 | 1 | 2 | 3;
+  readonly method: 'mip' | 'mip-incumbent' | 'local-search';
+  /** An incumbent whose values satisfy every row of the restricted LP (D5 10). Only a verified incumbent seeds the local search. */
+  readonly verified?: boolean;
 }
 
 interface Bound {
@@ -125,10 +134,18 @@ interface Bound {
 const real = (points: number, D: number): number => points / D;
 
 /** `points` (scaled by `from`) on the scale `to`. Scales only grow by whole multiples, so this is exact. */
-function rescale(points: number, from: number, to: number): number {
+export function rescale(points: number, from: number, to: number): number {
   const x = (points * to) / from;
   if (Math.abs(x - Math.round(x)) >= 1e-6) autoBuildFail('model_mismatch', `${points} at scale ${from} is not whole at scale ${to}`);
   return Math.round(x);
+}
+
+/**
+ * The points, on the final scale, that a local search lineup must exceed to replace what is found: the best found so far when there is
+ * one, rescaled whenever its scale is not the final one (a refinement round can change `D`), else the points of the seed.
+ */
+export function pointsToBeat(best: { readonly points: number; readonly scale: { readonly D: number } } | null, seedPoints: number, finalD: number): number {
+  return best === null ? seedPoints : rescale(best.points, best.scale.D, finalD);
 }
 
 /** The best lineup and the best bound so far. */
@@ -207,7 +224,8 @@ class Sequence {
       this.ledger.consider({ selection: build.select(result.columns), scale, points: build.pointsOf(result.columns), rank: 2, method: 'mip' });
     } else if (result.incumbent !== null) {
       checkObjective(build, result.incumbent, 'restricted incumbent');
-      this.ledger.consider({ selection: build.select(result.incumbent.columns), scale, points: build.pointsOf(result.incumbent.columns), rank: 1, method: 'mip-incumbent' });
+      const verified = rowsHold(build.model, result.incumbent.columns);
+      this.ledger.consider({ selection: build.select(result.incumbent.columns), scale, points: build.pointsOf(result.incumbent.columns), rank: 1, method: 'mip-incumbent', verified });
     }
     return 'ok';
   }
@@ -262,6 +280,41 @@ class Sequence {
     return { selection: build.select(result.columns), scale: finalScale, points, rank: best.rank, method: best.method };
   }
 
+  /**
+   * D5 10. Runs only when the last MIP solve ended at its time limit, and not after an Optimal restricted or relaxed result (which is
+   * the best over these columns already). Seed: the verified incumbent, else the current state if it
+   * satisfies every row; with neither, nothing runs. It returns a lineup only when the search beat both the seed and `best`: then the method is
+   * `'local-search'`. It never raises the proof: `proofOf` caps the status below `proven_optimal` for this method.
+   */
+  private fallback(best: Found | null, finalScale: Scale): Found | null {
+    const last = this.records[this.records.length - 1];
+    if (last === undefined || last.status !== 'Time limit reached') return best;
+    if (best !== null && best.rank !== 1) return best;
+    const allotment = Math.min(LOCAL_SEARCH_MAX_MS, this.timer.left());
+    if (allotment < MIN_ALLOTMENT_MS) return best;
+    // The clock starts before the LP is rebuilt: the rebuild is part of the allotment, so the stage ends within min(2 s, left).
+    const t0 = this.clock?.();
+    const build = buildLp(this.space, finalScale, { relaxed: false });
+    const { model } = build;
+    const fromIncumbent = best !== null && best.verified === true ? choiceOfChosen(model, best.selection.chosen) : null;
+    const seeds = [fromIncumbent, choiceOfCurrent(model)];
+    const budget = this.clock === undefined || t0 === undefined ? {} : { clock: this.clock, stopAt: t0 + allotment };
+    let seeded: ReturnType<typeof localSearch> = null;
+    for (const seed of seeds) {
+      if (seed === null) continue;
+      seeded = localSearch(model, seed, budget);
+      if (seeded !== null) break;
+    }
+    if (seeded === null) return best;
+    const ms = this.clock !== undefined && t0 !== undefined ? this.clock() - t0 : null;
+    this.records.push({ stage: 'local-search', status: seeded.stop === 'budget' ? SEARCH_BUDGET : LOCAL_OPTIMUM, ms, rows: build.rows, cols: build.cols });
+    const points = build.pointsOf(seeded.columns);
+    if (points !== seeded.objective) autoBuildFail('model_mismatch', `the local search objective ${seeded.objective} differs from the LP points ${points}`);
+    const beaten = pointsToBeat(best, seeded.startObjective, finalScale.D);
+    if (seeded.moves === 0 || points <= beaten) return best;
+    return { selection: build.select(seeded.columns), scale: finalScale, points, rank: 0, method: 'local-search' };
+  }
+
   async go(): Promise<SolveOutcome> {
     const { ledger } = this;
     for (let round = 0; ; round++) {
@@ -271,11 +324,12 @@ class Sequence {
       if (ledger.proven() || round >= this.limits.refineRounds || stage.active === null || !this.refine(stage.active)) break;
     }
     const finalScale = scaleFor(this.space);
-    const { best, upper } = ledger;
-    if (best === null) {
+    const { upper } = ledger;
+    const bestSoFar = ledger.best === null ? null : await this.tieBreak(ledger.best, finalScale);
+    const chosen = this.fallback(bestSoFar, finalScale);
+    if (chosen === null) {
       return { kind: 'non_result', upperScaled: upper === null ? null : rescale(upper.points, upper.D, finalScale.D), scale: finalScale };
     }
-    const chosen = await this.tieBreak(best, finalScale);
     const bestAtFinal = rescale(chosen.points, chosen.scale.D, finalScale.D);
     const upperAtFinal = upper === null ? null : rescale(upper.points, upper.D, finalScale.D);
     if (upperAtFinal !== null && bestAtFinal > upperAtFinal) {
