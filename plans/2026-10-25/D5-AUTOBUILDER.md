@@ -861,3 +861,97 @@ Test `cappedLegsDoNotCrowdQ`: the top 12 squads of an event all hold a swimmer w
      `objective.minSwims`; integers with 1 ≤ min ≤ recent ≤ 20.
    - `evaluation.robustOwnPoints` is set in robust mode only. `ownPoints`,
      `results` and `load` use normal seeds.
+
+## Amendment 6 (lead rulings, 2026-10-30, slice A8)
+
+1. **Seeds.** Every explanation fact uses normal seeds, in every mode. A
+   robust proposal carries no pins, so the facts describe the lineup the
+   coach would enter.
+2. **`marginalPoints`** is own points in every mode, including margin,
+   closest and goal seek.
+3. **Who is explained.** Decision swimmers who are tagged scorers or join
+   in the proposal. An entry with no place gets no explanation.
+4. **`binding`** replaces the three values of section 9. It is decided in
+   this order: `entry_cap`; `session_load` (respect mode only);
+   `strict_diver_rule`; `load_penalty` (prefer mode only: the entry adds
+   points, and the extra penalty is at least those points; an entry that
+   adds no points falls through to `teammates`); then, by the own marginal at the
+   skipped event: at or below 0 gives `teammates` (the spec's meaning); above
+   0 gives `search_limit` when the mode is max-own, the proof is not
+   `proven_optimal`, or the pair was outside the candidates (or frozen),
+   else `objective` (the mode's objective prefers the entered event: rival
+   points, robust value, or fewer changes). `strict_diver_rule` is the
+   AutoBuilder's conservative count (section 4.4, user question A4), never a
+   meet rule: `scoreMeet` raises no `scoring_team_size` violation for it,
+   and `roster_add.spotsAfter` uses `scoreMeet`'s count.
+   A frozen robust pair also reads `search_limit`, but no run length enters
+   it: U1 shows a skip whose pair is in `proof.searchSpace.frozenPairs` as
+   "not enough swims (n)", never as "a longer run may enter it".
+5. **`roster_add.marginalPoints`** removes the swimmer's individual entries
+   and every relay they swim.
+6. **`otherTeamsAhead`** counts other-team entries, not teams. A tie is
+   neither ahead nor behind.
+7. **`estimated`** is true when the entry names a converted seed swim, or
+   when every swim at the seed value is converted.
+8. **Order.** `roster_add` first by swimmer id, then `unusual_event` by
+   swimmer id and entry key. `skipped` is in ranking order.
+9. **Failure.** A mismatch inside `explain` throws `model_mismatch`, like
+   the gate: it means the scoring is inconsistent.
+10. **Timing.** `proof.timings.explainMs` (required). It is `null` with no
+    clock, or when no proposal was explained. An explain run that finds no
+    unusual entries still reports its time. Explanations add about 0.4 s on config C.
+
+## Amendment 7 (architect decision, 2026-10-31): where `autoBuild` runs (U1)
+
+1. **A dedicated `autobuilder.worker`**, owned by the dashboard page (the tab
+   or the docked iframe), runs all of `autoBuild`. It loads its own HiGHS and
+   calls `solveMipOn` (`worker/optimizerSolve.ts`) directly. `optimizer.worker`
+   does not change and keeps serving `rosterSuggest` and opponent re-suggests.
+   Reasons: on the dashboard main thread the synchronous evaluation, local
+   search, gate and explain freeze the port handler and the docked panel
+   (`main.tsx:7`); inside `optimizer.worker` a build blocks every other solve
+   for about 6 s, and Cancel (`terminate()`) would reject them too
+   (`optimizerClient.ts:260-264`); `optimizer.ts:12` says that worker builds no
+   lineup model.
+2. **Protocol** in a new `shared/autobuilderProtocol.ts` (type-only engine
+   imports; `optimizerProtocol.ts` must import nothing):
+   - `auto-build {id, request: Omit<AutoBuildRequest,'clock'>, clock: 'wall'|'none'}`.
+     The worker sets the clock (`'wall'` = `performance.now`). A request that
+     still holds a `clock` function is refused before `postMessage`.
+   - `auto-build-progress {id, solvesDone, elapsedMs, limitMs}`, one per
+     `MipSolve` call. No stage names.
+   - `auto-build-done {id, result, loadMs, wallMs}`.
+   - `auto-build-error {id, source: 'autobuild'|'score'|'internal', code,
+     subject, message}`: `code` and `subject` are copied, because an Error
+     keeps only name and message across `postMessage`.
+   - No cancel message: the client calls `terminate()`, rejects with
+     `'cancelled'`, and starts a fresh worker on the next run. Never use the
+     kind `plan-lineup` (`probeUnsupported` relies on it).
+3. **U1 builds against** `createAutoBuildClient(): { run(req, onProgress):
+   Promise<AutoBuildResult>; cancel(): void }`. One run at a time. The UI
+   lives in the dashboard. The page panel gets only `auto-build-status
+   {status, elapsedMs, limitMs}` (additive `panelProtocol.ts` kind). Each
+   result is tagged with its source snapshot; Apply is blocked when the
+   snapshot changed, and before Apply U1 re-suggests the opponents through
+   `optimizer.worker` and re-scores.
+4. **Acceptance for the wiring:**
+   1. the worker module in Node with a fake scope, `clock: 'none'`, a
+      generous limit and `refineRounds: 0`, equals a direct `autoBuild` with
+      `nodeMipSolve`, timing fields aside. This test also settles an open
+      observation: one architect run saw a different result from a
+      `structuredClone`d request (likely timing, unproven);
+   2. a request holding `clock` is refused;
+   3. an `AutoBuildError` arrives as `auto-build-error` with the same code
+      and subject;
+   4. progress arrives in order and `solvesDone` equals `proof.solves.length`;
+   5. `cancel()` rejects the run, an `optimizer.worker` `solveLp` in flight
+      still resolves, and the next run works;
+   6. the worker is in `build.config.mjs`, `extensionBuildFreshness.test.ts`
+      and the T-B7 list (`extensionBundleBoundaries.test.ts`); T-B5 and T-B8
+      pass; the bundle holds no `@omniswim/swimcloud`;
+   7. the `optimizer.worker` protocol tests pass unchanged;
+   8. the Chromium harness: the docked iframe runs a build, Cancel ends it,
+      and the page panel shows the status.
+5. **Risks:** two HiGHS instances (memory; `loadMs` per new worker); a tab and
+   a docked iframe can each run a build, so Apply goes through the storage
+   layer's last-write rule; wall-clock results vary with CPU load.

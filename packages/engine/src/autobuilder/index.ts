@@ -12,6 +12,7 @@
 import { scoreMeet } from '../model/results';
 import type { Results } from '../model/results';
 import type { Gender } from '../model/primitives';
+import { explain } from './explain';
 import { gate, ownPointsOf, repairable } from './gate';
 import { ownPenalty, scorerIds } from './load';
 import { metricOf } from './mode';
@@ -19,13 +20,14 @@ import { scaleFor, solveAutoBuild } from './solve';
 import type { Squad } from './squads';
 import type { SolveOutcome, SolveRecord } from './solve';
 import type { Evaluator } from './evaluate';
+import { eventId } from './evaluate';
 import { pinLineup } from './robust';
 import { buildProblem, classify, Space } from './space';
 import type { EventSpace, Problem } from './space';
 import type { Support } from './support';
 import { checkLimits, checkLoadSettings, checkObjective, checkOwnTags, checkRules, checkSchedule, checkTeams, loadRuleOf } from './support';
 import { autoBuildFail } from './types';
-import type { AutoBuildEvaluation, AutoBuildProof, AutoBuildRequest, AutoBuildResult, AutoBuildRestriction, MipSolve } from './types';
+import type { AutoBuildEvaluation, AutoBuildProof, AutoBuildProposal, AutoBuildRequest, AutoBuildResult, AutoBuildRestriction, MipSolve } from './types';
 
 export { AUTOBUILD_DEFAULT_LIMITS, AUTOBUILD_DEFAULT_ROBUST, AutoBuildError } from './types';
 export type {
@@ -108,7 +110,7 @@ function proofBase(problem: Problem, space: Space, records: readonly SolveRecord
       })),
     },
     solves: records.map((r) => ({ stage: r.stage, status: r.status, ms: r.ms, rows: r.rows, cols: r.cols })),
-    timings: { evaluateMs: space.evaluateMs, solveMs, gateMs },
+    timings: { evaluateMs: space.evaluateMs, solveMs, gateMs, explainMs: null },
   };
 }
 
@@ -157,11 +159,27 @@ function decide(problem: Problem, space: Space, outcome: Extract<SolveOutcome, {
   const gateMs = clock !== undefined && t0 !== undefined ? clock() - t0 : null;
   const broken = repairable(problem);
   const proof = proofOf(problem, space, outcome, current, records, gateMs, broken.length === 0 && !strictFits(problem));
-  if (broken.length > 0) return { kind: 'current_infeasible', currentViolations: broken, alternative: proposal, current, proof };
+  // D5 9: the explanations are read from the finished proposal, after the proof. They change neither, except `timings.explainMs`.
+  const explained = (): { readonly proposal: AutoBuildProposal; readonly proof: AutoBuildProof } => {
+    const t1 = clock?.();
+    const explanations = explain(problem, proposal, {
+      status: proof.status,
+      candidate: (event, swimmerId) => space.events.find((es) => es.id === eventId(event.eventKey, event.gender))?.candidates.includes(swimmerId) === true,
+    });
+    const explainMs = clock !== undefined && t1 !== undefined ? clock() - t1 : null;
+    return { proposal: { ...proposal, explanations }, proof: { ...proof, timings: { ...proof.timings, explainMs } } };
+  };
+  if (broken.length > 0) {
+    const done = explained();
+    return { kind: 'current_infeasible', currentViolations: broken, alternative: done.proposal, current, proof: done.proof };
+  }
   // Goal seek (D5 8.4): the current lineup missed the target, or `autoBuild` would have returned `current_meets_target`. The gate has
   // checked that the proposal reaches it, so it is better by the mode's own objective, the change count. No witness check applies:
   // the current lineup is not in the space of lineups that reach the target.
-  if (problem.mode.target !== null) return { kind: 'improved', proposal, current, proof };
+  if (problem.mode.target !== null) {
+    const done = explained();
+    return { kind: 'improved', proposal: done.proposal, current, proof: done.proof };
+  }
   const { D } = outcome.scale;
   const now = Math.round(current.objective * D);
   if (Math.abs(current.objective * D - now) >= 1e-6) autoBuildFail('model_mismatch', `the current lineup's objective ${current.objective} is not whole at scale ${D}`);
@@ -169,7 +187,10 @@ function decide(problem: Problem, space: Space, outcome: Extract<SolveOutcome, {
   if (currentInSpace && outcome.method === 'mip' && outcome.bestScaled < now) {
     autoBuildFail('model_mismatch', `the solver's optimum ${outcome.bestScaled} is below the current lineup's ${now}, and the current lineup is in the search space`);
   }
-  if (Math.round(proposal.evaluation.objective * D) > now) return { kind: 'improved', proposal, current, proof };
+  if (Math.round(proposal.evaluation.objective * D) > now) {
+    const done = explained();
+    return { kind: 'improved', proposal: done.proposal, current, proof: done.proof };
+  }
   // D5 amendment 1, 6.5 b: a current lineup outside the strict space is not proven optimal, only the strict space is.
   const provenNoBetter = proof.status === 'proven_optimal' && strictFits(problem);
   return { kind: 'unchanged', reason: provenNoBetter ? 'proven_no_better' : 'none_found_within_limits', current, proof };

@@ -132,7 +132,12 @@ export type AutoBuildExplanation =
         readonly eventKey: EventKey;
         readonly placeAlone: number;
         readonly marginalPoints: number;
-        readonly binding: 'entry_cap' | 'session_load' | 'teammates';
+        /**
+         * Why the swimmer is not entered there, decided in this order: `entry_cap` (an entry cap), `session_load` (a hard session limit, `respect`
+         * mode), `strict_diver_rule` (the AutoBuilder counts a swimmer who dives and swims as a full scoring spot, D5 14.4; real scoring may count him at the diver weight, so this is the AutoBuilder's conservative rule, not a meet rule. It is the `strict_diver_weight` restriction of `searchSpace`, and never a `scoring_team_size` violation), `load_penalty` (the `prefer` penalty of the extra race is
+         * as large as the points the entry adds), `search_limit` (the entry would add own points and nothing above applies, but the candidate limit or the time limit left this event unexplored; a longer run may enter it. The mode is max-own, or the proof is not `proven_optimal`, or the pair was outside the candidate columns or frozen in robust mode with too few dated swims), `objective` (the entry would add own points, the proof is `proven_optimal` and the pair was a candidate: the mode's objective prefers the entered event, as with rival points, a robust value or fewer changes), `teammates` (nothing above applies and the entry adds no own points: the teammates already there leave it no gain).
+         */
+        readonly binding: 'entry_cap' | 'session_load' | 'strict_diver_rule' | 'load_penalty' | 'search_limit' | 'objective' | 'teammates';
       }[];
     }
   | {
@@ -155,7 +160,7 @@ export interface AutoBuildProposal {
   /** The section 4.9 count: roster adds plus entry changes. */
   readonly changeCount: number;
   readonly evaluation: AutoBuildEvaluation;
-  /** Slice A8. Empty in A1. */
+  /** Slice A8 (D5 9): empty from `gate`, filled by `autoBuild` for a proposal it returns. */
   readonly explanations: readonly AutoBuildExplanation[];
   /** Section 8.3 warnings absent from the current results */
   readonly newWarnings: readonly Violation[];
@@ -235,8 +240,12 @@ export interface AutoBuildProof {
     readonly rows: number;
     readonly cols: number;
   }[];
-  /** Each is `null` when the request holds no clock (deviation from D5: the engine cannot read a clock itself). */
-  readonly timings: { readonly evaluateMs: number | null; readonly solveMs: number | null; readonly gateMs: number | null };
+  /**
+   * Each is `null` when the request holds no clock (deviation from D5: the engine cannot read a clock itself). `explainMs` (slice A8) is the time
+   * of the explanations, which run after the proof is built and outside the solve budget. It is also `null` when no explanation ran (a result
+   * with no proposal).
+   */
+  readonly timings: { readonly evaluateMs: number | null; readonly solveMs: number | null; readonly gateMs: number | null; readonly explainMs: number | null };
 }
 
 export type AutoBuildResult =

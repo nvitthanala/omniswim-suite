@@ -628,7 +628,7 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
-    "RESUME: A7 committed. Next A8 explanations (D5 12.8 + section 9) via SendMessage to executor ad2051c440db6ce85, then A9 roster swaps, then U1 to worker or Codex. User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md (A1-A9, B1-B3, C1, D1-D5, E1-E4).",
+    "RESUME: A8 committed. Next A9 roster swaps (D5 12.9; brief must name a9BriefNotes) via SendMessage to executor ad2051c440db6ce85, then U1 per D5 amendment 7 (worker or Codex). User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md.",
     "RESUME after the limit: 1) git status; diff packages/engine/src/autobuilder, tests/engineAutoBuild.test.ts, tests/helpers/nodeMipSolve.ts, plans/2026-10-25/D5-AUTOBUILDER.md (amendment 1 appended, uncommitted). 2) If the executor report is missing, resume it with SendMessage (A1 agent) rather than re-briefing. 3) npm run build:extension, then full gates; check defaultLimitsConfigC returns improved within 11 s, 3 runs. 4) Commit A1 + amendment as one commit (Codex J8 review: no defect, on the pre-amendment diff; re-review the amendment diff with Codex J terminal term_a6fd5787 first). 5) Next: D5 slice A2 (relays). Open user questions: D5 14.1-14.5, R70 x3, P4 fetch approval, cap-boundary tie rule.",
     "RESUME (if interrupted 2026-10-29 afternoon): read N2 and J4 reports (orca orchestration inbox); review sessionLoad.ts against D2 3.11; rebuild + full gates; commit planner core, then planner UI.",
     "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
@@ -1069,6 +1069,14 @@
         "robust_no_spread when no decision pair has a pin, subject robust",
         "limits_invalid for robust settings, subjects objective.recentSwims/minSwims, 1<=min<=recent<=20"
       ]
+    },
+    "D5.A8": {
+      "status": "COMMITTED 2026-10-31 (commit follows this state edit). Lead gates green (vitest 3162, npm test 65, golden, mutation 413, build, harness 2/2, no leak). Codex J19 (no findings) and J20 (two text mismatches; amendment 6 items 4 and 10 reworded, code right). binding: entry_cap | session_load | strict_diver_rule | load_penalty | search_limit | objective | teammates.",
+      "next": "A9 roster swaps (see a9BriefNotes)",
+      "bench": "lead run 2026-10-30, median of 3, explain on: config C 10 teams 5.6 s, synthetic 2.8 s (the executor's 7.0 s was machine load)",
+      "interruptions": [
+        "2026-10-31: executor hit the 5h limit (429, resets 9am CT) during the teammates/objective check; resumed by SendMessage after the reset"
+      ]
     }
   },
   "followUps": [
@@ -1122,10 +1130,6 @@
       "note": "Mutation runners need a per-mutant timeout (a >= mutant loops localSearch forever) and must not run as orphaned background jobs (they corrupt each other's source)."
     },
     {
-      "id": "A5-main-thread",
-      "note": "D5 11 does not say where autoBuild runs; the worker header says lineup building happens in the page. ~0.4 s evaluation plus up to 2 s synchronous local search would block the dashboard or docked panel main thread. Decide in U1 (e.g. run autoBuild in a worker)."
-    },
-    {
       "id": "A5-cap-machine-speed",
       "note": "LOCAL_SEARCH_MAX_EVALUATIONS 80000 is ~2 s on this machine; slower machines take longer with no clock. Production always passes a clock."
     },
@@ -1146,16 +1150,24 @@
       "note": "Margin relay bounds are loose by design; optimal margin lineups often report gap rather than proven."
     },
     {
-      "id": "A5-protocol-timing-flake",
-      "note": "tests/extensionOptimizerProtocol.test.ts:152-172 (A5) runs HiGHS with time_limit 0.05 on hardMip and failed once under full-suite load. Make it assert the invariants for whichever status returns, not a timing outcome."
-    },
-    {
       "id": "A7-fallback-useless-roster-add",
       "note": "The local-search fallback can add a frozen-held free swimmer to the roster when joining adds no points (first strictly-better column). The MIP tie-break avoids it."
     },
     {
       "id": "A7-H05-label",
       "note": "H05: a free swimmer's frozen entry in a timed-final-split event gets both held labels; diagnostic only."
+    },
+    {
+      "id": "A8-bench-explainMs",
+      "note": "scripts/bench/autoBuildTiming.ts does not print proof.timings.explainMs."
+    },
+    {
+      "id": "A8-explain-in-gate-reserve",
+      "note": "explain runs after the gate inside the 1 s gate reserve with no bound; 0.4 s on config C, but it grows with unusual entries x skipped events. Bound it for large meets."
+    },
+    {
+      "id": "U1-clone-determinism",
+      "note": "Architect saw a different autoBuild result from a structuredClone of the config C request (221 KB, 5.2 ms copy). Likely timing fields; unproven. U1 acceptance 1 must settle it."
     }
   ],
   "p3CoreA": {
@@ -1190,5 +1202,15 @@
     ]
   },
   "questionsFile": "plans/2026-10-25/QUESTIONS_FOR_USER.md (all open user questions, numbered A1-E4, 2026-10-29)",
-  "codexJTerminal": "J15: term_d6e74d3f-fb0f-45ff-98e6-634f4e2edb0c (run_a2e09d4827fd). Old J run run_da9d5ce0db6f stopped."
+  "codexJTerminal": "J15: term_d6e74d3f-fb0f-45ff-98e6-634f4e2edb0c (run_a2e09d4827fd). Old J run run_da9d5ce0db6f stopped.",
+  "a9BriefNotes": [
+    "A7: under propose-swaps a coach-tagged swimmer becomes free, so a frozen entry moves from frozenIn (x = 1) to held (x = z): test it survives",
+    "A6: goal-seek changeCount must count roster removes",
+    "A3: the decision set grows, so the load limit binds more swimmers",
+    "A8: section 9 has roster_add but no roster_remove explanation: rule or ask the user before the build"
+  ],
+  "u1Prereqs": [
+    "DONE: where autoBuild runs — architect decision, D5 amendment 7 (dedicated autobuilder.worker)",
+    "DONE: flaky protocol test fixed (e53edf6e)"
+  ]
 }
