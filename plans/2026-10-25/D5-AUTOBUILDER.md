@@ -835,3 +835,29 @@ Test `cappedLegsDoNotCrowdQ`: the top 12 squads of an event all hold a swimmer w
 4. **Goal-seek proof fields.** The solver maximizes minus the change count.
    `proof.bestFound` is the positive change count, and `proof.upperBound`
    holds a lower bound on changes. U1 labels them by that meaning.
+
+## Amendment 5 (lead rulings, 2026-10-30, slice A7)
+
+1. **Frozen current entries of free swimmers are held, not fixed.** Section
+   5.4 says `x = 1`. The build uses the 4.6 held-entry mechanism (`x = z`)
+   instead: the entry stays in the lineup whatever the swimmer does, scores
+   at its normal seed only if the swimmer joins, and never forces a roster
+   add. Pinned scorers keep `x = 1` through `frozenIn`.
+2. **Entries with no usable time.** A pair with no usable normal seed has
+   no value in any mode, so it is not frozen and not listed. Max-own drops
+   such a current entry as replaced too. User question A9 asks whether to
+   keep them.
+3. **Column pruning** counts only droppable members against the event cap.
+   A frozen or held member cannot be removed, so a column that adds a
+   faster swimmer beside it stays reachable. Max-own has no frozen entries
+   and is unaffected.
+4. **Public surface for U1.**
+   - `proof.searchSpace.frozenPairs` is required, and `[]` outside robust.
+     Render each as "not enough swims (n)".
+   - The restriction `robust_frozen_pairs` has `binding: false`.
+   - `robust_no_spread` (subject `robust`) when no decision pair has a
+     robust swim, for example a simulator-only model with no dated swims.
+   - `limits_invalid` with subjects `objective.recentSwims` and
+     `objective.minSwims`; integers with 1 ≤ min ≤ recent ≤ 20.
+   - `evaluation.robustOwnPoints` is set in robust mode only. `ownPoints`,
+     `results` and `load` use normal seeds.

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * AutoBuilder public types (plans/2026-10-25/D5-AUTOBUILDER.md, section 2). `max-own`, `margin` and `goal-seek` are built (slices
- * A1 and A6). `robust` is declared and throws `mode_not_built`, and so does a goal seek under the `prefer` load mode.
+ * A1, A6 and A7). A goal seek under the `prefer` load mode throws `mode_not_built`.
  */
 import type { CompleteRulePreset } from '../rules/rulePreset';
 import type { ConversionSettings } from '../sourcing/convert';
@@ -94,12 +94,16 @@ export interface AutoBuildRequest {
 }
 
 export interface AutoBuildEvaluation {
-  /** Mode units: points (max-own, robust, margin) or the target metric (goal seek). Prefer mode subtracts penaltyPoints. */
+  /**
+   * Mode units: points (max-own, robust, margin) or the target metric (goal seek). Prefer mode subtracts penaltyPoints. In robust mode these
+   * are the robust own points (`robustOwnPoints`), scored with the robust seed pins, less the penalty.
+   */
   readonly objective: number;
   /** Results.teams own total, normal seeds */
   readonly ownPoints: number;
   /** closest: the team that binds */
   readonly rival: { readonly teamId: TeamId; readonly points: number } | null;
+  /** Robust mode: the own points of the lineup scored with the robust seed pins (D5 5.4). `null` in every other mode. */
   readonly robustOwnPoints: number | null;
   /** Own swimmers with z = 1 only (section 8.2) */
   readonly penaltyPoints: number;
@@ -204,6 +208,12 @@ export interface AutoBuildProof {
      */
     readonly fixedRelayEvents: readonly { readonly eventKey: EventKey; readonly gender: Gender }[];
     /**
+     * D5 5.4 (A7), additive: the pairs that robust mode freezes because they have fewer than `minSwims` usable swims. A frozen pair is never added, and
+     * a current entry of a pinned swimmer is never dropped. `swims` is the count the rule found. Empty in every other mode. The restriction
+     * `robust_frozen_pairs` is listed exactly when this list is not empty.
+     */
+    readonly frozenPairs: readonly { readonly swimmerId: SwimmerId; readonly eventKey: EventKey; readonly gender: Gender; readonly swims: number }[];
+    /**
      * One entry per built event. For an individual or diving event, `candidates` is the candidate swimmers, `outside` the swimmers
      * outside them, and `columns` the columns. For a relay event, `candidates` is `|Q_e|` (the squads), `outside` is 1 when a squad
      * lies outside `Q_e` (`tau_out` exists) and 0 otherwise, and `columns` is the number of columns (sets of at most R disjoint
@@ -266,8 +276,8 @@ export type AutoBuildErrorCode =
   | 'scale_unsupported'
   | 'model_mismatch'
   /**
-   * The request asks for an objective that is not built: `robust` (slice A7), or goal seek with the `prefer` load mode (D5 4.7 leaves open
-   * whether the target metric carries the load penalty). The subject names the objective kind.
+   * The request asks for an objective that is not built: goal seek with the `prefer` load mode (D5 4.7 leaves open whether the target metric
+   * carries the load penalty). The subject names the objective kind.
    */
   | 'mode_not_built';
 

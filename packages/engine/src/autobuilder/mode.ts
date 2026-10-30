@@ -33,7 +33,7 @@ function ofRival(rival: RivalRef, model: MeetModel, own: TeamId): Pick<Mode, 'me
   return rival.kind === 'team' ? { metric: 'margin', rivals: [rival.teamId] } : { metric: 'closest', rivals: otherTeams(model, own) };
 }
 
-/** The mode of a request objective. `robust` is not built (A7): it reads as `own` here, and `autoBuild` refuses it first. */
+/** The mode of a request objective. `robust` reads as `own`: its columns are scored with the robust seed pins (`robust.ts`), and the gate scores a pinned copy. */
 export function modeOf(objective: AutoBuildObjective, model: MeetModel, own: TeamId): Mode {
   switch (objective.kind) {
     case 'margin':

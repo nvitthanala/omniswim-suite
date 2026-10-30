@@ -167,6 +167,12 @@ export function checkObjective(model: MeetModel, ownTeamId: TeamId, objective: A
   if (rival !== null && rival.kind === 'closest' && model.teams.every((t) => t.teamId === ownTeamId)) {
     autoBuildFail('rival_invalid', 'the closest rival needs at least one team other than the own team', 'closest');
   }
+  if (objective.kind === 'robust') {
+    // D5 2.1 item 7, the ranges of section 2: integers, 1 <= minSwims <= recentSwims <= 20.
+    const { recentSwims, minSwims } = objective;
+    if (!Number.isInteger(recentSwims) || recentSwims < 1 || recentSwims > 20) autoBuildFail('limits_invalid', `recentSwims ${recentSwims} must be an integer from 1 to 20`, 'objective.recentSwims');
+    if (!Number.isInteger(minSwims) || minSwims < 1 || minSwims > recentSwims) autoBuildFail('limits_invalid', `minSwims ${minSwims} must be an integer from 1 to recentSwims (${recentSwims})`, 'objective.minSwims');
+  }
   if (objective.kind === 'goal-seek' && !Number.isFinite(objective.target.points)) {
     autoBuildFail('target_invalid', 'the goal-seek target is not a finite number', 'target.points');
   }

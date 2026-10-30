@@ -20,6 +20,7 @@ import type { ConversionSettings } from '../sourcing/convert';
 import { FastScorer, fastSupported } from './fastScore';
 import { columnRaces, NO_RACES } from './load';
 import type { Races } from './load';
+import { pairKey, pinLineup } from './robust';
 import { freshRelays, squadKeyOfEntry } from './squads';
 import type { Squad } from './squads';
 import type { LoadRule } from './support';
@@ -57,6 +58,11 @@ export interface EvalBase {
   readonly fast?: boolean;
   /** How many of an event's first columns run through both scorers to check them (default 2). A difference falls back for the event. */
   readonly selfChecks?: number;
+  /**
+   * Robust mode (D5 5.4): `pairKey` to the `swimId` that pins the entry of that pair. A column scores its member entries pinned. The races of
+   * the column (D5 5.3) still come from the lineup as entered, because session races use normal seeds. Absent: every entry keeps its seed.
+   */
+  readonly pins?: ReadonlyMap<string, string>;
 }
 
 /** The rows of two scorers agree: the same entries, places and reasons, and points that differ by float noise only. */
@@ -235,7 +241,7 @@ export class Evaluator {
    * each held entry and each current entry of a member in place, then the members without a current entry, sorted by entry key, with the
    * engine's own seed pick.
    */
-  subLineup(event: MeetEvent, members: readonly SwimmerId[]): Lineup {
+  subLineup(event: MeetEvent, members: readonly SwimmerId[], pinned = true): Lineup {
     const memberSet = new Set(members);
     const kept: LineupEntry[] = [];
     const have = new Set<SwimmerId>();
@@ -252,7 +258,28 @@ export class Evaluator {
       .filter((id) => !have.has(id))
       .map((swimmerId) => ({ kind: 'individual' as const, teamId: this.base.own, swimmerId, eventKey: event.eventKey, gender: event.gender, seedSwimId: null }));
     added.sort((a, b) => cmp(entryKey(a), entryKey(b)));
-    return { payloadVersion: 1, meetKey: this.base.lineup.meetKey, entries: [...kept, ...added] };
+    const lineup: Lineup = { payloadVersion: 1, meetKey: this.base.lineup.meetKey, entries: [...kept, ...added] };
+    return pinned && this.base.pins !== undefined ? pinLineup(lineup, this.base.own, this.base.pins, (id) => memberSet.has(id)) : lineup;
+  }
+
+  /** The column's rows (and what the reference computed on the way) for a sub-lineup. */
+  private scoreColumn(
+    event: MeetEvent,
+    lineup: Lineup,
+    members: readonly SwimmerId[]
+  ): { readonly rows: readonly ResultRow[]; readonly model: MeetModel | null; readonly results: Results | null } {
+    const { base } = this;
+    const joining = new Set(members.filter((id) => base.free.has(id)));
+    let model: MeetModel | null = null;
+    let results: Results | null = null;
+    const rows = this.rowsOf(event, lineup, joining, () => {
+      model = this.individualModel(event, lineup);
+      const extra: ScorerTag[] = members.filter((id) => base.free.has(id)).map((swimmerId) => ({ teamId: base.own, swimmerId, role: 'scorer' as const }));
+      this.referenceCalls += 1;
+      results = scoreMeet(model, lineup, [...base.tags, ...extra], base.rules, base.sourcing);
+      return results.events.find((e) => e.eventKey === event.eventKey && e.gender === event.gender)?.rows ?? [];
+    });
+    return { rows, model, results };
   }
 
   evaluate(event: MeetEvent, members: readonly SwimmerId[]): ColumnEval {
@@ -261,22 +288,17 @@ export class Evaluator {
     if (known) return known;
     const { base } = this;
     const lineup = this.subLineup(event, members);
-    const joining = new Set(members.filter((id) => base.free.has(id)));
     this.calls += 1;
-    let model: MeetModel | null = null;
-    let referenceResults: Results | null = null;
-    const rows = this.rowsOf(event, lineup, joining, () => {
-      model = this.individualModel(event, lineup);
-      const extra: ScorerTag[] = members.filter((id) => base.free.has(id)).map((swimmerId) => ({ teamId: base.own, swimmerId, role: 'scorer' as const }));
-      this.referenceCalls += 1;
-      referenceResults = scoreMeet(model, lineup, [...base.tags, ...extra], base.rules, base.sourcing);
-      return referenceResults.events.find((e) => e.eventKey === event.eventKey && e.gender === event.gender)?.rows ?? [];
-    });
+    const scored = this.scoreColumn(event, lineup, members);
+    // D5 5.4: session races use normal seeds. When a pin applies to a member, the races come from the same column scored as entered.
+    const pinsApply = base.pins !== undefined && base.load !== null && members.some((id) => base.pins?.has(pairKey(id, event.eventKey)) === true);
+    const raced = pinsApply ? this.subLineup(event, members, false) : lineup;
+    const asEntered = pinsApply ? this.scoreColumn(event, raced, members) : scored;
     const evaluated: ColumnEval = {
-      own: rows.reduce((sum, r) => (r.teamId === base.own ? sum + r.points : sum), 0),
-      tieSizes: tieSizesOf(rows),
-      rows,
-      races: this.racesOf(event, lineup, rows, model, referenceResults, (l) => this.individualModel(event, l)),
+      own: scored.rows.reduce((sum, r) => (r.teamId === base.own ? sum + r.points : sum), 0),
+      tieSizes: tieSizesOf(scored.rows),
+      rows: scored.rows,
+      races: this.racesOf(event, raced, asEntered.rows, asEntered.model, asEntered.results, (l) => this.individualModel(event, l)),
     };
     this.cache.set(key, evaluated);
     return evaluated;

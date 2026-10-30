@@ -628,7 +628,7 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
-    "RESUME: A6 committed. Next A7 robust (D5 12.7) via SendMessage to executor ad2051c440db6ce85, built on the 14.1 default. User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md (A1-A8, B1-B3, C1, D1-D5, E1-E4).",
+    "RESUME: A7 committed. Next A8 explanations (D5 12.8 + section 9) via SendMessage to executor ad2051c440db6ce85, then A9 roster swaps, then U1 to worker or Codex. User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md (A1-A9, B1-B3, C1, D1-D5, E1-E4).",
     "RESUME after the limit: 1) git status; diff packages/engine/src/autobuilder, tests/engineAutoBuild.test.ts, tests/helpers/nodeMipSolve.ts, plans/2026-10-25/D5-AUTOBUILDER.md (amendment 1 appended, uncommitted). 2) If the executor report is missing, resume it with SendMessage (A1 agent) rather than re-briefing. 3) npm run build:extension, then full gates; check defaultLimitsConfigC returns improved within 11 s, 3 runs. 4) Commit A1 + amendment as one commit (Codex J8 review: no defect, on the pre-amendment diff; re-review the amendment diff with Codex J terminal term_a6fd5787 first). 5) Next: D5 slice A2 (relays). Open user questions: D5 14.1-14.5, R70 x3, P4 fetch approval, cap-boundary tie rule.",
     "RESUME (if interrupted 2026-10-29 afternoon): read N2 and J4 reports (orca orchestration inbox); review sessionLoad.ts against D2 3.11; rebuild + full gates; commit planner core, then planner UI.",
     "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
@@ -1055,6 +1055,20 @@
     "D5.A6": {
       "status": "COMMITTED 2026-10-30 (commit follows this state edit). Lead gates green: lint, vitest 3103, npm test 65, golden, mutation 413, build, harness 2/2, no leak. Codex J16: no findings. Advisor audit: fallback covered for all three modes (test 10); goal-seek+prefer subject renamed goal-seek-prefer; D5 amendment 4 records the rulings. Mutation 52 sites; G01-G03 killed by direct gate tests; G04, M26 equivalent.",
       "next": "A7 robust (D5 12.7) on the D5 14.1 default"
+    },
+    "D5.A7": {
+      "status": "COMMITTED 2026-10-30 (commit follows this state edit). Lead gates green (vitest 3125, npm test 65, golden, mutation 413, build, harness 2/2, no leak). Codex J17 (HIGH: frozen free entry droppable, fixed by the held route) and J18 (no findings). Advisor audit: no-time entries dropped by max-own too (existing behaviour, user question A9). D5 amendment 5.",
+      "next": "A8 explanations (D5 12.8, section 9)",
+      "executorChoices": [
+        "undated or no-time swims excluded before taking the 5 most recent",
+        "SUPERSEDED by J17: a free swimmer's frozen current entry is held (x = z, D5 4.6 mechanism); the roster is not forced",
+        "binding false for robust_frozen_pairs",
+        "date tie by swimId ascending",
+        "frozen pair swims = count of eligible recent swims",
+        "pair with no usable normal seed not listed as frozen",
+        "robust_no_spread when no decision pair has a pin, subject robust",
+        "limits_invalid for robust settings, subjects objective.recentSwims/minSwims, 1<=min<=recent<=20"
+      ]
     }
   },
   "followUps": [
@@ -1130,6 +1144,18 @@
     {
       "id": "A6-margin-relay-bound-loose",
       "note": "Margin relay bounds are loose by design; optimal margin lineups often report gap rather than proven."
+    },
+    {
+      "id": "A5-protocol-timing-flake",
+      "note": "tests/extensionOptimizerProtocol.test.ts:152-172 (A5) runs HiGHS with time_limit 0.05 on hardMip and failed once under full-suite load. Make it assert the invariants for whichever status returns, not a timing outcome."
+    },
+    {
+      "id": "A7-fallback-useless-roster-add",
+      "note": "The local-search fallback can add a frozen-held free swimmer to the roster when joining adds no points (first strictly-better column). The MIP tie-break avoids it."
+    },
+    {
+      "id": "A7-H05-label",
+      "note": "H05: a free swimmer's frozen entry in a timed-final-split event gets both held labels; diagnostic only."
     }
   ],
   "p3CoreA": {

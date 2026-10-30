@@ -21,6 +21,8 @@ import { buildLegSources, currentSquad, generateSquads, legOptions } from './squ
 import type { LegSources, Positions, Squad } from './squads';
 import { modeOf } from './mode';
 import type { Mode } from './mode';
+import { pairKey, robustPlan } from './robust';
+import type { RobustPlan } from './robust';
 import { eventCap } from './support';
 import type { Support } from './support';
 import type { AutoBuildRequest } from './types';
@@ -57,15 +59,23 @@ export interface Problem {
    * heat over every entry.
    */
   readonly held: ReadonlySet<string>;
+  /**
+   * Robust mode (D5 5.4): the held keys that are not split entries. A free swimmer's current entry in a frozen pair (no spread, usable
+   * seed) is never dropped. It is held: `x = z`. The entry stays in the lineup whatever `z` is, and it scores only when the swimmer joins,
+   * at his normal seed. Joining for another event therefore keeps it, and the roster is not forced.
+   */
+  readonly frozenHeld: ReadonlySet<string>;
   /** The races of the own swimmers in the events the search does not build: constants of the load rows. Empty without load rows. */
   readonly fixedRaces: Races;
   /** `sessionLoad` on the current lineup when the request has a `load` (any mode), else `null`. */
   readonly currentLoad: SessionLoadResult | null;
   /** The violations of the current lineup that can name a built lineup: `scoreMeet`'s and the load's (see `violationsOf`). */
   readonly currentViolations: readonly Violation[];
+  /** Robust mode (D5 5.4): the pinned swim of every pair with a spread and the swim count of every pair without one. `null` in every other mode. */
+  readonly robust: RobustPlan | null;
 }
 
-export const pairKey = (swimmerId: SwimmerId, eventKey: string): string => `${swimmerId}\u0000${eventKey}`;
+export { pairKey };
 
 function ownRelayCounts(req: AutoBuildRequest, results: Results, exhibitionCounts: boolean, builtIds: ReadonlySet<string>): Map<SwimmerId, number> {
   const skipped = new Set<string>();
@@ -156,6 +166,26 @@ export function buildProblem(req: AutoBuildRequest, support: Support, currentRes
     const own = new Set(req.model.swimmers.filter((m) => m.teamId === req.ownTeamId).map((m) => m.swimmerId));
     races = fixedRaces(rule, req.model, req.lineup, currentResults, (e) => builtIds.has(eventId(e.eventKey, e.gender)), own, req.rules);
   }
+  const robust =
+    req.objective.kind === 'robust'
+      ? robustPlan(
+          req.model,
+          built.flatMap((event) => (event.kind === 'relay' ? [] : [...(who.pinned.get(event.gender) ?? []), ...(who.free.get(event.gender) ?? [])].sort(cmp).map((swimmerId) => ({ swimmerId, event })))),
+          { recentSwims: req.objective.recentSwims, minSwims: req.objective.minSwims }
+        )
+      : null;
+  const frozenHeld = new Set<string>();
+  if (robust !== null) {
+    const index = buildIndex(req.model);
+    for (const [key, entry] of currentEntry) {
+      if (!who.freeSet.has(entry.swimmerId) || !robust.absent.has(key) || !builtIds.has(eventId(entry.eventKey, entry.gender))) continue;
+      const lineup: Lineup = { payloadVersion: 1, meetKey: req.lineup.meetKey, entries: [entry] };
+      // A pair with no usable normal seed is not frozen (it is not listed either), so its entry may go.
+      if ((resolveLineup(req.model, lineup, index).resolved[0]?.value ?? null) === null) continue;
+      if (!held.has(key)) frozenHeld.add(key); // a split entry is already held, and stays a split entry
+      held.add(key);
+    }
+  }
   const currentLoad = rule === null ? null : sessionLoad(req.model, req.lineup, currentResults, rule.schedule, rule.preference, req.rules);
   return {
     req,
@@ -167,9 +197,11 @@ export function buildProblem(req: AutoBuildRequest, support: Support, currentRes
     built,
     currentResults,
     held,
+    frozenHeld,
     fixedRaces: races,
     currentLoad,
     currentViolations: violationsOf(currentResults, currentLoad, rule === null ? null : rule.schedule),
+    robust,
   };
 }
 
@@ -230,7 +262,12 @@ export class EventSpace {
     readonly currentColumn: readonly SwimmerId[],
     k: number,
     /** Held entries (D5 4.6): candidates whether or not they rank in the top K. */
-    readonly forced: readonly SwimmerId[] = []
+    readonly forced: readonly SwimmerId[] = [],
+    /**
+     * Robust mode (D5 5.4): the pinned swimmers whose current entry has no spread. They are in every column, so the entry is never
+     * dropped. They are not candidates and not outside pairs.
+     */
+    readonly frozenIn: readonly SwimmerId[] = []
   ) {
     const diving = event.kind === 'diving';
     this.scorable = [...pairs.values()]
@@ -256,6 +293,8 @@ export class Space {
   private readonly sources: LegSources;
   private readonly index: ReturnType<typeof buildIndex>;
   readonly events: EventSpace[] = [];
+  /** Robust mode: the pairs with a usable seed and no spread (D5 5.4). They are never added, and a current entry of a pinned swimmer is never dropped. */
+  readonly frozenPairs: { readonly swimmerId: SwimmerId; readonly eventKey: string; readonly gender: Gender; readonly swims: number }[] = [];
   /** Milliseconds spent evaluating columns (construction and refinement), or `null` when the request holds no clock. */
   evaluateMs: number | null;
 
@@ -280,6 +319,7 @@ export class Space {
       free: problem.freeSet,
       load: support.load,
       held: problem.held,
+      ...(problem.robust === null ? {} : { pins: problem.robust.pins }),
     });
     const values = this.seedValues();
     const pinned = new Set([...problem.pinned.values()].flat());
@@ -296,6 +336,13 @@ export class Space {
           pairs.set(swimmerId, { swimmerId, value, scorable: false, singleton: null });
           continue;
         }
+        const absent = problem.robust?.absent.get(pairKey(swimmerId, event.eventKey));
+        if (absent !== undefined) {
+          // D5 5.4: no spread. The pair is valued at its normal seed and is never added.
+          pairs.set(swimmerId, { swimmerId, value, scorable: false, singleton: null });
+          this.frozenPairs.push({ swimmerId, eventKey: event.eventKey, gender: event.gender, swims: absent });
+          continue;
+        }
         const singleton = this.evaluator.evaluate(event, [swimmerId]);
         const key = entryKey(this.entryFor(swimmerId, event));
         const row = singleton.rows.find((r) => r.entryKey === key);
@@ -304,7 +351,8 @@ export class Space {
       }
       const currentColumn = swimmers.filter((id) => pinned.has(id) && problem.currentEntry.has(pairKey(id, event.eventKey)));
       const forced = swimmers.filter((id) => problem.held.has(pairKey(id, event.eventKey)));
-      const space = new EventSpace(event, eventId(event.eventKey, event.gender), pairs, currentColumn, k, forced);
+      const frozenIn = currentColumn.filter((id) => problem.robust?.absent.has(pairKey(id, event.eventKey)) === true && pairs.get(id)?.value !== null);
+      const space = new EventSpace(event, eventId(event.eventKey, event.gender), pairs, currentColumn, k, forced, frozenIn);
       this.events.push(space);
     }
     check?.(this.events, this.evaluator);
@@ -316,17 +364,18 @@ export class Space {
     if (this.clock !== undefined && started !== undefined && this.evaluateMs !== null) this.evaluateMs += this.clock() - started;
   }
 
+  /** The entry a pair would have: the current one, or a new one. Robust mode pins it to its robust swim, so the seed value is the robust one. */
   private entryFor(swimmerId: SwimmerId, event: MeetEvent): IndividualEntry {
-    return (
-      this.problem.currentEntry.get(pairKey(swimmerId, event.eventKey)) ?? {
-        kind: 'individual',
-        teamId: this.problem.req.ownTeamId,
-        swimmerId,
-        eventKey: event.eventKey,
-        gender: event.gender,
-        seedSwimId: null,
-      }
-    );
+    const entry: IndividualEntry = this.problem.currentEntry.get(pairKey(swimmerId, event.eventKey)) ?? {
+      kind: 'individual',
+      teamId: this.problem.req.ownTeamId,
+      swimmerId,
+      eventKey: event.eventKey,
+      gender: event.gender,
+      seedSwimId: null,
+    };
+    const pin = this.problem.robust?.pins.get(pairKey(swimmerId, event.eventKey));
+    return pin === undefined ? entry : { ...entry, seedSwimId: pin };
   }
 
   /** The seed value of every (decision swimmer, built event) entry, from one `resolveLineup` call. */
@@ -369,9 +418,12 @@ export class Space {
       columns.push({ members, eval: this.evaluator.evaluate(es.event, members), isCurrent: k === currentKey });
     };
     const cands = es.candidates;
+    const stays = new Set([...es.frozenIn, ...es.forced.filter((id) => this.problem.frozenHeld.has(pairKey(id, es.event.eventKey)))]);
     for (let mask = 0; mask < 1 << cands.length; mask++) {
-      const members = cands.filter((_, i) => (mask >> i) & 1).sort(cmp);
-      if (members.length <= pruneAt) add(members);
+      const members = [...cands.filter((_, i) => (mask >> i) & 1), ...es.frozenIn].sort(cmp);
+      // Dropping an over-cap member only dominates when he can be dropped: a frozen entry stays (D5 5.4), and a held free entry is
+      // dropped only with his roster place. At least (droppable members - cap) droppable members are over the cap, so the test counts those.
+      if (members.filter((id) => !stays.has(id)).length <= pruneAt) add(members);
     }
     add(es.currentColumn);
     columns.sort((a, b) => cmp(keyOf(a.members), keyOf(b.members)));

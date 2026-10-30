@@ -18,8 +18,10 @@ import { metricOf } from './mode';
 import { scaleFor, solveAutoBuild } from './solve';
 import type { Squad } from './squads';
 import type { SolveOutcome, SolveRecord } from './solve';
+import type { Evaluator } from './evaluate';
+import { pinLineup } from './robust';
 import { buildProblem, classify, Space } from './space';
-import type { Problem } from './space';
+import type { EventSpace, Problem } from './space';
 import type { Support } from './support';
 import { checkLimits, checkLoadSettings, checkObjective, checkOwnTags, checkRules, checkSchedule, checkTeams, loadRuleOf } from './support';
 import { autoBuildFail } from './types';
@@ -60,20 +62,26 @@ function strictFits(problem: Problem): boolean {
 }
 
 function evaluationOf(results: Results, problem: Problem): AutoBuildEvaluation {
-  const ownPoints = ownPointsOf(results, problem.req.ownTeamId);
+  const { req } = problem;
+  const ownPoints = ownPointsOf(results, req.ownTeamId);
+  // D5 5.4: the current lineup of a robust request is scored again with the robust swims pinned on the entries of the pinned swimmers.
+  const robustResults =
+    problem.robust === null ? null : scoreMeet(req.model, pinLineup(req.lineup, req.ownTeamId, problem.robust.pins, (id) => problem.roles.get(id) === 'scorer'), req.tags, req.rules, req.sourcing);
   // D5 8.2: the own-only penalty over the own swimmers on the scoring roster, from `sessionLoad`'s `perSwimmer` rows.
   const penaltyPoints = ownPenalty(problem.support.load, problem.currentLoad, scorerIds(problem.req.tags, problem.req.ownTeamId));
   // D5 4.7: the metric of the mode (own points, the margin, the closest margin), less the penalty. A goal seek's metric has none.
-  const { value, rival } = metricOf(problem.mode, results, problem.req.ownTeamId);
-  return { objective: problem.mode.target === null ? value - penaltyPoints : value, ownPoints, rival, robustOwnPoints: null, penaltyPoints, results, load: problem.currentLoad };
+  const { value, rival } = metricOf(problem.mode, robustResults ?? results, req.ownTeamId);
+  const robustOwnPoints = robustResults === null ? null : ownPointsOf(robustResults, req.ownTeamId);
+  return { objective: problem.mode.target === null ? value - penaltyPoints : value, ownPoints, rival, robustOwnPoints, penaltyPoints, results, load: problem.currentLoad };
 }
 
-function restrictionsOf(problem: Problem): AutoBuildRestriction[] {
+function restrictionsOf(problem: Problem, space: Space): AutoBuildRestriction[] {
   const out: AutoBuildRestriction[] = ['scorers_only_entries'];
   if (problem.built.some((e) => e.kind === 'relay')) out.push('relays_within_scoring_cap', 'disjoint_relays', 'relay_leg_bases');
   if (problem.fixedRelayEvents.size > 0) out.push('fixed_relay_events');
-  if (problem.held.size > 0) out.push('held_split_entries');
+  if ([...problem.held].some((k) => !problem.frozenHeld.has(k))) out.push('held_split_entries');
   if (problem.support.size !== 'unlimited') out.push('strict_diver_weight');
+  if (space.frozenPairs.length > 0) out.push('robust_frozen_pairs');
   return out;
 }
 
@@ -85,11 +93,12 @@ function proofBase(problem: Problem, space: Space, records: readonly SolveRecord
   const solveMs = records.some((r) => r.ms === null) ? null : records.reduce((s, r) => s + (r.ms as number), 0);
   return {
     searchSpace: {
-      restrictions: restrictionsOf(problem),
-      restrictionStatus: restrictionsOf(problem).map((restriction) => ({ restriction, binding: bindingOf(restriction, strictBinds) })),
+      restrictions: restrictionsOf(problem, space),
+      restrictionStatus: restrictionsOf(problem, space).map((restriction) => ({ restriction, binding: bindingOf(restriction, strictBinds) })),
       fixedRelayEvents: problem.req.model.events
         .filter((e) => problem.fixedRelayEvents.has(`${e.gender}\u0000${e.eventKey}`))
         .map((e) => ({ eventKey: e.eventKey, gender: e.gender })),
+      frozenPairs: space.frozenPairs.map((f) => ({ ...f })),
       events: space.events.map((es) => ({
         eventKey: es.event.eventKey,
         gender: es.event.gender,
@@ -179,6 +188,15 @@ function undecided(problem: Problem, space: Space, outcome: Exclude<SolveOutcome
   return { kind: 'unchanged', reason: 'none_found_within_limits', current, proof };
 }
 
+/** D5 2.1 items 5 and 6: the load refusals that need the candidates of every event. */
+function checkLoad(load: NonNullable<AutoBuildRequest['load']>, events: readonly EventSpace[], evaluator: Evaluator): void {
+  // D5 2.1 item 5: a pending setting of a relay event refuses first. One probe column per relay event reads its `sessionLoad`; the
+  // individual events were read when their candidate pairs were scored.
+  for (const es of events) if (es.relay !== null && es.relay.squads.length > 0) evaluator.evaluateRelay(es.event, [es.relay.squads[0] as Squad]);
+  // Item 6: an event with a candidate pair or a squad must be on the schedule, or `sessionLoad` would count no races for it.
+  checkSchedule(load, events.filter((es) => (es.relay === null ? es.scorable.length > 0 || es.frozenIn.length > 0 : es.relay.squads.length > 0)).map((es) => es.event));
+}
+
 export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise<AutoBuildResult> {
   // The wall-time budget runs from here (D5 amendment 1, 6.3). Without a clock, only solver-reported seconds count.
   const started = req.clock?.();
@@ -192,9 +210,6 @@ export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise
   const support: Support = { ...rules, load: loadRuleOf(req.load) };
   checkObjective(req.model, req.ownTeamId, req.objective);
   checkLimits(req.limits);
-  if (req.objective.kind === 'robust') {
-    autoBuildFail('mode_not_built', 'the "robust" objective is built in a later slice (A7)', 'robust');
-  }
   // D5 4.7 subtracts the load penalty in every mode "but goal seek", and the evaluation doc says goal seek is in mode units: the spec does
   // not say whether a goal-seek target counts the penalty. Refuse the combination until the lead decides.
   if (req.objective.kind === 'goal-seek' && req.load !== null && req.load.preference.mode === 'prefer') {
@@ -204,12 +219,11 @@ export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise
   const problem = buildProblem(req, support, currentResults);
   const load = req.load;
   const space = new Space(problem, req.limits.candidatesPerEvent, req.clock, (events, evaluator) => {
-    if (load === null || load.preference.mode === 'off') return;
-    // D5 2.1 item 5: a pending setting of a relay event refuses first. One probe column per relay event reads its `sessionLoad`; the
-    // individual events were read when their candidate pairs were scored.
-    for (const es of events) if (es.relay !== null && es.relay.squads.length > 0) evaluator.evaluateRelay(es.event, [es.relay.squads[0] as Squad]);
-    // Item 6: an event with a candidate pair or a squad must be on the schedule, or `sessionLoad` would count no races for it.
-    checkSchedule(load, events.filter((es) => (es.relay === null ? es.scorable.length > 0 : es.relay.squads.length > 0)).map((es) => es.event));
+    if (load !== null && load.preference.mode !== 'off') checkLoad(load, events, evaluator);
+    // D5 2.1 item 8, after the schedule refusals of item 6: robust mode needs one pair with a spread. A simulator-only model has none.
+    if (problem.robust !== null && problem.robust.pins.size === 0) {
+      autoBuildFail('robust_no_spread', 'robust mode found no (swimmer, event) pair with enough dated SCY swims inside the record range, so no pair has a spread', 'robust');
+    }
   });
 
   const current = evaluationOf(currentResults, problem);

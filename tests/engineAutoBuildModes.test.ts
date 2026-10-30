@@ -943,7 +943,7 @@ it('3 goalSeekOneChange: the target is reached with 1 change where max-own uses 
     );
     expect(preferred).toMatchObject({ code: 'mode_not_built', subject: 'goal-seek-prefer' });
     const robust = await autoError(() => autoBuild(request(steps(1), { objective: { kind: 'robust', recentSwims: 5, minSwims: 3 } }), nodeMipSolve()));
-    expect(robust).toMatchObject({ code: 'mode_not_built', subject: 'robust' });
+    expect(robust).toMatchObject({ code: 'robust_no_spread', subject: 'robust' });
   });
 
   it('7 orderIndependence: permuting swimmers, swims and tags gives byte-identical LP text for margin, closest and goal seek', async () => {

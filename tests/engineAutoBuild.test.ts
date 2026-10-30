@@ -23,7 +23,6 @@ import {
 } from '@omniswim/engine';
 import type {
   AutoBuildLimits,
-  AutoBuildObjective,
   AutoBuildRequest,
   AutoBuildResult,
   CompleteRulePreset,
@@ -762,7 +761,6 @@ describe('autoBuild (D5, slice A1)', () => {
       { label: 'no time', req: request(fx, { limits: { ...LIMITS, timeLimitSeconds: 0 } }), code: 'limits_invalid', subject: 'timeLimitSeconds' },
       { label: 'more than 120 s', req: request(fx, { limits: { ...LIMITS, timeLimitSeconds: 121 } }), code: 'limits_invalid', subject: 'timeLimitSeconds' },
       { label: 'a scale the integer model cannot hold', req: request({ ...fx, rules: rulesOf({ individualPoints: [1e12, 1e12] }) }), code: 'scale_unsupported', subject: 'objective' },
-      { label: 'the robust objective (slice A7)', req: request(fx, { objective: { kind: 'robust', recentSwims: 5, minSwims: 3 } as AutoBuildObjective }), code: 'mode_not_built', subject: 'robust' },
     ];
     for (const c of cases) {
       const error = await autoError(() => autoBuild(c.req, nodeMipSolve()).then((r) => { throw new Error('did not throw: ' + c.label + ' gave ' + r.kind); }));

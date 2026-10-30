@@ -17,6 +17,7 @@ import { ownPenalty, scorerIds, violationsOf } from './load';
 import type { SessionLoadResult } from './load';
 import { freshRelays, squadKeyOfEntry } from './squads';
 import { metricOf } from './mode';
+import { pinLineup } from './robust';
 import { pairKey } from './space';
 import type { Problem, Space } from './space';
 import { autoBuildFail } from './types';
@@ -213,7 +214,13 @@ export function gate(
   const load: SessionLoadResult | null = rule === null ? null : sessionLoad(req.model, built.lineup, results, rule.schedule, rule.preference, req.rules);
   const penaltyPoints = ownPenalty(problem.support.load, load, scorerIds(built.tagsForScoring, req.ownTeamId));
   const ownPoints = ownPointsOf(results, req.ownTeamId);
-  const { value, rival } = metricOf(problem.mode, results, req.ownTeamId);
+  // D5 5.4 and 8.2: robust mode ranks the lineup with the robust swims pinned on the entries of the swimmers the solver owns. The pinned copy is
+  // scored by `scoreMeet` for the objective only. Everything else (`results`, `ownPoints`, the load, the violations) is the lineup as built.
+  const robustResults =
+    problem.robust === null
+      ? null
+      : scoreMeet(req.model, pinLineup(built.lineup, req.ownTeamId, problem.robust.pins, (id) => isPinned(problem, id) || built.joined.has(id)), built.tagsForScoring, req.rules, req.sourcing);
+  const { value, rival } = metricOf(problem.mode, robustResults ?? results, req.ownTeamId);
   const changeCount = built.rosterAdds.length + built.entryChanges.length;
   const target = problem.mode.target;
   if (target === null) {
@@ -226,7 +233,7 @@ export function gate(
     if (changeCount !== -mipPoints) autoBuildFail('model_mismatch', `the built lineup has ${changeCount} changes; the solver counted ${-mipPoints}`);
   }
   const newWarnings = checkViolations(problem, built, violationsOf(results, load, rule === null ? null : rule.schedule));
-  const evaluation: AutoBuildEvaluation = { objective: target === null ? value - penaltyPoints : value, ownPoints, rival, robustOwnPoints: null, penaltyPoints, results, load };
+  const evaluation: AutoBuildEvaluation = { objective: target === null ? value - penaltyPoints : value, ownPoints, rival, robustOwnPoints: robustResults === null ? null : ownPointsOf(robustResults, req.ownTeamId), penaltyPoints, results, load };
   return {
     lineup: built.lineup,
     rosterAdds: built.rosterAdds,

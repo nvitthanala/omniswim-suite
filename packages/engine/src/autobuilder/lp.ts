@@ -180,7 +180,13 @@ export interface LpOptions {
 }
 
 /**
- * The scaled value of everything the columns do not cover: the events outside the search and the one-column events. The value is the
+ * An event with one column that holds no swimmer has nothing to decide: its value and its races are constants. A single column with members
+ * (robust mode: a frozen current entry of a pinned swimmer, D5 5.4) is still an event: its entries count in the caps, the roster and the load.
+ */
+const isFixedEvent = (es: EventSpace): boolean => es.columns.length === 1 && (es.columns[0] as Column).members.length === 0;
+
+/**
+ * The scaled value of everything the columns do not cover: the events outside the search and the one-column events with no swimmer. The value is the
  * own points, or with a `team` the own points less that team's (the margin constant of D5 4.7).
  */
 function constantPoints(problem: Problem, space: Space, scale: Scale, team: TeamId | null): number {
@@ -195,7 +201,7 @@ function constantPoints(problem: Problem, space: Space, scale: Scale, team: Team
   }
   let total = scale.scaled(fixed, team === null ? 'the own points outside the search' : `the margin over ${team} outside the search`);
   for (const es of space.events) {
-    if (es.columns.length === 1) {
+    if (isFixedEvent(es)) {
       const only = (es.columns[0] as Column).eval;
       total += scale.scaled(team === null ? only.own : only.own - pointsOfTeam(only.rows, team), `the value of ${es.event.eventKey}`);
     }
@@ -656,7 +662,7 @@ class Builder {
     const goal = mode.target !== null;
     const closest = mode.metric === 'closest';
     const fixedBy = this.lanes.map((lane) => constantPoints(problem, space, scale, lane.team));
-    space.events.filter((es) => es.columns.length > 1).forEach((es, ei) => this.addEvent(es, ei));
+    space.events.filter((es) => !isFixedEvent(es)).forEach((es, ei) => this.addEvent(es, ei));
     this.addRoster();
     this.addCaps();
     const constRaces = new Map<SwimmerId, Map<string, number>>();
@@ -666,7 +672,7 @@ class Builder {
       constRaces.set(id, m);
     };
     for (const [id, sessions] of problem.fixedRaces) for (const [k, n] of sessions) bump(id, k, n);
-    for (const es of space.events.filter((e) => e.columns.length === 1)) {
+    for (const es of space.events.filter(isFixedEvent)) {
       for (const [id, sessions] of (es.columns[0] as Column).eval.races) for (const [k, n] of sessions) bump(id, k, n);
     }
     this.addLoad(constRaces);
