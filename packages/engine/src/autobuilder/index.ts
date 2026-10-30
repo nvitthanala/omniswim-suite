@@ -15,6 +15,7 @@ import type { Gender } from '../model/primitives';
 import { gate, ownPointsOf, repairable } from './gate';
 import { ownPenalty, scorerIds } from './load';
 import { solveAutoBuild } from './solve';
+import type { Squad } from './squads';
 import type { SolveOutcome, SolveRecord } from './solve';
 import { buildProblem, classify, Space } from './space';
 import type { Problem } from './space';
@@ -172,11 +173,15 @@ export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise
   }
 
   const problem = buildProblem(req, support, currentResults);
-  const space = new Space(problem, req.limits.candidatesPerEvent, req.clock);
-  // D5 2.1 item 6: an event with a candidate pair or a squad must be on the schedule, or `sessionLoad` would count no races for it.
-  if (req.load !== null && req.load.preference.mode !== 'off') {
-    checkSchedule(req.load, space.events.filter((es) => (es.relay === null ? es.scorable.length > 0 : es.relay.squads.length > 0)).map((es) => es.event));
-  }
+  const load = req.load;
+  const space = new Space(problem, req.limits.candidatesPerEvent, req.clock, (events, evaluator) => {
+    if (load === null || load.preference.mode === 'off') return;
+    // D5 2.1 item 5: a pending setting of a relay event refuses first. One probe column per relay event reads its `sessionLoad`; the
+    // individual events were read when their candidate pairs were scored.
+    for (const es of events) if (es.relay !== null && es.relay.squads.length > 0) evaluator.evaluateRelay(es.event, [es.relay.squads[0] as Squad]);
+    // Item 6: an event with a candidate pair or a squad must be on the schedule, or `sessionLoad` would count no races for it.
+    checkSchedule(load, events.filter((es) => (es.relay === null ? es.scorable.length > 0 : es.relay.squads.length > 0)).map((es) => es.event));
+  });
 
   const current = evaluationOf(currentResults, problem);
   const currentInSpace = repairable(problem).length === 0 && strictFits(problem);

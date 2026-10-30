@@ -871,7 +871,8 @@
     "since": "2026-10-29 late",
     "trigger": "Budget tier critical: 5h 80% used, resets in about 2h",
     "resumePoint": "A4 in flight with executor ad2051c440db6ce85. If interrupted: git status, then SendMessage that agent to continue.",
-    "rule": "one agent at a time; no new heavy Claude agents until reset"
+    "rule": "one agent at a time; no new heavy Claude agents until reset",
+    "endedAt": "2026-10-29 ~11pm CT: limit reset; executor hit 429 mid-A4 (at the bench script) and was resumed by SendMessage"
   },
   "codexRuns": [
     {
@@ -1029,8 +1030,16 @@
       "acceptanceGap": "D5 12.3 config C timing with load on is UNMEASURED: blocked on the user schedule question (blockedOnUser)."
     },
     "D5.A4": {
-      "status": "IN PROGRESS 2026-10-29: executor ad2051c440db6ce85 resumed by SendMessage. Scope: fix A3-refusal-order first, then fast evaluator + parity test + bench (D5 12.4), report on the 351-point gap.",
-      "next": "Codex J13 review -> lead gates -> commit"
+      "status": "COMMITTED 2026-10-29 (commit follows this state edit). Lead gates green: lint, vitest 3019, npm test 65, golden, mutation 413, build, harness 2/2, no bundle leak, rosterSuggestTiming runs. Codex J13: no findings (35 focused tests). Advisor audit passed.",
+      "next": "A5 (time limit and fallback, D5 12.5)",
+      "bench": {
+        "method": "npx tsx scripts/bench/autoBuildTiming.ts, wall time end to end, default limits, median of 3 (executor); lead single run in brackets",
+        "configC10teams": "5.3 s (5.8 s)",
+        "configCUnscaled3teams": "8.3 s, of which ~7.7 s HiGHS solve",
+        "synthetic20Event10teams": "2.4 s (2.4 s) — SYNTHETIC generated values; returns current_infeasible so it times the repair path, not improve",
+        "evalTime": "~0.4 s per run, down from 4-5 s"
+      },
+      "gap": "Not narrowed. Config C unscaled finds 1435; the relaxed-MIP bound varies with the wall clock (1714/1731/1786), so the gap is 279-351. Sweep: K10/Kmax12 -> 736 found; 2 refine rounds -> 1435; 30 s -> 1498 (over budget). Defaults unchanged (D5 6.4)."
     }
   },
   "followUps": [
@@ -1062,6 +1071,22 @@
     {
       "id": "A3-current-infeasible-load",
       "note": "Respect mode: a session_load violation already in the current lineup returns current_infeasible (same path as entry_cap). Confirm with user under D5 14.3."
+    },
+    {
+      "id": "A4-bound-unchecked",
+      "note": "The relaxed-MIP upper bound is built from fast column values; only the first 2 columns per event are self-checked against scoreMeet. A fast-scorer undervaluation could lower the bound and give a false proven label. The incumbent is still re-scored by scoreMeet in gate.ts. The parity test is the only guard for the bound."
+    },
+    {
+      "id": "A4-synthetic-bench-infeasible",
+      "note": "The synthetic bench lineup breaks v5 per-swimmer entry limits, so it measures the repair path. Make the generator respect the limits."
+    },
+    {
+      "id": "A4-d5-6.4-rationale",
+      "note": "D5 6.4 justifies K_max 10 by evaluation cost, which A4 removed. K_max 10 still holds because the solver cannot use more columns in 10 s. Amend the rationale (architect)."
+    },
+    {
+      "id": "A3-A15-A20-survivors",
+      "note": "A3 mutation survivors A15 (lp.ts unit guard) and A20 (gate.ts session_load tripwire) argued unreachable/defensive, not proven."
     }
   ],
   "p3CoreA": {

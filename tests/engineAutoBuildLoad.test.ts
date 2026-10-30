@@ -8,7 +8,7 @@
  * small fixture by its own code, scores each as a whole meet, counts its races with the whole-meet `sessionLoad`, and the
  * AutoBuilder must equal the best lineup that the preference allows.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AutoBuildError, autoBuild, BUILTIN_SESSION_PRESETS, builtinRulePreset, requireComplete, scoreMeet, sessionLoad } from '@omniswim/engine';
 import type {
   AutoBuildLimits,
@@ -26,8 +26,22 @@ import type {
   ScorerTag,
   SessionPreset,
 } from '@omniswim/engine';
+import { FastScorer } from '../packages/engine/src/autobuilder/fastScore';
 import { nodeMipSolve } from './helpers/nodeMipSolve';
 import { set, TEST_PROVENANCE } from './engineTestPresets';
+
+// Counts the `scoreMeet` calls of the engine (and, below, the fast scorer's), so a test can see that a refusal came before the columns were built.
+const scored = vi.hoisted(() => ({ calls: 0 }));
+vi.mock('../packages/engine/src/model/results', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../packages/engine/src/model/results')>();
+  return {
+    ...real,
+    scoreMeet: (...args: Parameters<typeof real.scoreMeet>) => {
+      scored.calls += 1;
+      return real.scoreMeet(...args);
+    },
+  };
+});
 
 const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
@@ -921,6 +935,47 @@ describe('autoBuild (D5, slice A3: session load)', () => {
     const proposal = result.kind === 'improved' ? result.proposal : result.kind === 'current_infeasible' ? result.alternative : null;
     expect(proposal === null ? result.current.objective : proposal.evaluation.objective).toBeCloseTo(best, 9);
     expect(result.proof.status).toBe('proven_optimal');
+  }, 120_000);
+
+  it('19 refusalOrder: pending and unscheduled refusals come before any column is built, and a pending setting comes first', async () => {
+    const E1 = '100 Freestyle';
+    const E2 = '100 Backstroke';
+    const SP = '500 Freestyle';
+    const own = ['o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7'];
+    const specs: Spec[] = [
+      ...own.map((id, i) => ({ id, team: 'A', swims: { [E1]: 5000 + i, [E2]: 5100 + i, [SP]: 5200 + i } })),
+      { id: 'b1', team: 'B', swims: { [E1]: 5500, [E2]: 5500, [SP]: 5500 } },
+    ];
+    const fx: Fx = {
+      model: buildModel(specs, [E1, E2, SP]),
+      lineup: lineup(ind('B', 'b1', E1), ind('B', 'b1', E2), ind('B', 'b1', SP)),
+      tags: [tag('A', 'o1'), tag('B', 'b1')],
+      rules: rulesOf(),
+    };
+    // Six free swimmers make 64 columns per event, 192 in all, once the space is built. A refusal must cost far fewer scoreMeet calls.
+    const pendingSplit: ScheduledEvent = {
+      eventKey: SP,
+      gender: 'both',
+      format: { kind: 'timed-final-split', slowHeats: { day: 1, slot: 'morning' }, fastHeat: { day: 1, slot: 'evening' }, fastHeatSize: { state: 'pending', question: 'synthetic', blocks: [] }, smallFieldSession: set({ day: 1, slot: 'evening' as const }) },
+    };
+    const evaluations = (): number => scored.calls + fastSpy.mock.calls.length;
+    const fastSpy = vi.spyOn(FastScorer.prototype, 'score');
+    scored.calls = 0;
+    fastSpy.mockClear();
+    const unscheduled = await autoError(() => autoBuild(request(fx, { schedule: schedule(timedFinal(E1), timedFinal(SP)), preference: respect(2) }), nodeMipSolve()));
+    expect({ code: unscheduled.code, subject: unscheduled.subject }).toEqual({ code: 'unscheduled_event', subject: `${E2}|Men` });
+    expect(evaluations(), 'unscheduled refusal: no column enumeration').toBeLessThan(40);
+    // E2 is unscheduled and SP has a pending setting: the pending setting (2.1 item 5) wins over the unscheduled event (item 6).
+    scored.calls = 0;
+    fastSpy.mockClear();
+    const both = await autoError(() => autoBuild(request(fx, { schedule: schedule(timedFinal(E1), pendingSplit), preference: respect(2) }), nodeMipSolve()));
+    expect({ code: both.code, subject: both.subject }).toEqual({ code: 'pending_setting', subject: `schedule:${SP}|Men:fastHeatSize` });
+    expect(evaluations(), 'pending refusal: no column enumeration').toBeLessThan(40);
+    // Control: a schedule that covers every event builds the columns, which costs many more calls.
+    scored.calls = 0;
+    fastSpy.mockClear();
+    await autoBuild(request(fx, { schedule: schedule(timedFinal(E1), timedFinal(E2), timedFinal(SP)), preference: respect(2) }), nodeMipSolve());
+    expect(evaluations(), 'control').toBeGreaterThan(100);
   }, 120_000);
 
   it('11 rankDependentCounts: a swimmer at the edge of the top 16 races a final or not by who else enters, and the load follows the column', async () => {

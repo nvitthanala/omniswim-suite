@@ -252,7 +252,11 @@ export class Space {
   /** Milliseconds spent evaluating columns (construction and refinement), or `null` when the request holds no clock. */
   evaluateMs: number | null;
 
-  constructor(readonly problem: Problem, k: number, private readonly clock?: () => number) {
+  /**
+   * `check` runs after every event has its candidates (and every relay event its squads) and before any column is built. D5 2.1 puts the
+   * schedule refusals ahead of the search space, so a refusal there must not wait for the column enumeration.
+   */
+  constructor(readonly problem: Problem, k: number, private readonly clock?: () => number, check?: (events: readonly EventSpace[], evaluator: Evaluator) => void) {
     const started = clock?.();
     this.evaluateMs = clock === undefined ? null : 0;
     const { req, support } = problem;
@@ -295,8 +299,9 @@ export class Space {
       const forced = swimmers.filter((id) => problem.held.has(pairKey(id, event.eventKey)));
       const space = new EventSpace(event, eventId(event.eventKey, event.gender), pairs, currentColumn, k, forced);
       this.events.push(space);
-      this.refresh(space);
     }
+    check?.(this.events, this.evaluator);
+    for (const es of this.events) this.refresh(es);
     this.charge(started);
   }
 
@@ -397,8 +402,9 @@ export class Space {
       tauOut: null,
       ubRel: 0,
     };
+    // The squads exist before the columns do, so the schedule check can see them (`refresh` builds the same set again).
+    es.relay.squads = generateSquads(es.relay.positions, es.relay.freestyle, es.relay.T, es.relay.current).squads;
     this.events.push(es);
-    this.refresh(es);
   }
 
   /** Points an outside squad can earn at most: the relay table at the best place behind the standing relays that beat `tau_out`. */

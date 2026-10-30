@@ -2,18 +2,22 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * The reference column evaluator (D5 5.1). One column is one set of own entries in one event. Its value is the own team's
+ * The column evaluator (D5 5.1, 12.4). One column is one set of own entries in one event. Its value is the own team's
  * points that `scoreMeet` gives the event when exactly those own entries stand beside the fixed entries of every other
- * side. Nothing here scores by itself: `scoreMeet` is the only scorer.
+ * side. `scoreMeet` is the reference scorer. The fast scorer (`fastScore.ts`) gives the same rows by arithmetic for the rules it
+ * models, and the reference scores everything else. An event runs its first columns through both and falls back to the
+ * reference for good if they differ, so a quirk the arithmetic misses cannot reach a lineup.
  */
 import { scoreMeet } from '../model/results';
-import type { ResultRow } from '../model/results';
+import type { ResultRow, Results } from '../model/results';
 import { entryKey } from '../model/lineup';
 import type { IndividualEntry, Lineup, LineupEntry, RelayEntry, ScorerTag } from '../model/lineup';
 import type { MeetEvent, MeetModel, MeetSwim, RelaySplit } from '../model/meet';
 import type { Gender, SwimmerId, TeamId } from '../model/primitives';
+import type { ScorerRole } from '../model/lineup';
 import type { CompleteRulePreset } from '../rules/rulePreset';
 import type { ConversionSettings } from '../sourcing/convert';
+import { FastScorer, fastSupported } from './fastScore';
 import { columnRaces, NO_RACES } from './load';
 import type { Races } from './load';
 import { freshRelays, squadKeyOfEntry } from './squads';
@@ -49,6 +53,27 @@ export interface EvalBase {
   readonly load: LoadRule | null;
   /** Held split entries (D5 4.6), `swimmerId NUL eventKey`: the entry stays in the sub-lineup whether or not the swimmer is in the column. */
   readonly held: ReadonlySet<string>;
+  /** Score by arithmetic where the rules allow it (default true). `false` runs the reference for every column. */
+  readonly fast?: boolean;
+  /** How many of an event's first columns run through both scorers to check them (default 2). A difference falls back for the event. */
+  readonly selfChecks?: number;
+}
+
+/** The rows of two scorers agree: the same entries, places and reasons, and points that differ by float noise only. */
+export function sameRows(a: readonly ResultRow[], b: readonly ResultRow[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((r, i) => {
+    const o = b[i] as ResultRow;
+    return (
+      r.entryKey === o.entryKey &&
+      r.teamId === o.teamId &&
+      r.swimmerId === o.swimmerId &&
+      r.place === o.place &&
+      r.scored === o.scored &&
+      r.notScoredReason === o.notScoredReason &&
+      Math.abs(r.points - o.points) < 1e-9
+    );
+  });
 }
 
 /** The sizes of the tie groups in a result: rows with one place. Only a place held by 2 or more rows gives a size. */
@@ -59,8 +84,15 @@ export function tieSizesOf(rows: readonly ResultRow[]): number[] {
 }
 
 export class Evaluator {
-  /** How many `scoreMeet` calls ran. A cache hit does not count. */
+  /** How many columns were evaluated, by either scorer. A cache hit does not count. */
   calls = 0;
+  /** How many of them ran `scoreMeet`. */
+  referenceCalls = 0;
+  /** The events (by `eventId`) the fast scorer gave up on, because the rules or a first column did not agree with the reference. */
+  readonly fallbacks = new Set<string>();
+  private readonly fastScorer: FastScorer | null;
+  private readonly roles = new Map<SwimmerId, ScorerRole>();
+  private readonly checksLeft = new Map<string, number>();
   private readonly cache = new Map<string, ColumnEval>();
   private readonly entriesByEvent = new Map<string, readonly LineupEntry[]>();
   private readonly swimsByKey = new Map<string, readonly MeetSwim[]>();
@@ -88,6 +120,64 @@ export class Evaluator {
     for (const e of base.model.events) this.eventOf.set(eventId(e.eventKey, e.gender), e);
     for (const s of base.model.swims) this.swimById.set(s.swimId, s);
     for (const s of base.model.relaySplits) this.splitById.set(s.splitId, s);
+    this.fastScorer = base.fast !== false && fastSupported(base.rules) ? new FastScorer(base.model, base.rules) : null;
+    for (const t of base.tags) this.roles.set(t.swimmerId, t.role);
+  }
+
+  /** The fast rows of an event for a sub-lineup, or `null` when the reference has to score it. */
+  private fastRows(event: MeetEvent, lineup: Lineup, joining: ReadonlySet<SwimmerId>): readonly ResultRow[] | null {
+    const id = eventId(event.eventKey, event.gender);
+    if (this.fastScorer === null || this.fallbacks.has(id)) return null;
+    const rows = this.fastScorer.score(event, lineup.entries, (swimmer) => (joining.has(swimmer) ? 'scorer' : this.roles.get(swimmer)));
+    if (rows === null) this.fallbacks.add(id);
+    return rows;
+  }
+
+  /**
+   * The rows of a column: the fast rows when the event is trusted, else the reference's. The first columns of an event run both, and a
+   * difference moves the event to the reference for good (a rule the arithmetic does not know). `reference` runs `scoreMeet`.
+   */
+  private rowsOf(event: MeetEvent, lineup: Lineup, joining: ReadonlySet<SwimmerId>, reference: () => readonly ResultRow[]): readonly ResultRow[] {
+    const id = eventId(event.eventKey, event.gender);
+    const fast = this.fastRows(event, lineup, joining);
+    if (fast === null) return reference();
+    const left = this.checksLeft.get(id) ?? this.base.selfChecks ?? 2;
+    if (left <= 0) return fast;
+    this.checksLeft.set(id, left - 1);
+    const checked = reference();
+    if (sameRows(fast, checked)) return fast;
+    this.fallbacks.add(id);
+    return checked;
+  }
+
+  /** A `Results` that holds one event's rows: all `sessionLoad` reads of a column's results. */
+  private resultsOf(event: MeetEvent, rows: readonly ResultRow[]): Results {
+    return { payloadVersion: 1, teams: [], events: [{ eventKey: event.eventKey, gender: event.gender, rows }], violations: [], rosterUnknown: [] };
+  }
+
+  private relayModel(event: MeetEvent, lineup: Lineup): MeetModel {
+    const swimIds = new Set<string>();
+    const splitIds = new Set<string>();
+    for (const e of lineup.entries) {
+      if (e.kind !== 'relay') continue;
+      for (const leg of e.legs) {
+        if (leg.basis.kind === 'split') splitIds.add(leg.basis.splitId);
+        else if (leg.basis.kind === 'flat-start-swim' || leg.basis.kind === 'flyover-estimate') swimIds.add(leg.basis.swimId);
+      }
+    }
+    const swims = [...swimIds].sort(cmp).flatMap((id) => this.swimById.get(id) ?? []);
+    const splits = [...splitIds].sort(cmp).flatMap((id) => this.splitById.get(id) ?? []);
+    return { ...this.base.model, events: [event], swims, relaySplits: splits };
+  }
+
+  private individualModel(event: MeetEvent, lineup: Lineup): MeetModel {
+    const present = new Set<SwimmerId>();
+    for (const e of lineup.entries) {
+      if (e.kind === 'individual') present.add(e.swimmerId);
+    }
+    const swims: MeetSwim[] = [];
+    for (const id of [...present].sort(cmp)) swims.push(...(this.swimsByKey.get(`${id}\u0000${event.eventKey}`) ?? []));
+    return { ...this.base.model, events: [event], swims, relaySplits: [] };
   }
 
   /**
@@ -119,28 +209,22 @@ export class Evaluator {
     if (known) return known;
     const { base } = this;
     const lineup = this.subLineupRelay(event, squads);
-    const swimIds = new Set<string>();
-    const splitIds = new Set<string>();
-    for (const e of lineup.entries) {
-      if (e.kind !== 'relay') continue;
-      for (const leg of e.legs) {
-        if (leg.basis.kind === 'split') splitIds.add(leg.basis.splitId);
-        else if (leg.basis.kind === 'flat-start-swim' || leg.basis.kind === 'flyover-estimate') swimIds.add(leg.basis.swimId);
-      }
-    }
-    const swims = [...swimIds].sort(cmp).flatMap((id) => this.swimById.get(id) ?? []);
-    const splits = [...splitIds].sort(cmp).flatMap((id) => this.splitById.get(id) ?? []);
-    const model: MeetModel = { ...base.model, events: [event], swims, relaySplits: splits };
     const joining = new Set(squads.flatMap((q) => q.swimmers).filter((id) => base.free.has(id)));
-    const extra: ScorerTag[] = [...joining].sort(cmp).map((swimmerId) => ({ teamId: base.own, swimmerId, role: 'scorer' as const }));
     this.calls += 1;
-    const results = scoreMeet(model, lineup, [...base.tags, ...extra], base.rules, base.sourcing);
-    const rows = results.events.find((e) => e.eventKey === event.eventKey && e.gender === event.gender)?.rows ?? [];
+    let model: MeetModel | null = null;
+    let referenceResults: Results | null = null;
+    const rows = this.rowsOf(event, lineup, joining, () => {
+      model = this.relayModel(event, lineup);
+      const extra: ScorerTag[] = [...joining].sort(cmp).map((swimmerId) => ({ teamId: base.own, swimmerId, role: 'scorer' as const }));
+      this.referenceCalls += 1;
+      referenceResults = scoreMeet(model, lineup, [...base.tags, ...extra], base.rules, base.sourcing);
+      return referenceResults.events.find((e) => e.eventKey === event.eventKey && e.gender === event.gender)?.rows ?? [];
+    });
     const evaluated: ColumnEval = {
       own: rows.reduce((sum, r) => (r.teamId === base.own ? sum + r.points : sum), 0),
       tieSizes: tieSizesOf(rows),
       rows,
-      races: base.load === null ? NO_RACES : columnRaces(base.load, model, lineup, results, event, base.decision, base.rules),
+      races: this.racesOf(event, lineup, rows, model, referenceResults, (l) => this.relayModel(event, l)),
     };
     this.cache.set(key, evaluated);
     return evaluated;
@@ -177,24 +261,31 @@ export class Evaluator {
     if (known) return known;
     const { base } = this;
     const lineup = this.subLineup(event, members);
-    const present = new Set<SwimmerId>();
-    for (const e of lineup.entries) {
-      if (e.kind === 'individual') present.add(e.swimmerId);
-    }
-    const swims: MeetSwim[] = [];
-    for (const id of [...present].sort(cmp)) swims.push(...(this.swimsByKey.get(`${id}\u0000${event.eventKey}`) ?? []));
-    const model: MeetModel = { ...base.model, events: [event], swims, relaySplits: [] };
-    const extra: ScorerTag[] = members.filter((id) => base.free.has(id)).map((swimmerId) => ({ teamId: base.own, swimmerId, role: 'scorer' as const }));
+    const joining = new Set(members.filter((id) => base.free.has(id)));
     this.calls += 1;
-    const results = scoreMeet(model, lineup, [...base.tags, ...extra], base.rules, base.sourcing);
-    const rows = results.events.find((e) => e.eventKey === event.eventKey && e.gender === event.gender)?.rows ?? [];
+    let model: MeetModel | null = null;
+    let referenceResults: Results | null = null;
+    const rows = this.rowsOf(event, lineup, joining, () => {
+      model = this.individualModel(event, lineup);
+      const extra: ScorerTag[] = members.filter((id) => base.free.has(id)).map((swimmerId) => ({ teamId: base.own, swimmerId, role: 'scorer' as const }));
+      this.referenceCalls += 1;
+      referenceResults = scoreMeet(model, lineup, [...base.tags, ...extra], base.rules, base.sourcing);
+      return referenceResults.events.find((e) => e.eventKey === event.eventKey && e.gender === event.gender)?.rows ?? [];
+    });
     const evaluated: ColumnEval = {
       own: rows.reduce((sum, r) => (r.teamId === base.own ? sum + r.points : sum), 0),
       tieSizes: tieSizesOf(rows),
       rows,
-      races: base.load === null ? NO_RACES : columnRaces(base.load, model, lineup, results, event, base.decision, base.rules),
+      races: this.racesOf(event, lineup, rows, model, referenceResults, (l) => this.individualModel(event, l)),
     };
     this.cache.set(key, evaluated);
     return evaluated;
+  }
+
+  /** D5 5.3: the races of the column, from `sessionLoad` on its sub-lineup. It reads the rows only, so the fast rows serve it. */
+  private racesOf(event: MeetEvent, lineup: Lineup, rows: readonly ResultRow[], model: MeetModel | null, results: Results | null, build: (lineup: Lineup) => MeetModel): Races {
+    const load = this.base.load;
+    if (load === null) return NO_RACES;
+    return columnRaces(load, model ?? build(lineup), lineup, results ?? this.resultsOf(event, rows), event, this.base.decision, this.base.rules);
   }
 }
