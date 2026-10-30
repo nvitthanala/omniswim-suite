@@ -635,7 +635,7 @@ describe('autoBuild (D5, slice A1)', () => {
     expect(result.proof.bestFound).toBeCloseTo(53 / 3 + 15, 9);
   });
 
-  it('9 fixedRelaysUntouched: own relays stay as entered, free relay legs stay off the roster, and relay entries count toward the cap', async () => {
+  it('9 fixedRelaysUntouched: a relay with a leg off the decision set stays as entered, its free legs stay off the roster, and its entries count toward the cap', async () => {
     const specs: Spec[] = [
       { id: 'p1', team: 'A', times: { [FREE]: 4800, [BACK]: 4900, [FLY]: 5000 } },
       { id: 'q', team: 'A', times: { [FREE]: 4850, [BACK]: 4700 } },
@@ -649,7 +649,8 @@ describe('autoBuild (D5, slice A1)', () => {
     const fx: Fx = {
       model: buildModel(specs, [FREE, BACK, FLY, RELAY]),
       lineup: lineup(ownRelay, theirRelay, ind('A', 'q', BACK), ind('B', 'b0', FREE), ind('B', 'b0', BACK), ind('B', 'b0', FLY)),
-      tags: [tag('A', 'p1'), ...tags('B', ['b0', 'b1', 'b2', 'b3'])],
+      // s is tagged off the scoring roster: the relay has a leg the solver does not own, so its event stays as entered (A2).
+      tags: [tag('A', 'p1'), tag('A', 's', 'non-scorer'), ...tags('B', ['b0', 'b1', 'b2', 'b3'])],
       rules: rulesOf({ maxTotal: 2 }),
     };
     const result = await autoBuild(request(fx), nodeMipSolve());
@@ -663,7 +664,8 @@ describe('autoBuild (D5, slice A1)', () => {
     expect(proposal.lineup.entries.filter((e) => e.kind === 'individual' && e.swimmerId === 'p1').length).toBeLessThanOrEqual(1);
     // b0 is over the cap in the input too (a relay and three swims). That is the opponent's, and unchanged.
     expect(proposal.evaluation.results.violations.filter((v) => v.kind === 'entry_cap' && ['p1', 'q', 'r', 's', 'w'].includes(v.swimmerId))).toEqual([]);
-    expect(result.proof.searchSpace.restrictions).toContain('fixed_relays');
+    expect(result.proof.searchSpace.restrictions).toContain('fixed_relay_events');
+    expect(result.proof.searchSpace.restrictions).not.toContain('fixed_relays' as never);
   });
 
   // ---- D5 2.2 and 8.5 --------------------------------------------------------------------------

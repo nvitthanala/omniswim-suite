@@ -9,9 +9,10 @@
 import { scoreMeet } from '../model/results';
 import type { Results, Violation } from '../model/results';
 import { entryKey } from '../model/lineup';
-import type { IndividualEntry, LineupEntry, ScorerTag } from '../model/lineup';
+import type { IndividualEntry, LineupEntry, RelayEntry, ScorerTag } from '../model/lineup';
 import type { Gender, SwimmerId, TeamId } from '../model/primitives';
 import type { Selection, Scale } from './lp';
+import { freshRelays, squadKeyOfEntry } from './squads';
 import { pairKey } from './space';
 import type { Problem, Space } from './space';
 import { autoBuildFail } from './types';
@@ -46,6 +47,8 @@ export function repairable(problem: Problem, results: Results): Violation[] {
   return results.violations.filter((v) => {
     if (v.kind === 'entry_cap' || v.kind === 'session_load') return problem.decision.has(v.swimmerId);
     if (v.kind === 'scoring_team_size') return v.teamId === problem.req.ownTeamId && problem.genders.includes(v.gender);
+    // Own relays of a built event are solver-owned: an over-limit count there is repaired by choosing fewer relays (D5 amendment 2, 3.3).
+    if (v.kind === 'relay_entries_over_limit') return v.teamId === problem.req.ownTeamId && problem.built.some((e) => e.eventKey === v.eventKey && e.gender === v.gender);
     return false;
   });
 }
@@ -62,44 +65,71 @@ export interface Built {
   readonly joined: ReadonlySet<SwimmerId>;
 }
 
+const eventIdOf = (e: { readonly gender: Gender; readonly eventKey: string }): string => `${e.gender}\u0000${e.eventKey}`;
+
 /** D5 8.1: copy the lineup, drop the solver-owned entries that are not chosen, keep the rest in place, append the new entries. */
 export function buildLineup(problem: Problem, space: Space, selection: Selection): Built {
   const { req } = problem;
   const owned = (id: SwimmerId): boolean => isPinned(problem, id) || selection.joined.has(id);
   const members = new Map<string, ReadonlySet<SwimmerId>>();
   for (const es of space.events) members.set(es.id, new Set(selection.chosen.get(es.id)?.members ?? []));
-  const builtIds = new Set(space.events.map((es) => `${es.event.gender}\u0000${es.event.eventKey}`));
+  const builtIds = new Set(space.events.map((es) => es.id));
+  const relayIds = new Set(space.events.filter((es) => es.relay !== null).map((es) => es.id));
+
+  /** An own relay of a built relay event is solver-owned: it stays only when its squad is in the chosen column. */
+  const relayVerdict = (e: LineupEntry): 'keep' | 'drop' | null => {
+    if (e.kind !== 'relay' || e.teamId !== req.ownTeamId || !relayIds.has(eventIdOf(e))) return null;
+    const wanted = (selection.chosen.get(eventIdOf(e))?.squads ?? []).some((q) => q.key === squadKeyOfEntry(e));
+    return wanted ? 'keep' : 'drop';
+  };
+  /** An own individual entry of a decision swimmer who is pinned or joins: it stays only when the swimmer is in the chosen column. */
+  const individualDropped = (e: LineupEntry): boolean =>
+    e.kind === 'individual' &&
+    e.teamId === req.ownTeamId &&
+    problem.decision.has(e.swimmerId) &&
+    builtIds.has(eventIdOf(e)) &&
+    owned(e.swimmerId) &&
+    !(members.get(eventIdOf(e)) as ReadonlySet<SwimmerId>).has(e.swimmerId);
 
   const entries: LineupEntry[] = [];
   const changes: EntryChange[] = [];
   const have = new Set<string>();
+  const surviving = new Map<string, RelayEntry[]>();
   for (const e of req.lineup.entries) {
-    if (e.kind === 'individual' && e.teamId === req.ownTeamId && problem.decision.has(e.swimmerId) && builtIds.has(`${e.gender}\u0000${e.eventKey}`)) {
-      if (owned(e.swimmerId)) {
-        const id = `${e.gender}\u0000${e.eventKey}`;
-        if (!(members.get(id) as ReadonlySet<SwimmerId>).has(e.swimmerId)) {
-          changes.push({ kind: 'removed', entryKey: entryKey(e), why: 'replaced' });
-          continue;
-        }
-        have.add(pairKey(e.swimmerId, e.eventKey) + e.gender);
-      }
+    const verdict = relayVerdict(e);
+    if (verdict === 'drop' || individualDropped(e)) {
+      changes.push({ kind: 'removed', entryKey: entryKey(e), why: 'replaced' });
+      continue;
+    }
+    if (verdict === 'keep') surviving.set(eventIdOf(e), [...(surviving.get(eventIdOf(e)) ?? []), e as RelayEntry]);
+    if (e.kind === 'individual' && e.teamId === req.ownTeamId && problem.decision.has(e.swimmerId) && builtIds.has(eventIdOf(e)) && owned(e.swimmerId)) {
+      have.add(pairKey(e.swimmerId, e.eventKey) + e.gender);
     }
     entries.push(e);
   }
-  const order = new Map<string, number>(req.model.events.map((e, i) => [`${e.gender}\u0000${e.eventKey}`, i]));
+  const order = new Map<string, number>(req.model.events.map((e, i) => [eventIdOf(e), i]));
   const byModelOrder = [...space.events].sort((a, b) => (order.get(a.id) as number) - (order.get(b.id) as number));
   const added: EntryChange[] = [];
+  const append = (fresh: readonly LineupEntry[]): void => {
+    for (const f of fresh) {
+      entries.push(f);
+      added.push({ kind: 'added', entryKey: entryKey(f) });
+    }
+  };
   for (const es of byModelOrder) {
+    if (es.relay !== null) {
+      const kept = surviving.get(es.id) ?? [];
+      const present = new Set(kept.map(squadKeyOfEntry));
+      const squads = (selection.chosen.get(es.id)?.squads ?? []).filter((q) => !present.has(q.key));
+      append(freshRelays(req.ownTeamId, es.event, squads, kept));
+      continue;
+    }
     const fresh: IndividualEntry[] = [];
     for (const swimmerId of members.get(es.id) as ReadonlySet<SwimmerId>) {
       if (have.has(pairKey(swimmerId, es.event.eventKey) + es.event.gender)) continue;
       fresh.push({ kind: 'individual', teamId: req.ownTeamId, swimmerId, eventKey: es.event.eventKey, gender: es.event.gender, seedSwimId: null });
     }
-    fresh.sort((a, b) => cmp(entryKey(a), entryKey(b)));
-    for (const f of fresh) {
-      entries.push(f);
-      added.push({ kind: 'added', entryKey: entryKey(f) });
-    }
+    append(fresh.sort((a, b) => cmp(entryKey(a), entryKey(b))));
   }
 
   const joined = [...selection.joined].sort(cmp);

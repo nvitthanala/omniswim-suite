@@ -582,7 +582,7 @@
     {
       "id": "P6",
       "name": "AutoBuilder (F4)",
-      "status": "A1 DONE (this commit): max-own AutoBuilder, D5 amendment 1 and 1a. Config C defaults: improved in 7.4-8.0 s, 1219-1243 points, UB 1299. Gates: vitest 2960, npm test 65, golden OK, mutation 413, harness 2/2, lint 0. Codex J8 + J9 reviews. Next: A2 relays."
+      "status": "A1 6a49d8b1; A2 relays DONE (this commit) with D5 amendment 2. Config C: 1435 pts, UB 1786, ~8.6 s, 3 own relays. Gates: vitest 2984, golden OK, mutation 413, lint 0. Codex J10 no defect; J11 found cap-row guard bug, fixed with test sharedSwimmerCaps. Next: A3 session load (D5 12.3), then A4 performance (the 351-point gap and 8.6 s)."
     },
     {
       "id": "P7",

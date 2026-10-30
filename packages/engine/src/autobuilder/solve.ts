@@ -156,10 +156,11 @@ class Ledger {
   }
 }
 
-/** What the relaxed stage learned: an outside set to refine on, or that the MIP is infeasible. */
+/** What the relaxed stage learned: the active outside terms to refine on, or that the MIP is infeasible. */
 interface RelaxedStage {
   readonly infeasible: boolean;
-  readonly outside: ReadonlyMap<string, readonly string[]> | null;
+  /** The relaxed solution, when an outside term (`o` or `oR`) is active in it. */
+  readonly active: Selection | null;
 }
 
 /** One `solveAutoBuild` call: the stages of D5 amendment 1, 6.3, over one shared budget and one ledger. */
@@ -216,31 +217,32 @@ class Sequence {
     const { scale, ledger } = this;
     const build = buildLp(this.space, scale, { relaxed: true });
     const result = await this.run('relaxed', build, this.timer.left());
-    if (result === null) return { infeasible: false, outside: null };
+    if (result === null) return { infeasible: false, active: null };
     if (result.status === 'Infeasible') {
       if (ledger.best !== null) autoBuildFail('model_mismatch', 'the relaxed MIP is infeasible, but the restricted MIP found a lineup');
-      return { infeasible: true, outside: null };
+      return { infeasible: true, active: null };
     }
     if (result.status !== 'Optimal') {
       const dual = dualOf(result);
       if (dual !== null) ledger.bound(dual, scale.D);
-      return { infeasible: false, outside: null };
+      return { infeasible: false, active: null };
     }
     ledger.bound(checkObjective(build, result, 'relaxed solve'), scale.D);
     const selection = build.select(result.columns);
-    if (selection.outside.size > 0) return { infeasible: false, outside: selection.outside };
+    if (selection.outside.size > 0 || selection.relayOutside.size > 0) return { infeasible: false, active: selection };
     ledger.consider({ selection, scale, points: build.pointsOf(result.columns), rank: 3, method: 'mip' });
-    return { infeasible: false, outside: null };
+    return { infeasible: false, active: null };
   }
 
   /** Stage 3: grow the candidate sets, only when the estimate fits. Returns whether a round ran. */
-  private refine(outside: ReadonlyMap<string, readonly string[]>): boolean {
-    const plan = this.space.planGrowth(outside, this.limits.maxCandidatesPerEvent, REFINE_PER_EVENT);
-    if (plan.next.size === 0) return false;
+  private refine(active: Selection): boolean {
+    const limits = { kMax: this.limits.maxCandidatesPerEvent, tMax: this.limits.maxRelaySquadsPerEvent };
+    const plan = this.space.planGrowth(active.outside, active.relayOutside, limits, REFINE_PER_EVENT);
+    if (plan.empty) return false;
     const perColumn = this.space.msPerColumn();
     if (perColumn !== null && plan.newColumns * perColumn + 1000 >= this.timer.left()) return false;
     if (this.timer.left() < MIN_ALLOTMENT_MS) return false;
-    this.space.applyGrowth(plan.next);
+    this.space.applyGrowth(plan);
     this.scale = scaleFor(this.space);
     return true;
   }
@@ -266,7 +268,7 @@ class Sequence {
       if ((await this.restricted()) === 'infeasible') return { kind: 'infeasible', scale: this.scale };
       const stage = await this.relaxed();
       if (stage.infeasible) return { kind: 'infeasible', scale: this.scale };
-      if (ledger.proven() || round >= this.limits.refineRounds || stage.outside === null || !this.refine(stage.outside)) break;
+      if (ledger.proven() || round >= this.limits.refineRounds || stage.active === null || !this.refine(stage.active)) break;
     }
     const finalScale = scaleFor(this.space);
     const { best, upper } = ledger;

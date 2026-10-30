@@ -25,6 +25,10 @@ export interface Support {
   readonly weight: DiverWeight;
   readonly entryCaps: { readonly individual: Cap; readonly relay: Cap; readonly total: Cap };
   readonly exhibitionCounts: boolean;
+  /** R: the own relays one event scores (`scorers.scoringRelaysPerTeamPerEvent`). */
+  readonly relayCap: number;
+  /** `entries.nonScoringRelaysAllowed`: `false` makes more than R own relays in one event a hard violation (README R42). An absent rule is `true`. */
+  readonly nonScoringRelaysAllowed: boolean;
   readonly tables: { readonly individual: readonly number[]; readonly diving: readonly number[]; readonly relay: readonly number[] };
   /** The power of ten that makes every table value a whole number (rosterSuggest.ts:163). */
   readonly decScale: number;
@@ -89,6 +93,8 @@ export function checkRules(rules: CompleteRulePreset): Support {
       total: settled(rules.entries.maxTotalPerSwimmer, 'entries.maxTotalPerSwimmer'),
     },
     exhibitionCounts: settled(rules.entries.exhibitionCounts, 'entries.exhibitionCounts'),
+    relayCap: settled(rules.scorers.scoringRelaysPerTeamPerEvent, 'scorers.scoringRelaysPerTeamPerEvent') as number,
+    nonScoringRelaysAllowed: rules.entries.nonScoringRelaysAllowed === undefined ? true : settled(rules.entries.nonScoringRelaysAllowed, 'entries.nonScoringRelaysAllowed'),
     tables,
     decScale,
     rules,

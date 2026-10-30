@@ -166,8 +166,12 @@ export type AutoBuildRestriction =
   | 'held_split_entries'
   | 'strict_diver_weight'
   | 'robust_frozen_pairs'
-  /** D5 amendment 1 (6.5 f), slice A1 only, removed in A2: own relays stay as entered and their free legs stay off the roster. */
-  | 'fixed_relays';
+  /**
+   * Slice A2: a relay event that holds an own relay with a leg off the decision set (a swimmer tagged off the scoring roster,
+   * or off the roster) stays as entered. Its decision legs count toward the entry caps as fixed entries, and its free legs
+   * stay off the roster.
+   */
+  | 'fixed_relay_events';
 
 /**
  * What `autoBuild` proves. `proven_optimal` holds within `searchSpace.restrictions` only. The fewest-changes tie-break (4.9) is
@@ -191,6 +195,17 @@ export interface AutoBuildProof {
      * guard then treats the current lineup normally. Every other restriction is `binding: false` in A1.
      */
     readonly restrictionStatus: readonly { readonly restriction: AutoBuildRestriction; readonly binding: boolean }[];
+    /**
+     * D5 amendment 2, additive: the relay events that stay as entered (`fixed_relay_events`). A fixed event has no columns, no leg
+     * options and no outside slot, so it is not in `events`.
+     */
+    readonly fixedRelayEvents: readonly { readonly eventKey: EventKey; readonly gender: Gender }[];
+    /**
+     * One entry per built event. For an individual or diving event, `candidates` is the candidate swimmers, `outside` the swimmers
+     * outside them, and `columns` the columns. For a relay event, `candidates` is `|Q_e|` (the squads), `outside` is 1 when a squad
+     * lies outside `Q_e` (`tau_out` exists) and 0 otherwise, and `columns` is the number of columns (sets of at most R disjoint
+     * squads, plus the current column).
+     */
     readonly events: readonly {
       readonly eventKey: EventKey;
       readonly gender: Gender;

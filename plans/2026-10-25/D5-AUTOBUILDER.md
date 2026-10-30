@@ -713,7 +713,7 @@ The F4 target of "a 10-team, 20-event meet under 10 s" stays. With these default
   - `MipSolution.seconds?`: the solver-reported time, diagnostic only. Budgeting uses the clock.
   - `AutoBuildRequest.clock?: () => number`.
   - Proof timing fields are null only for a stage that did not run.
-  - Restriction `'fixed_relays'`: A1 only, and removed in A2.
+  - Restriction `'fixed_relays'`: A1 only. A2 replaces it with `'fixed_relay_events'`: a relay event stays as entered when any current own relay in it has a leg who is not a decision swimmer (amendment 2, 3.4).
 
 ### 8.5 (added acceptance)
 
@@ -736,3 +736,60 @@ The F4 target of "a 10-team, 20-event meet under 10 s" stays. With these default
 - **Final lineup.** The highest objective that passes the gate wins. The order in 6.3 (proven relaxed, then restricted Optimal, then verified incumbent) breaks ties only. A verified incumbent passes the same gate (8.3) as an optimum, so returning a lower-scoring Optimal lineup would throw away points.
 - **`binding`.** It lives in `proof.searchSpace.restrictionStatus: { restriction, binding }[]`. `restrictions` stays a string array.
 - **Proof of a gated incumbent.** A verified incumbent whose objective equals a valid upper bound is proven optimal, with `proof.status` `'proven_optimal'` and `method` still `'mip-incumbent'`. The bound, not the solver status, carries the proof (section 0 item 3). "An incumbent is never an optimum" means the engine never trusts a timed-out solve's status. It does not rule out a certificate. (Codex J9 review raised the case; the lead ruled it correct.)
+
+## D5 amendment 2 (2026-10-29): relay rulings for slice A2
+
+### 3.4 (amend) Restriction `fixed_relay_events` replaces `fixed_relays`
+
+Replace the D5:716 sentence ("A2 removes it") with this rule. A relay event stays fixed when any current own relay in it has a leg who is not a decision swimmer: pinned off, untagged with `unknown` membership, or outside `S_g`.
+
+- In a fixed event, every own relay stays byte-identical.
+- Its legs keep their current roles.
+- Their entries count in `k_R` and `k_T`, and they set `d = 0`.
+- The event gets no columns and no `oR` slot.
+- `proof.searchSpace.restrictions` lists `'fixed_relay_events'` once. Add an additive `fixedRelayEvents: { eventKey, gender }[]` beside it.
+- A free leg (untagged member) is a decision swimmer, so it does not fix its event.
+
+Why the whole event: R and the letters are counted per event. Mixing fixed relays and solver relays in one event would make both depend on entries the solver cannot move.
+
+Test `fixedRelayEvent`: one event's relay has an exhibition-tagged leg, and another event's relay has only decision legs.
+- The first event's own relays are deep-equal to the current ones.
+- The second event is built.
+- `fixedRelayEvents` names only the first event.
+
+### 3.3 (amend) A current relay column over the limit
+
+The current squads are always in `Q_e`. So every set of at most R pairwise-disjoint current squads is an ordinary column, and that is the repair. The full current column, with more than R squads, follows two rules.
+
+- **Selectable only when it is legal.** Exclude it when `entries.nonScoringRelaysAllowed` is false: its selection would raise `relay_entries_over_limit`, a hard violation. The current lineup is then infeasible (8.3), and the guard returns `current_infeasible` or `improved`. When the rule is absent or true, keep the column. Its extra relays are legal entries, and `scoreMeet` values them exactly.
+- **Repeated swimmers.** When current squads share a swimmer, E2 for relays uses multiplicity: `Σ_p mult_p(s)·y[e,p] = x[s,e]`, with `x` a general integer in `0..max mult`. Z1 becomes `x − mult_max·z ≤ 0`, and C2 and C3 count `x` as it is.
+
+Tests:
+1. `overLimitCurrentV5`: under `nsisc` v5 with 3 current relays in one event, the result never holds 3 own relays there. The kind is `current_infeasible` or `improved`, and there is no `model_mismatch`.
+2. `overLimitCurrentAllowed`: the same fixture with the rule absent can return `unchanged` with the current column.
+
+### 3.2 (amend) Current legs with bad bases
+
+A current squad keeps its entry object, letter and bases, including a flat start on legs 2 to 4, an `event_mismatch` leg, or `no-time`. It may appear in any column. New squads still use only the 3.2 bases.
+
+### 8.3 (amend) Hard and carried violations
+
+8.3 item 3 applies to **new** relay entries only. A `relay_leg` violation on a surviving current relay entry is carried: it falls under the subset rule.
+
+Test `badBasisSurvives`: a current relay with a flat start on leg 3 is kept when it is best. No `model_mismatch` follows, and no new relay has a `relay_leg` violation.
+
+### `proof.searchSpace.events` for relays
+
+- `candidates` is `|Q_e|`, the squad count.
+- `outside` is 1 when an outside squad exists (`tauOut !== null`), else 0.
+- `columns` is the column count.
+
+State these meanings in the field doc comments. No test is needed beyond a field check in an existing relay test.
+
+### 3.2 (amend) Remove legs with no relay capacity left
+
+Before squad generation, drop from every position's options any decision swimmer with `cap_R − k_R(s) ≤ 0` or `cap_T − k_I(s) − k_R(s) ≤ 0`, where `k_I` and `k_R` count only fixed entries.
+
+This is exact. C2 and C3 already forbid `x[s,e] = 1` for such a swimmer, so no feasible lineup uses a squad that holds them. Compute `tau_out` over the remaining universe; the bound stays valid because the removed squads are infeasible. The current squads stay in `Q_e` even when they hold such a swimmer, so the current state remains representable.
+
+Test `cappedLegsDoNotCrowdQ`: the top 12 squads of an event all hold a swimmer whose relay cap is used up by a fixed relay. A feasible relay exists among the other swimmers. With default limits, the result is `improved` and holds that relay. The same fixture before this rule returned `unchanged` with `none_found_within_limits`.

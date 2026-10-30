@@ -371,7 +371,7 @@ export function buildIndex(model: MeetModel): Index {
 }
 
 /** The SCY value a swim states: hundredths, or `null` when the swim has no usable time. */
-function scyValue(swim: MeetSwim): Hundredths | null {
+export function scyValue(swim: MeetSwim): Hundredths | null {
   switch (swim.scy.kind) {
     case 'recorded-scy':
       return swim.recordedTime === null ? null : swim.recordedTime.hundredths;
@@ -383,7 +383,7 @@ function scyValue(swim: MeetSwim): Hundredths | null {
 }
 
 /** A swim the engine may pick without being told: not an extracted split, a typed-in time or an unconfirmed program swim (invariant 8). */
-const isRankable = (swim: MeetSwim): boolean =>
+export const isRankable = (swim: MeetSwim): boolean =>
   swim.flags.extractedSplit !== true && swim.flags.userInputted !== true && swim.flags.programUnconfirmed !== true;
 
 function individualValue(entry: Extract<LineupEntry, { kind: 'individual' }>, key: string, event: MeetEvent, index: Index): Hundredths | null {
@@ -409,7 +409,7 @@ function individualValue(entry: Extract<LineupEntry, { kind: 'individual' }>, ke
 }
 
 /** Leg event keys a relay expects, in leg order: a medley relay swims back, breast, fly, free; a free relay, free. */
-function expectedLegEvents(event: MeetEvent): readonly EventKey[] | null {
+export function expectedLegEvents(event: MeetEvent): readonly EventKey[] | null {
   if (event.distanceYards === null || event.distanceYards % 4 !== 0) return null;
   const legDistance = event.distanceYards / 4;
   const strokes = event.relayKind === 'medley' ? ['Backstroke', 'Breaststroke', 'Butterfly', 'Freestyle'] : ['Freestyle', 'Freestyle', 'Freestyle', 'Freestyle'];
