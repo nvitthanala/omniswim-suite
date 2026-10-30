@@ -628,7 +628,7 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
-    "RESUME: A5 committed. Next A6 (margin and goal seek, D5 12.6) via SendMessage to executor ad2051c440db6ce85. User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md (A1-A7, B1-B3, C1, D1-D5, E1-E4).",
+    "RESUME: A6 committed. Next A7 robust (D5 12.7) via SendMessage to executor ad2051c440db6ce85, built on the 14.1 default. User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md (A1-A8, B1-B3, C1, D1-D5, E1-E4).",
     "RESUME after the limit: 1) git status; diff packages/engine/src/autobuilder, tests/engineAutoBuild.test.ts, tests/helpers/nodeMipSolve.ts, plans/2026-10-25/D5-AUTOBUILDER.md (amendment 1 appended, uncommitted). 2) If the executor report is missing, resume it with SendMessage (A1 agent) rather than re-briefing. 3) npm run build:extension, then full gates; check defaultLimitsConfigC returns improved within 11 s, 3 runs. 4) Commit A1 + amendment as one commit (Codex J8 review: no defect, on the pre-amendment diff; re-review the amendment diff with Codex J terminal term_a6fd5787 first). 5) Next: D5 slice A2 (relays). Open user questions: D5 14.1-14.5, R70 x3, P4 fetch approval, cap-boundary tie rule.",
     "RESUME (if interrupted 2026-10-29 afternoon): read N2 and J4 reports (orca orchestration inbox); review sessionLoad.ts against D2 3.11; rebuild + full gates; commit planner core, then planner UI.",
     "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
@@ -1051,6 +1051,10 @@
         "tests"
       ],
       "next": "A6 margin and goal seek (D5 12.6)"
+    },
+    "D5.A6": {
+      "status": "COMMITTED 2026-10-30 (commit follows this state edit). Lead gates green: lint, vitest 3103, npm test 65, golden, mutation 413, build, harness 2/2, no leak. Codex J16: no findings. Advisor audit: fallback covered for all three modes (test 10); goal-seek+prefer subject renamed goal-seek-prefer; D5 amendment 4 records the rulings. Mutation 52 sites; G01-G03 killed by direct gate tests; G04, M26 equivalent.",
+      "next": "A7 robust (D5 12.7) on the D5 14.1 default"
     }
   },
   "followUps": [
@@ -1110,6 +1114,22 @@
     {
       "id": "A5-cap-machine-speed",
       "note": "LOCAL_SEARCH_MAX_EVALUATIONS 80000 is ~2 s on this machine; slower machines take longer with no clock. Production always passes a clock."
+    },
+    {
+      "id": "A6-closest-no-fallback",
+      "note": "closest skips the local-search fallback (its margin is a min over teams). A timeout with no incumbent returns unchanged/none_found_within_limits. A Derived min kind in localSearch.ts would fix it."
+    },
+    {
+      "id": "A6-goalseek-broken-current",
+      "note": "Goal seek over an infeasible current lineup returns target_unreachable when the relaxed MIP is infeasible, without saying the current lineup is infeasible. Settle with user question A3."
+    },
+    {
+      "id": "A6-goalseek-proof-fields",
+      "note": "U1: in goal seek, proof.bestFound is the positive change count and proof.upperBound holds a LOWER bound on changes. Do not label it upper bound in the UI."
+    },
+    {
+      "id": "A6-margin-relay-bound-loose",
+      "note": "Margin relay bounds are loose by design; optimal margin lineups often report gap rather than proven."
     }
   ],
   "p3CoreA": {

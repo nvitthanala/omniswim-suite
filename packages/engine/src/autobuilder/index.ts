@@ -14,7 +14,8 @@ import type { Results } from '../model/results';
 import type { Gender } from '../model/primitives';
 import { gate, ownPointsOf, repairable } from './gate';
 import { ownPenalty, scorerIds } from './load';
-import { solveAutoBuild } from './solve';
+import { metricOf } from './mode';
+import { scaleFor, solveAutoBuild } from './solve';
 import type { Squad } from './squads';
 import type { SolveOutcome, SolveRecord } from './solve';
 import { buildProblem, classify, Space } from './space';
@@ -62,7 +63,9 @@ function evaluationOf(results: Results, problem: Problem): AutoBuildEvaluation {
   const ownPoints = ownPointsOf(results, problem.req.ownTeamId);
   // D5 8.2: the own-only penalty over the own swimmers on the scoring roster, from `sessionLoad`'s `perSwimmer` rows.
   const penaltyPoints = ownPenalty(problem.support.load, problem.currentLoad, scorerIds(problem.req.tags, problem.req.ownTeamId));
-  return { objective: ownPoints - penaltyPoints, ownPoints, rival: null, robustOwnPoints: null, penaltyPoints, results, load: problem.currentLoad };
+  // D5 4.7: the metric of the mode (own points, the margin, the closest margin), less the penalty. A goal seek's metric has none.
+  const { value, rival } = metricOf(problem.mode, results, problem.req.ownTeamId);
+  return { objective: problem.mode.target === null ? value - penaltyPoints : value, ownPoints, rival, robustOwnPoints: null, penaltyPoints, results, load: problem.currentLoad };
 }
 
 function restrictionsOf(problem: Problem): AutoBuildRestriction[] {
@@ -77,17 +80,10 @@ function restrictionsOf(problem: Problem): AutoBuildRestriction[] {
 /** D5 amendment 1, 6.5 b: the strict diver weight binds when the current lineup passes the gate but breaks it. */
 const bindingOf = (restriction: AutoBuildRestriction, strictBinds: boolean): boolean => restriction === 'strict_diver_weight' && strictBinds;
 
-function proofOf(
-  problem: Problem,
-  space: Space,
-  outcome: SolveOutcome,
-  current: AutoBuildEvaluation,
-  records: readonly SolveRecord[],
-  gateMs: number | null,
-  strictBinds: boolean
-): AutoBuildProof {
+/** The parts of a proof that do not depend on the outcome. */
+function proofBase(problem: Problem, space: Space, records: readonly SolveRecord[], gateMs: number | null, strictBinds: boolean): Pick<AutoBuildProof, 'searchSpace' | 'solves' | 'timings'> {
   const solveMs = records.some((r) => r.ms === null) ? null : records.reduce((s, r) => s + (r.ms as number), 0);
-  const base = {
+  return {
     searchSpace: {
       restrictions: restrictionsOf(problem),
       restrictionStatus: restrictionsOf(problem).map((restriction) => ({ restriction, binding: bindingOf(restriction, strictBinds) })),
@@ -105,12 +101,33 @@ function proofOf(
     solves: records.map((r) => ({ stage: r.stage, status: r.status, ms: r.ms, rows: r.rows, cols: r.cols })),
     timings: { evaluateMs: space.evaluateMs, solveMs, gateMs },
   };
+}
+
+function proofOf(
+  problem: Problem,
+  space: Space,
+  outcome: SolveOutcome,
+  current: AutoBuildEvaluation,
+  records: readonly SolveRecord[],
+  gateMs: number | null,
+  strictBinds: boolean
+): AutoBuildProof {
+  const base = proofBase(problem, space, records, gateMs, strictBinds);
+  // Goal seek ranks the negative change count: the changes are `-best`, and a bound on the ranked value bounds the changes from below.
+  const goal = problem.mode.target !== null;
+  const sign = goal ? -1 : 1;
   if (outcome.kind === 'found') {
     const { D, best, upper } = outcome.bound;
-    const bestFound = best / D;
+    const bestFound = (sign * best) / D;
     if (upper === null) return { status: 'unknown', bestFound, upperBound: null, gap: null, ...base };
     // The local search never claims a proof (D5 10), even when its points meet the bound: that stays a gap of 0.
-    return { status: upper === best && outcome.method !== 'local-search' ? 'proven_optimal' : 'gap', bestFound, upperBound: upper / D, gap: (upper - best) / D, ...base };
+    return { status: upper === best && outcome.method !== 'local-search' ? 'proven_optimal' : 'gap', bestFound, upperBound: (sign * upper) / D, gap: (upper - best) / D, ...base };
+  }
+  if (goal) {
+    // No lineup reaches the target as far as the search knows. `proven`: the relaxed MIP is infeasible, so none exists.
+    const upper = outcome.kind === 'non_result' ? outcome.upperScaled : null;
+    const proven = outcome.kind === 'infeasible' && outcome.proven;
+    return { status: proven ? 'proven_optimal' : 'unknown', bestFound: 0, upperBound: upper === null ? null : -upper, gap: null, ...base };
   }
   // No lineup was found: the best known is the current one, and a dual bound (when the solver gave one) is the only bound.
   const upper = outcome.kind === 'non_result' ? outcome.upperScaled : null;
@@ -127,11 +144,15 @@ function proofOf(
 /** The guard (D5 8.4) for a solve with a result. */
 function decide(problem: Problem, space: Space, outcome: Extract<SolveOutcome, { kind: 'found' }>, current: AutoBuildEvaluation, currentInSpace: boolean, records: readonly SolveRecord[], clock: (() => number) | undefined): AutoBuildResult {
   const t0 = clock?.();
-  const proposal = gate(problem, space, outcome.selection, outcome.scale, outcome.bestScaled, outcome.method);
+  const proposal = gate(problem, space, outcome.selection, outcome.scale, outcome.bestScaled, outcome.method, outcome.valueScaled);
   const gateMs = clock !== undefined && t0 !== undefined ? clock() - t0 : null;
   const broken = repairable(problem);
   const proof = proofOf(problem, space, outcome, current, records, gateMs, broken.length === 0 && !strictFits(problem));
   if (broken.length > 0) return { kind: 'current_infeasible', currentViolations: broken, alternative: proposal, current, proof };
+  // Goal seek (D5 8.4): the current lineup missed the target, or `autoBuild` would have returned `current_meets_target`. The gate has
+  // checked that the proposal reaches it, so it is better by the mode's own objective, the change count. No witness check applies:
+  // the current lineup is not in the space of lineups that reach the target.
+  if (problem.mode.target !== null) return { kind: 'improved', proposal, current, proof };
   const { D } = outcome.scale;
   const now = Math.round(current.objective * D);
   if (Math.abs(current.objective * D - now) >= 1e-6) autoBuildFail('model_mismatch', `the current lineup's objective ${current.objective} is not whole at scale ${D}`);
@@ -148,6 +169,8 @@ function decide(problem: Problem, space: Space, outcome: Extract<SolveOutcome, {
 function undecided(problem: Problem, space: Space, outcome: Exclude<SolveOutcome, { kind: 'found' }>, current: AutoBuildEvaluation, currentInSpace: boolean, records: readonly SolveRecord[]): AutoBuildResult {
   const proof = proofOf(problem, space, outcome, current, records, null, repairable(problem).length === 0 && !strictFits(problem));
   if (outcome.kind === 'non_result') return { kind: 'unchanged', reason: 'none_found_within_limits', current, proof };
+  // Goal seek: an infeasible MIP says that no lineup reaches the target, whatever the current lineup is (D5 8.4).
+  if (problem.mode.target !== null) return { kind: 'target_unreachable', reason: outcome.proven ? 'proven' : 'within_limits', current, proof };
   // Infeasible. A current lineup inside the search space is a witness, so an infeasible MIP is a model error.
   if (currentInSpace) autoBuildFail('model_mismatch', 'the MIP is infeasible, but the current lineup satisfies every row of it');
   const broken = repairable(problem);
@@ -169,8 +192,13 @@ export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise
   const support: Support = { ...rules, load: loadRuleOf(req.load) };
   checkObjective(req.model, req.ownTeamId, req.objective);
   checkLimits(req.limits);
-  if (req.objective.kind !== 'max-own') {
-    autoBuildFail('mode_not_built', `the "${req.objective.kind}" objective is built in a later slice; slice A1 builds "max-own"`, req.objective.kind);
+  if (req.objective.kind === 'robust') {
+    autoBuildFail('mode_not_built', 'the "robust" objective is built in a later slice (A7)', 'robust');
+  }
+  // D5 4.7 subtracts the load penalty in every mode "but goal seek", and the evaluation doc says goal seek is in mode units: the spec does
+  // not say whether a goal-seek target counts the penalty. Refuse the combination until the lead decides.
+  if (req.objective.kind === 'goal-seek' && req.load !== null && req.load.preference.mode === 'prefer') {
+    autoBuildFail('mode_not_built', 'goal seek with the "prefer" load mode is not built: D5 4.7 does not say whether the target counts the penalty', 'goal-seek-prefer');
   }
 
   const problem = buildProblem(req, support, currentResults);
@@ -187,6 +215,15 @@ export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise
   const current = evaluationOf(currentResults, problem);
   const currentInSpace = repairable(problem).length === 0 && strictFits(problem);
   const records: SolveRecord[] = [];
+  // Goal seek (D5 8.4): a feasible current lineup that reaches the target needs no change. The schedule refusals above have run first.
+  const target = problem.mode.target;
+  if (target !== null && repairable(problem).length === 0) {
+    const D = scaleFor(space).D;
+    if (Math.round(current.objective * D) >= Math.ceil(target * D - 1e-9)) {
+      const proof: AutoBuildProof = { status: 'proven_optimal', bestFound: 0, upperBound: 0, gap: 0, ...proofBase(problem, space, records, null, !strictFits(problem)) };
+      return { kind: 'unchanged', reason: 'current_meets_target', current, proof };
+    }
+  }
   const outcome = await solveAutoBuild(space, req.limits, solve, req.clock, started, records);
   return outcome.kind === 'found'
     ? decide(problem, space, outcome, current, currentInSpace, records, req.clock)

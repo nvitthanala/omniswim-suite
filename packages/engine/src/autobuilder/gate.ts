@@ -16,6 +16,7 @@ import type { Selection, Scale } from './lp';
 import { ownPenalty, scorerIds, violationsOf } from './load';
 import type { SessionLoadResult } from './load';
 import { freshRelays, squadKeyOfEntry } from './squads';
+import { metricOf } from './mode';
 import { pairKey } from './space';
 import type { Problem, Space } from './space';
 import { autoBuildFail } from './types';
@@ -159,11 +160,14 @@ export function buildLineup(problem: Problem, space: Space, selection: Selection
   };
 }
 
-/** The objective of a built lineup (own points, less the own-only penalty in `prefer` mode) must equal the MIP's, scaled (D5 8.3.2). */
-function checkPoints(points: number, scale: Scale, mip: number): void {
+/**
+ * The objective of a built lineup (the metric of the mode, less the own-only penalty in `prefer` mode) must equal the MIP's, scaled
+ * (D5 8.3.2). `what` names the quantity in the failure.
+ */
+function checkPoints(points: number, scale: Scale, mip: number, what = 'the own points less the penalty'): void {
   const x = points * scale.D;
   if (Math.abs(x - Math.round(x)) >= 1e-6 || Math.round(x) !== mip) {
-    autoBuildFail('model_mismatch', `scoreMeet gives ${points} own points less the penalty (${x} at scale ${scale.D}); the solver proved ${mip}`);
+    autoBuildFail('model_mismatch', `scoreMeet gives ${points} for ${what} (${x} at scale ${scale.D}); the solver proved ${mip}`);
   }
 }
 
@@ -187,8 +191,20 @@ function checkViolations(problem: Problem, built: Built, violations: readonly Vi
   return violations.filter((v) => isWarning(v, problem) && !before.has(JSON.stringify(v)));
 }
 
-/** Build, re-score and check. Throws `model_mismatch` on any difference. */
-export function gate(problem: Problem, space: Space, selection: Selection, scale: Scale, mipPoints: number, method: AutoBuildProposal['method'] = 'mip'): AutoBuildProposal {
+/**
+ * Build, re-score and check. Throws `model_mismatch` on any difference. `mipPoints` is what the mode ranks (`LpBuild.pointsOf`):
+ * the metric less the penalty, or in goal seek the negative change count. `valueScaled` is the metric (`LpBuild.valueOf`), which goal
+ * seek checks as well, because its ranked quantity says nothing about the metric.
+ */
+export function gate(
+  problem: Problem,
+  space: Space,
+  selection: Selection,
+  scale: Scale,
+  mipPoints: number,
+  method: AutoBuildProposal['method'] = 'mip',
+  valueScaled: number = mipPoints
+): AutoBuildProposal {
   const { req } = problem;
   const built = buildLineup(problem, space, selection);
   const results = scoreMeet(req.model, built.lineup, built.tagsForScoring, req.rules, req.sourcing);
@@ -197,15 +213,26 @@ export function gate(problem: Problem, space: Space, selection: Selection, scale
   const load: SessionLoadResult | null = rule === null ? null : sessionLoad(req.model, built.lineup, results, rule.schedule, rule.preference, req.rules);
   const penaltyPoints = ownPenalty(problem.support.load, load, scorerIds(built.tagsForScoring, req.ownTeamId));
   const ownPoints = ownPointsOf(results, req.ownTeamId);
-  checkPoints(ownPoints - penaltyPoints, scale, mipPoints);
+  const { value, rival } = metricOf(problem.mode, results, req.ownTeamId);
+  const changeCount = built.rosterAdds.length + built.entryChanges.length;
+  const target = problem.mode.target;
+  if (target === null) {
+    checkPoints(value - penaltyPoints, scale, mipPoints, 'the metric less the penalty');
+  } else {
+    // Goal seek (D5 4.7): the metric equals the MIP's, it reaches the target, and the changes counted from the lineup are the ones
+    // the MIP minimized (4.9). The metric carries no penalty.
+    checkPoints(value, scale, valueScaled, 'the metric');
+    if (Math.round(value * scale.D) < Math.ceil(target * scale.D - 1e-9)) autoBuildFail('model_mismatch', `the built lineup's metric ${value} is below the target ${target}`);
+    if (changeCount !== -mipPoints) autoBuildFail('model_mismatch', `the built lineup has ${changeCount} changes; the solver counted ${-mipPoints}`);
+  }
   const newWarnings = checkViolations(problem, built, violationsOf(results, load, rule === null ? null : rule.schedule));
-  const evaluation: AutoBuildEvaluation = { objective: ownPoints - penaltyPoints, ownPoints, rival: null, robustOwnPoints: null, penaltyPoints, results, load };
+  const evaluation: AutoBuildEvaluation = { objective: target === null ? value - penaltyPoints : value, ownPoints, rival, robustOwnPoints: null, penaltyPoints, results, load };
   return {
     lineup: built.lineup,
     rosterAdds: built.rosterAdds,
     tagsForScoring: built.tagsForScoring,
     entryChanges: built.entryChanges,
-    changeCount: built.rosterAdds.length + built.entryChanges.length,
+    changeCount,
     evaluation,
     explanations: [],
     newWarnings,

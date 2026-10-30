@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * AutoBuilder public types (plans/2026-10-25/D5-AUTOBUILDER.md, section 2). Slice A1 builds only the `max-own`
- * objective; the other objective kinds are declared and throw `mode_not_built`.
+ * AutoBuilder public types (plans/2026-10-25/D5-AUTOBUILDER.md, section 2). `max-own`, `margin` and `goal-seek` are built (slices
+ * A1 and A6). `robust` is declared and throws `mode_not_built`, and so does a goal seek under the `prefer` load mode.
  */
 import type { CompleteRulePreset } from '../rules/rulePreset';
 import type { ConversionSettings } from '../sourcing/convert';
@@ -174,7 +174,10 @@ export type AutoBuildRestriction =
   | 'fixed_relay_events';
 
 /**
- * What `autoBuild` proves. `proven_optimal` holds within `searchSpace.restrictions` only. The fewest-changes tie-break (4.9) is
+ * What `autoBuild` proves. In goal seek the quantity is the change count (D5 4.9), `bestFound` is the changes of the lineup found, and
+ * `upperBound` is a lower bound on them. A `target_unreachable` result found no lineup: its `bestFound` is 0 (the current lineup's own
+ * changes), `upperBound` and `gap` are null, and the status is `proven_optimal` only when the reason is `proven`. A `current_meets_target`
+ * result is `proven_optimal` at 0 changes. `proven_optimal` holds within `searchSpace.restrictions` only. The fewest-changes tie-break (4.9) is
  * minimal within the columns actually built (pruning under a numeric per-event cap removes some multi-member columns), and
  * it runs only when time is left. It is a tie-break, not a guarantee. The current column is never pruned, so a zero-change
  * tie is always reachable inside the space.
@@ -262,7 +265,10 @@ export type AutoBuildErrorCode =
   | 'robust_no_spread'
   | 'scale_unsupported'
   | 'model_mismatch'
-  /** The request asks for an objective a later slice builds (margin, goal seek, robust). Session load is built (slice A3). */
+  /**
+   * The request asks for an objective that is not built: `robust` (slice A7), or goal seek with the `prefer` load mode (D5 4.7 leaves open
+   * whether the target metric carries the load penalty). The subject names the objective kind.
+   */
   | 'mode_not_built';
 
 export class AutoBuildError extends Error {

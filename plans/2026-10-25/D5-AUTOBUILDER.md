@@ -818,3 +818,20 @@ Test `cappedLegsDoNotCrowdQ`: the top 12 squads of an event all hold a swimmer w
    "Clock"). The local search therefore also stops at a fixed evaluation
    cap, in every mode, so the stage is always bounded. A cap stop reports
    the same `budget` stop as a clock stop.
+
+## Amendment 4 (lead rulings, 2026-10-30, slice A6)
+
+1. **Goal seek with `prefer` load is refused.** Section 4.7 does not say
+   whether the target counts the penalty (user question A8). The refusal is
+   `mode_not_built` with subject `goal-seek-prefer`. Goal seek itself is
+   built; only this pairing is not.
+2. **`closest` has no local-search fallback.** Its margin is a minimum over
+   teams, which no column choice derives. A timeout with no incumbent gives
+   `unchanged`, `none_found_within_limits`.
+3. **Goal seek over a current lineup that breaks a hard rule.** When the
+   relaxed MIP is infeasible the result is `target_unreachable`, `proven`:
+   no legal lineup reaches the target. It does not also say the current
+   lineup is infeasible. User question A3 settles that.
+4. **Goal-seek proof fields.** The solver maximizes minus the change count.
+   `proof.bestFound` is the positive change count, and `proof.upperBound`
+   holds a lower bound on changes. U1 labels them by that meaning.

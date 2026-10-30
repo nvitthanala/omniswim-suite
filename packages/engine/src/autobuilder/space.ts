@@ -12,13 +12,15 @@ import { sessionLoad } from '../planner/sessionLoad';
 import { entryKey } from '../model/lineup';
 import type { IndividualEntry, Lineup, LineupEntry, RelayEntry, ScorerRole } from '../model/lineup';
 import type { MeetEvent } from '../model/meet';
-import type { Gender, SwimmerId } from '../model/primitives';
+import type { Gender, SwimmerId, TeamId } from '../model/primitives';
 import { Evaluator, eventId } from './evaluate';
 import type { ColumnEval } from './evaluate';
 import { fixedRaces, scheduledOf, violationsOf } from './load';
 import type { Races, SessionLoadResult } from './load';
 import { buildLegSources, currentSquad, generateSquads, legOptions } from './squads';
 import type { LegSources, Positions, Squad } from './squads';
+import { modeOf } from './mode';
+import type { Mode } from './mode';
 import { eventCap } from './support';
 import type { Support } from './support';
 import type { AutoBuildRequest } from './types';
@@ -29,6 +31,8 @@ const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 export interface Problem {
   readonly req: AutoBuildRequest;
   readonly support: Support;
+  /** What a lineup is worth and the goal-seek target (D5 4.7), from `req.objective`. */
+  readonly mode: Mode;
   readonly genders: readonly Gender[];
   /** Coach role per swimmer (every team). */
   readonly roles: ReadonlyMap<SwimmerId, ScorerRole>;
@@ -156,6 +160,7 @@ export function buildProblem(req: AutoBuildRequest, support: Support, currentRes
   return {
     req,
     support,
+    mode: modeOf(req.objective, req.model, req.ownTeamId),
     ...who,
     relayEntries: ownRelayCounts(req, currentResults, support.exhibitionCounts, builtIds),
     currentEntry,
@@ -199,6 +204,8 @@ export interface RelayData {
   readonly current: readonly Squad[];
   /** The times of the fixed entries that hold a place in the empty column (hundredths). */
   readonly standing: readonly number[];
+  /** The same entries with their team and their place in the empty column: the rival relays an outside own squad can push (D5 6.2, margin). */
+  readonly standingRows: readonly { readonly teamId: TeamId; readonly time: number; readonly place: number }[];
   /** T: how many top squads `Q_e` holds. */
   T: number;
   squads: readonly Squad[];
@@ -390,6 +397,7 @@ export class Space {
     const empty = this.evaluator.evaluateRelay(event, []);
     const times = new Map(resolveLineup(problem.req.model, this.evaluator.subLineupRelay(event, []), this.index).resolved.map((r) => [r.key, r.value]));
     const standing = empty.rows.flatMap((r) => (r.place === null ? [] : (times.get(r.entryKey) ?? null) === null ? [] : [times.get(r.entryKey) as number]));
+    const standingRows = empty.rows.flatMap((r) => (r.place === null || (times.get(r.entryKey) ?? null) === null ? [] : [{ teamId: r.teamId, time: times.get(r.entryKey) as number, place: r.place }]));
     es.relay = {
       positions,
       freestyle: event.relayKind !== 'medley',
@@ -397,6 +405,7 @@ export class Space {
       slots: problem.support.relayCap,
       current,
       standing,
+      standingRows,
       T: problem.req.limits.relaySquadsPerEvent,
       squads: [],
       tauOut: null,

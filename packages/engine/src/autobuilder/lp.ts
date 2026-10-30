@@ -9,12 +9,15 @@
  * Variable names follow a canonical numbering (swimmers and events in sorted order, columns by sorted member ids), so
  * two requests that differ only in the order of their input arrays give byte-identical text (D5 7).
  */
-import type { SwimmerId } from '../model/primitives';
+import type { SwimmerId, TeamId } from '../model/primitives';
 import type { MeetEvent } from '../model/meet';
 import { autoBuildFail } from './types';
+import type { ColumnEval } from './evaluate';
 import type { Column, EventSpace, Problem, Space } from './space';
 import { pairKey } from './space';
 import { certainSession, scorerIds } from './load';
+import { lambdaOf, pointsOfTeam } from './mode';
+import type { Standing } from './mode';
 import type { Support } from './support';
 
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
@@ -154,30 +157,60 @@ export interface LpBuild {
   readonly model: LpModel;
   /** The objective this LP maximizes, as whole numbers. */
   objectiveOf(columns: Readonly<Record<string, number>>): number;
-  /** The own points (scaled, constant included) of the chosen columns: the `y` terms only. */
+  /**
+   * What the mode ranks, scaled, constant included, from the `y` terms only: own points, the margin or the closest margin (less the
+   * least penalty in `prefer` mode), or for goal seek the negative change count (D5 4.9).
+   */
   pointsOf(columns: Readonly<Record<string, number>>): number;
+  /** The metric of the mode (own points, margin, closest margin), scaled and without any penalty: what a goal-seek target is compared with. */
+  valueOf(columns: Readonly<Record<string, number>>): number;
+  /** False when the integer model has a variable that no column choice derives (the `t` of closest), so the local search cannot climb it. */
+  readonly searchable: boolean;
   select(columns: Readonly<Record<string, number>>): Selection;
 }
 
 export interface LpOptions {
   readonly relaxed: boolean;
-  /** Tie-break stage (D5 6.3.3): minimize changes (4.9) subject to points of at least `minPoints` (scaled, constant included). */
+  /**
+   * Tie-break stage (D5 6.3.3): minimize changes (4.9) subject to points of at least `minPoints` (scaled, constant included), the
+   * quantity `pointsOf` returns. In goal seek that quantity is the negative change count, so the stage instead maximizes the metric
+   * subject to at most `-minPoints` changes.
+   */
   readonly tieBreak?: { readonly minPoints: number };
 }
 
-/** The scaled own points of everything the columns do not cover: the events outside the search and the one-column events. */
-function constantPoints(problem: Problem, space: Space, scale: Scale): number {
+/**
+ * The scaled value of everything the columns do not cover: the events outside the search and the one-column events. The value is the
+ * own points, or with a `team` the own points less that team's (the margin constant of D5 4.7).
+ */
+function constantPoints(problem: Problem, space: Space, scale: Scale, team: TeamId | null): number {
   const covered = new Set(problem.built.map((e) => `${e.gender}\u0000${e.eventKey}`));
   let fixed = 0;
   for (const e of problem.currentResults.events) {
     if (covered.has(`${e.gender}\u0000${e.eventKey}`)) continue;
-    for (const r of e.rows) if (r.teamId === problem.req.ownTeamId) fixed += r.points;
+    for (const r of e.rows) {
+      if (r.teamId === problem.req.ownTeamId) fixed += r.points;
+      else if (team !== null && r.teamId === team) fixed -= r.points;
+    }
   }
-  let total = scale.scaled(fixed, 'the own points outside the search');
+  let total = scale.scaled(fixed, team === null ? 'the own points outside the search' : `the margin over ${team} outside the search`);
   for (const es of space.events) {
-    if (es.columns.length === 1) total += scale.scaled((es.columns[0] as Column).eval.own, `the own points of ${es.event.eventKey}`);
+    if (es.columns.length === 1) {
+      const only = (es.columns[0] as Column).eval;
+      total += scale.scaled(team === null ? only.own : only.own - pointsOfTeam(only.rows, team), `the value of ${es.event.eventKey}`);
+    }
   }
   return total;
+}
+
+/** One value the mode adds up over the columns: the own points, or the own points less one team's (D5 4.7). */
+interface Lane {
+  /** `null`: the own points. */
+  readonly team: TeamId | null;
+  /** The `y` coefficients. */
+  readonly terms: Term[];
+  /** The relaxed outside terms (`o`, `oR`): the bound of D5 6.2 plus the margin `lambda`. Empty in a restricted build. */
+  readonly relaxed: Term[];
 }
 
 /** One term of a swimmer's races in one session: the variable, its coefficient and its largest value (D5 4.5). */
@@ -218,7 +251,10 @@ class Builder {
   private readonly loadVars: string[] = [];
   /** Definitions of the variables that follow the column choices (see `Derived`), in dependency order. */
   private readonly derived: Derived[] = [];
-  readonly points: Term[] = [];
+  /** The values the mode adds up (see `Lane`): one for own points and for a margin over one team, one per other team for `closest`. */
+  private readonly lanes: Lane[];
+  /** The `y` terms of the one value of a maximizing mode other than `closest`: the points of D5 4.7. Empty for `closest`. */
+  readonly points: Term[];
   readonly objective: Term[] = [];
   constant = 0;
 
@@ -229,6 +265,9 @@ class Builder {
     private readonly opts: LpOptions
   ) {
     [...problem.decision].sort(cmp).forEach((id, i) => this.swimmerIndex.set(id, i));
+    const { mode } = problem;
+    this.lanes = mode.metric === 'own' ? [{ team: null, terms: [], relaxed: [] }] : mode.rivals.map((team) => ({ team, terms: [], relaxed: [] }));
+    this.points = mode.metric === 'closest' ? [] : (this.lanes[0] as Lane).terms;
   }
 
   private general(name: string, ub: number): string {
@@ -272,6 +311,52 @@ class Builder {
     }
   }
 
+  /** The scaled value of one column in a lane: its own points, less the lane's team's points in the margin modes. */
+  private laneValue(lane: Lane, column: ColumnEval, eventKey: string): number {
+    return this.scale.scaled(lane.team === null ? column.own : column.own - pointsOfTeam(column.rows, lane.team), `the value of ${eventKey}`);
+  }
+
+  /** The rows of the field with no own decision entry in an event, found among the columns or evaluated once. */
+  private emptyField(es: EventSpace): ColumnEval {
+    return es.columns.find((c) => c.members.length === 0)?.eval ?? this.space.evaluator.evaluate(es.event, []);
+  }
+
+  /**
+   * `lambda` of D5 6.2 for an outside pair, scaled: the most the lane's rival can lose when the swimmer is added to the field. It sums the
+   * step of the rival's standing entries that are not ahead of him. His place in the singleton column says which: an entry is pushed when
+   * its place there is his or later. An entry missing from the singleton rows counts as pushed. Zero for the own-points lane.
+   */
+  private pairLambda(lane: Lane, es: EventSpace, id: SwimmerId): number {
+    if (lane.team === null) return 0;
+    const own = this.problem.req.ownTeamId;
+    const singleton = es.pairs.get(id)?.singleton;
+    const mine = singleton?.rows.find((r) => r.teamId === own && r.swimmerId === id);
+    if (singleton === undefined || singleton === null || mine === undefined || mine.place === null) {
+      return autoBuildFail('model_mismatch', `no place for ${id} in ${es.event.eventKey}: the margin bound has no basis`, id);
+    }
+    const placeOf = new Map(singleton.rows.map((r) => [r.entryKey, r.place] as const));
+    const standing: Standing[] = [];
+    for (const r of this.emptyField(es).rows) {
+      if (r.teamId !== lane.team || r.place === null) continue;
+      const now = placeOf.get(r.entryKey);
+      standing.push({ place: r.place, pushed: now === undefined || now === null || now >= (mine.place as number) });
+    }
+    const { tables } = this.problem.support;
+    return this.scale.scaled(lambdaOf(es.event.kind === 'diving' ? tables.diving : tables.individual, standing), `the margin bound of ${id} in ${es.event.eventKey}`);
+  }
+
+  /**
+   * `lambda` for one unit of the outside relay slot, scaled. An outside squad is no faster than `tau_out`, so it can push only the
+   * rival relays standing at `tau_out` or slower (a tie counts). Zero for the own-points lane.
+   */
+  private relayLambda(lane: Lane, es: EventSpace): number {
+    const relay = es.relay as NonNullable<EventSpace['relay']>;
+    if (lane.team === null || relay.tauOut === null) return 0;
+    const tauOut = relay.tauOut;
+    const standing: Standing[] = relay.standingRows.filter((r) => r.teamId === lane.team).map((r) => ({ place: r.place, pushed: r.time >= tauOut }));
+    return this.scale.scaled(lambdaOf(this.problem.support.tables.relay, standing), `the margin bound of the relay slot in ${es.event.eventKey}`);
+  }
+
   private bin(name: string): string {
     this.binaries.push(name);
     return name;
@@ -290,7 +375,9 @@ class Builder {
     const members = new Set<SwimmerId>();
     for (const c of es.columns) for (const id of c.members) members.add(id);
     const ys = es.columns.map((column, ci) => ({ name: this.bin(`y${ei}_${ci}`), column }));
-    ys.forEach(({ name, column }) => this.points.push([name, scale.scaled(column.eval.own, `the own points of ${es.event.eventKey}`)]));
+    ys.forEach(({ name, column }) => {
+      for (const lane of this.lanes) lane.terms.push([name, this.laneValue(lane, column.eval, es.event.eventKey)]);
+    });
     this.row(ys.map(({ name }) => [name, 1] as Term), '=', 1);
     const xs = new Map<SwimmerId, string>();
     for (const id of [...members].sort(cmp)) {
@@ -312,7 +399,7 @@ class Builder {
         os.set(id, o);
         const pair = es.pairs.get(id);
         const ub = scale.scaled(pair?.singleton?.own ?? 0, `the bound of ${id} in ${es.event.eventKey}`);
-        this.objective.push([o, ub]);
+        for (const lane of this.lanes) lane.relaxed.push([o, ub + this.pairLambda(lane, es, id)]);
         const x = xs.get(id);
         if (x !== undefined) this.row([[x, 1], [o, 1]], '<=', 1);
         this.pairVars.set(id, [...(this.pairVars.get(id) ?? []), { name: o, event: es.event, kind: 'o', ub: 1 }]);
@@ -334,7 +421,8 @@ class Builder {
     const { scale } = this;
     const oR = `oR${ei}`;
     this.generals.push({ name: oR, ub: relay.slots });
-    this.objective.push([oR, scale.scaled(relay.ubRel, `the relay bound of ${es.event.eventKey}`)]);
+    const ubRel = scale.scaled(relay.ubRel, `the relay bound of ${es.event.eventKey}`);
+    for (const lane of this.lanes) lane.relaxed.push([oR, ubRel + this.relayLambda(lane, es)]);
     const sized = ys.flatMap(({ name, column }) => ((column.squads?.length ?? 0) > 0 ? [[name, Math.min(column.squads?.length ?? 0, relay.slots)] as Term] : []));
     this.row([...sized, [oR, 1]], '<=', relay.slots);
     const ws: string[] = [];
@@ -460,9 +548,13 @@ class Builder {
     }
   }
 
-  /** The tie-break objective: the negative change count of D5 4.9, and the points floor. */
-  private addTieBreak(minPoints: number): void {
-    this.row([...this.points, ...this.penTerms], '>=', minPoints - this.constant);
+  /**
+   * The negative change count of D5 4.9, as objective terms and a constant: what the tie-break and goal seek maximize. A relaxed outside
+   * pair `o` that is new counts 0 changes, and one that is current keeps its entry (so the relaxed count never exceeds a real one, D5 6.2).
+   * An outside relay slot counts 0.
+   */
+  private changeTerms(): { readonly terms: Term[]; readonly constant: number } {
+    const terms: Term[] = [];
     let constant = 0;
     for (const id of [...this.problem.decision].sort(cmp)) {
       const vars = this.pairVars.get(id) ?? [];
@@ -471,11 +563,14 @@ class Builder {
       for (const e of this.problem.built) if (this.problem.currentEntry.has(pairKey(id, e.eventKey))) nCurrent += 1;
       if (this.problem.freeSet.has(id)) {
         const z = this.zVar.get(id);
-        if (z !== undefined) this.objective.push([z, -(1 + nCurrent)]);
+        if (z !== undefined) terms.push([z, -(1 + nCurrent)]);
       } else {
         constant -= nCurrent;
       }
-      for (const v of vars) if (v.event.kind !== 'relay') this.objective.push([v.name, current(v) ? 1 : -1]);
+      for (const v of vars) {
+        if (v.event.kind === 'relay' || (v.kind === 'o' && !current(v))) continue;
+        terms.push([v.name, current(v) ? 1 : -1]);
+      }
     }
     // A relay event changes by the squads that differ from the current ones (D5 4.9): an entry removed plus an entry added.
     for (const ev of this.eventVars) {
@@ -484,15 +579,83 @@ class Builder {
       for (const { name, column } of ev.ys) {
         const keys = new Set((column.squads ?? []).map((q) => q.key));
         const changed = [...keys].filter((k) => !now.has(k)).length + [...now].filter((k) => !keys.has(k)).length;
-        if (changed > 0) this.objective.push([name, -changed]);
+        if (changed > 0) terms.push([name, -changed]);
       }
     }
-    this.constant = constant;
+    return { terms, constant };
+  }
+
+  /**
+   * M rows of D5 4.7, `closest`: `t <= value_k` for every other team k. `t` is a general integer, shifted by `B` so that it stays
+   * non-negative (`t = margin + B`, `0 <= t <= 2B`), where `B` bounds the absolute value of every lane. Returns the shift.
+   */
+  private addClosest(fixed: readonly number[]): number {
+    const reach = this.lanes.map((lane, i) => lane.terms.reduce((s, [, k]) => s + Math.abs(k), 0) + lane.relaxed.reduce((s, [, k]) => s + Math.abs(k), 0) + Math.abs(fixed[i] as number));
+    const shift = Math.max(...reach);
+    const t = this.general('t', 2 * shift);
+    this.lanes.forEach((lane, i) => {
+      this.row([[t, 1], ...lane.terms.map(([name, k]) => [name, -k] as Term), ...lane.relaxed.map(([name, k]) => [name, -k] as Term)], '<=', (fixed[i] as number) + shift);
+    });
+    this.objective.push([t, 1]);
+    return shift;
+  }
+
+  /** Fail loudly when a row the modes add cannot be stated exactly (the same limit as the objective). */
+  private checkRowScale(from: number): void {
+    for (const r of this.rows.slice(from)) {
+      const sum = r.terms.reduce((s, [, k]) => s + Math.abs(k), 0) + Math.abs(r.rhs);
+      if (!Number.isSafeInteger(sum) || sum >= MAX_COEFFICIENT_SUM) {
+        autoBuildFail('scale_unsupported', `the scale ${this.scale.D} is too large for an exact solve (row coefficient sum ${sum})`, 'objective');
+      }
+    }
+  }
+
+  /**
+   * The objective of D5 4.7 and the rows the mode adds to it, by mode and stage. `laneConstant(i)` is the value of lane `i` outside the
+   * columns, less the constant penalty. `change` is the 4.9 change count (set for goal seek and the tie-break).
+   */
+  private setObjective(fixedBy: readonly number[], laneConstant: (i: number) => number, change: { readonly terms: Term[]; readonly constant: number } | null, extraCost: number): void {
+    const { mode } = this.problem;
+    const goal = mode.target !== null;
+    const closest = mode.metric === 'closest';
+    const { scale } = this;
+    const c = change as NonNullable<typeof change>;
+    if (goal && this.opts.tieBreak === undefined) {
+      // GS (D5 4.7): minimize changes, subject to the metric reaching the target. The relaxed outside terms only widen the metric.
+      const need = Math.ceil((mode.target as number) * scale.D - 1e-9);
+      this.lanes.forEach((lane, i) => this.row([...lane.terms, ...lane.relaxed], '>=', need - (fixedBy[i] as number)));
+      this.objective.push(...c.terms);
+      this.constant = c.constant;
+    } else if (goal && this.opts.tieBreak !== undefined) {
+      // The tie-break of goal seek (D5 6.3.3): the best metric among the lineups with at most `-minPoints` changes.
+      this.row(c.terms, '>=', this.opts.tieBreak.minPoints - c.constant);
+      if (closest) this.constant = -this.addClosest(fixedBy);
+      else {
+        this.objective.push(...this.points);
+        this.constant = fixedBy[0] as number;
+      }
+    } else if (this.opts.tieBreak !== undefined) {
+      const { minPoints } = this.opts.tieBreak;
+      if (closest) this.lanes.forEach((lane, i) => this.row([...lane.terms, ...this.penTerms], '>=', minPoints - laneConstant(i)));
+      else this.row([...this.points, ...this.penTerms], '>=', minPoints - laneConstant(0));
+      this.objective.push(...c.terms);
+      this.constant = c.constant;
+    } else if (closest) {
+      this.constant = -this.addClosest(fixedBy) - extraCost;
+      this.objective.push(...this.penTerms);
+    } else {
+      this.objective.push(...(this.lanes[0] as Lane).relaxed);
+      this.objective.unshift(...this.points, ...this.penTerms);
+      this.constant = laneConstant(0);
+    }
   }
 
   build(): LpBuild {
     const { problem, space, scale } = this;
-    const fixed = constantPoints(problem, space, scale);
+    const { mode } = problem;
+    const goal = mode.target !== null;
+    const closest = mode.metric === 'closest';
+    const fixedBy = this.lanes.map((lane) => constantPoints(problem, space, scale, lane.team));
     space.events.filter((es) => es.columns.length > 1).forEach((es, ei) => this.addEvent(es, ei));
     this.addRoster();
     this.addCaps();
@@ -519,25 +682,28 @@ class Builder {
       }
     }
     const penaltyUnit = loadRule !== null && loadRule.prefer ? scale.scaled(loadRule.penalty, 'the preference penalty') : 0;
-    const pointsConstant = fixed - extra * penaltyUnit;
-    if (this.opts.tieBreak !== undefined) {
-      this.constant = pointsConstant;
-      this.addTieBreak(this.opts.tieBreak.minPoints);
-    } else {
-      this.objective.unshift(...this.points, ...this.penTerms);
-      this.constant = pointsConstant;
-    }
+    // The value of lane `i` is `laneConstant(i)` plus its `y` terms, less the penalty. Goal seek ranks changes, and its metric has no penalty.
+    const laneConstant = (i: number): number => (fixedBy[i] as number) - extra * penaltyUnit;
+    const change = goal || this.opts.tieBreak !== undefined ? this.changeTerms() : null;
+    const firstMode = this.rows.length;
+    this.setObjective(fixedBy, laneConstant, change, extra * penaltyUnit);
+    this.checkRowScale(firstMode);
     const sum = this.objective.reduce((s, [, k]) => s + Math.abs(k), 0) + Math.abs(this.constant);
     if (!Number.isSafeInteger(sum) || sum >= MAX_COEFFICIENT_SUM) {
       autoBuildFail('scale_unsupported', `the objective scale ${scale.D} is too large for an exact solve (coefficient sum ${sum})`, 'objective');
     }
     const objective = this.objective;
     const constant = this.constant;
-    const points = this.points;
+    const lanes = this.lanes;
     const penaltyRows = this.penaltyRows;
     const text = render(objective, constant, this.rows, this.binaries, this.generals);
     const sumTerms = (terms: readonly Term[], columns: Readonly<Record<string, number>>): number =>
       terms.reduce((s, [name, k]) => s + k * readColumn(columns, name), 0);
+    // The lane values from the `y` terms alone: the metric is the one value, or the least over the other teams (`closest`).
+    const valueOf = (columns: Readonly<Record<string, number>>, laneOffset: (i: number) => number): number => {
+      const values = lanes.map((lane, i) => laneOffset(i) + sumTerms(lane.terms, columns));
+      return closest ? Math.min(...values) : (values[0] as number);
+    };
     const order = new Map<string, number>(problem.req.model.events.map((e, i) => [`${e.gender}\u0000${e.eventKey}`, i]));
     const model: LpModel = {
       rows: this.rows,
@@ -556,16 +722,19 @@ class Builder {
       cols: this.binaries.length + this.generals.length + 1,
       relaxed: this.opts.relaxed,
       model,
+      searchable: !closest,
       objectiveOf: (columns) => constant + sumTerms(objective, columns),
       // The least `v` of the solution: an incumbent may carry a larger `v`, and the gate re-scores the lineup itself.
       pointsOf: (columns) => {
+        if (change !== null && goal) return change.constant + sumTerms(change.terms, columns);
         let extraRaces = 0;
         for (const row of penaltyRows) {
           const races = row.k0 + row.terms.reduce((sum, t) => sum + t.coef * readColumn(columns, t.name), 0);
           if (races > (loadRule?.max ?? 0)) extraRaces += races - (loadRule?.max ?? 0);
         }
-        return pointsConstant + sumTerms(points, columns) - extraRaces * penaltyUnit;
+        return valueOf(columns, laneConstant) - extraRaces * penaltyUnit;
       },
+      valueOf: (columns) => valueOf(columns, (i) => fixedBy[i] as number),
       select: (columns) => this.select(columns),
     };
   }

@@ -163,6 +163,10 @@ export function checkObjective(model: MeetModel, ownTeamId: TeamId, objective: A
   if (rival !== null && rival.kind === 'team' && (rival.teamId === ownTeamId || !model.teams.some((t) => t.teamId === rival.teamId))) {
     autoBuildFail('rival_invalid', `rival "${rival.teamId}" is the own team or is not in the meet model`, rival.teamId);
   }
+  // `closest` takes the margin over whichever other team ends nearest: with no other team there is nothing to measure against.
+  if (rival !== null && rival.kind === 'closest' && model.teams.every((t) => t.teamId === ownTeamId)) {
+    autoBuildFail('rival_invalid', 'the closest rival needs at least one team other than the own team', 'closest');
+  }
   if (objective.kind === 'goal-seek' && !Number.isFinite(objective.target.points)) {
     autoBuildFail('target_invalid', 'the goal-seek target is not a finite number', 'target.points');
   }

@@ -50,13 +50,18 @@ export type SolveOutcome =
       readonly kind: 'found';
       readonly selection: Selection;
       readonly method: 'mip' | 'mip-incumbent' | 'local-search';
-      /** The scale and own points (scaled) of the lineup found: what the gate checks. */
+      /** The scale of the solve that found the lineup, and what the mode ranks (`LpBuild.pointsOf`, scaled) and its metric (`valueOf`): what the gate checks. */
       readonly scale: Scale;
       readonly bestScaled: number;
-      /** Best and bound on one common scale, for the proof. `upper` is `null` when no bound is known. */
+      readonly valueScaled: number;
+      /**
+       * Best and bound on one common scale, for the proof. `upper` is `null` when no bound is known. The scale is `D` for the maximizing
+       * modes. Goal seek ranks the negative change count, a whole number at any scale, so its `D` is 1.
+       */
       readonly bound: { readonly D: number; readonly best: number; readonly upper: number | null };
     }
-  | { readonly kind: 'infeasible'; readonly scale: Scale }
+  /** No lineup meets every row. `proven`: the relaxed MIP is infeasible too, so no lineup of the whole space exists (goal seek: the target is out of reach). */
+  | { readonly kind: 'infeasible'; readonly scale: Scale; readonly proven: boolean }
   | { readonly kind: 'non_result'; readonly upperScaled: number | null; readonly scale: Scale };
 
 const sorted = (ns: Iterable<number>): number[] => [...new Set(ns)].sort((a, b) => a - b);
@@ -119,7 +124,12 @@ const dualOf = (result: MipSolution): number | null => (result.dualBound !== nul
 interface Found {
   readonly selection: Selection;
   readonly scale: Scale;
+  /** What the mode ranks, scaled by `rankD`. */
   readonly points: number;
+  /** The scale of `points`: `scale.D`, or 1 in goal seek (the negative change count). */
+  readonly rankD: number;
+  /** The metric of the lineup, scaled by `scale.D`. */
+  readonly value: number;
   readonly rank: 0 | 1 | 2 | 3;
   readonly method: 'mip' | 'mip-incumbent' | 'local-search';
   /** An incumbent whose values satisfy every row of the restricted LP (D5 10). Only a verified incumbent seeds the local search. */
@@ -158,8 +168,8 @@ class Ledger {
       this.best = candidate;
       return;
     }
-    const a = real(candidate.points, candidate.scale.D);
-    const b = real(this.best.points, this.best.scale.D);
+    const a = real(candidate.points, candidate.rankD);
+    const b = real(this.best.points, this.best.rankD);
     if (a > b + 1e-9 || (Math.abs(a - b) <= 1e-9 && candidate.rank > this.best.rank)) this.best = candidate;
   }
 
@@ -169,7 +179,7 @@ class Ledger {
 
   proven(): boolean {
     const { best, upper } = this;
-    return best !== null && upper !== null && real(best.points, best.scale.D) >= real(upper.points, upper.D) - 1e-9;
+    return best !== null && upper !== null && real(best.points, best.rankD) >= real(upper.points, upper.D) - 1e-9;
   }
 }
 
@@ -185,6 +195,8 @@ class Sequence {
   private readonly timer: Timer;
   private readonly ledger = new Ledger();
   private scale: Scale;
+  /** Goal seek (D5 4.7): the MIP minimizes changes, so the ledger ranks the negative change count. */
+  private readonly goal: boolean;
 
   constructor(
     private readonly space: Space,
@@ -196,6 +208,7 @@ class Sequence {
   ) {
     this.timer = new Timer(limits.timeLimitSeconds, clock, started);
     this.scale = scaleFor(space);
+    this.goal = space.problem.mode.target !== null;
   }
 
   /** Run one LP. An allotment under 200 ms skips the stage: nothing runs and nothing is recorded. */
@@ -209,7 +222,29 @@ class Sequence {
     return result;
   }
 
-  /** Stage 1, the safety net: the current column is in the space, so an Optimal result or a verified incumbent is a real lineup. */
+  /** Goal seek ranks the negative change count, whole at any scale; every other mode ranks its metric at the scale `D`. */
+  private rankD(scale: Scale): number {
+    return this.goal ? 1 : scale.D;
+  }
+
+  /** Goal seek: a lineup the MIP calls real must reach the target. A missed target means the rows and the metric disagree. */
+  private checkTarget(build: LpBuild, columns: Readonly<Record<string, number>>, scale: Scale, what: string): void {
+    const target = this.space.problem.mode.target;
+    if (target === null) return;
+    const need = Math.ceil(target * scale.D - 1e-9);
+    const value = build.valueOf(columns);
+    if (value < need) autoBuildFail('model_mismatch', `${what}: the metric ${value} is below the target ${need} at scale ${scale.D}`);
+  }
+
+  /** A lineup from one solve's columns, with what the mode ranks and the metric. */
+  private foundOf(build: LpBuild, columns: Readonly<Record<string, number>>, scale: Scale, extra: Pick<Found, 'rank' | 'method'> & { readonly verified?: boolean }): Found {
+    return { selection: build.select(columns), scale, points: build.pointsOf(columns), rankD: this.rankD(scale), value: build.valueOf(columns), ...extra };
+  }
+
+  /**
+   * Stage 1, the safety net: the current column is in the space, so an Optimal result or a verified incumbent is a real lineup. In goal
+   * seek the current lineup misses the target, so the restricted MIP can be infeasible: that is an answer, and the relaxed MIP still runs.
+   */
   private async restricted(): Promise<'infeasible' | 'ok'> {
     const { scale } = this;
     const build = buildLp(this.space, scale, { relaxed: false });
@@ -221,17 +256,19 @@ class Sequence {
     }
     if (result.status === 'Optimal') {
       checkObjective(build, result, 'restricted solve');
-      this.ledger.consider({ selection: build.select(result.columns), scale, points: build.pointsOf(result.columns), rank: 2, method: 'mip' });
+      this.checkTarget(build, result.columns, scale, 'restricted solve');
+      this.ledger.consider(this.foundOf(build, result.columns, scale, { rank: 2, method: 'mip' }));
     } else if (result.incumbent !== null) {
       checkObjective(build, result.incumbent, 'restricted incumbent');
       const verified = rowsHold(build.model, result.incumbent.columns);
-      this.ledger.consider({ selection: build.select(result.incumbent.columns), scale, points: build.pointsOf(result.incumbent.columns), rank: 1, method: 'mip-incumbent', verified });
+      if (verified) this.checkTarget(build, result.incumbent.columns, scale, 'restricted incumbent');
+      this.ledger.consider(this.foundOf(build, result.incumbent.columns, scale, { rank: 1, method: 'mip-incumbent', verified }));
     }
     return 'ok';
   }
 
-  /** Stage 2: a valid upper bound, and a proven lineup when no outside term is active. */
-  private async relaxed(): Promise<RelaxedStage> {
+  /** Stage 2: a valid upper bound, and a proven lineup when no outside term is active. `restrictedInfeasible`: the restricted MIP had no solution. */
+  private async relaxed(restrictedInfeasible: boolean): Promise<RelaxedStage> {
     const { scale, ledger } = this;
     const build = buildLp(this.space, scale, { relaxed: true });
     const result = await this.run('relaxed', build, this.timer.left());
@@ -242,13 +279,15 @@ class Sequence {
     }
     if (result.status !== 'Optimal') {
       const dual = dualOf(result);
-      if (dual !== null) ledger.bound(dual, scale.D);
+      if (dual !== null) ledger.bound(dual, this.rankD(scale));
       return { infeasible: false, active: null };
     }
-    ledger.bound(checkObjective(build, result, 'relaxed solve'), scale.D);
+    ledger.bound(checkObjective(build, result, 'relaxed solve'), this.rankD(scale));
     const selection = build.select(result.columns);
     if (selection.outside.size > 0 || selection.relayOutside.size > 0) return { infeasible: false, active: selection };
-    ledger.consider({ selection, scale, points: build.pointsOf(result.columns), rank: 3, method: 'mip' });
+    if (restrictedInfeasible) autoBuildFail('model_mismatch', 'the relaxed MIP found a lineup with no outside term, but the restricted MIP is infeasible');
+    this.checkTarget(build, result.columns, scale, 'relaxed solve');
+    ledger.consider(this.foundOf(build, result.columns, scale, { rank: 3, method: 'mip' }));
     return { infeasible: false, active: null };
   }
 
@@ -265,19 +304,23 @@ class Sequence {
     return true;
   }
 
-  /** Stage 4: fewest changes among the lineups with these points. A timeout keeps the lineup from before it. */
+  /**
+   * Stage 4: fewest changes among the lineups with these points. A timeout keeps the lineup from before it. In goal seek it is the
+   * other way round: the best metric among the lineups with no more changes than the best found.
+   */
   private async tieBreak(best: Found, finalScale: Scale): Promise<Found> {
     if (this.timer.left() < TIE_BREAK_MIN_MS) return best;
-    const floor = rescale(best.points, best.scale.D, finalScale.D);
+    const floor = rescale(best.points, best.rankD, this.rankD(finalScale));
     const build = buildLp(this.space, finalScale, { relaxed: false, tieBreak: { minPoints: floor } });
     const result = await this.run('tie-break', build, this.timer.left());
     if (result === null) return best;
     if (result.status === 'Infeasible') autoBuildFail('model_mismatch', `the tie-break found no lineup with the ${floor} points of the previous solve`);
     if (result.status !== 'Optimal') return best;
     checkObjective(build, result, 'tie-break solve');
-    const points = build.pointsOf(result.columns);
-    if (points < floor) autoBuildFail('model_mismatch', 'the tie-break solution has fewer points than the floor it was given');
-    return { selection: build.select(result.columns), scale: finalScale, points, rank: best.rank, method: best.method };
+    this.checkTarget(build, result.columns, finalScale, 'tie-break solve');
+    const found = this.foundOf(build, result.columns, finalScale, { rank: best.rank, method: best.method });
+    if (found.points < floor) autoBuildFail('model_mismatch', 'the tie-break solution has fewer points than the floor it was given');
+    return found;
   }
 
   /**
@@ -285,11 +328,13 @@ class Sequence {
    * the best over these columns already). Seed: the verified incumbent, else the current state if it
    * satisfies every row; with neither, nothing runs. It returns a lineup only when the search beat both the seed and `best`: then the method is
    * `'local-search'`. It never raises the proof: `proofOf` caps the status below `proven_optimal` for this method.
+   * It does not run for `closest`: the `t` of its M rows is no function of the column choices, so the search has nothing to climb.
    */
   private fallback(best: Found | null, finalScale: Scale): Found | null {
     const last = this.records[this.records.length - 1];
     if (last === undefined || last.status !== 'Time limit reached') return best;
     if (best !== null && best.rank !== 1) return best;
+    if (this.space.problem.mode.metric === 'closest') return best;
     const allotment = Math.min(LOCAL_SEARCH_MAX_MS, this.timer.left());
     if (allotment < MIN_ALLOTMENT_MS) return best;
     // The clock starts before the LP is rebuilt: the rebuild is part of the allotment, so the stage ends within min(2 s, left).
@@ -310,28 +355,35 @@ class Sequence {
     this.records.push({ stage: 'local-search', status: seeded.stop === 'budget' ? SEARCH_BUDGET : LOCAL_OPTIMUM, ms, rows: build.rows, cols: build.cols });
     const points = build.pointsOf(seeded.columns);
     if (points !== seeded.objective) autoBuildFail('model_mismatch', `the local search objective ${seeded.objective} differs from the LP points ${points}`);
-    const beaten = pointsToBeat(best, seeded.startObjective, finalScale.D);
+    const finalD = this.rankD(finalScale);
+    const beaten = pointsToBeat(best === null ? null : { points: best.points, scale: { D: best.rankD } }, seeded.startObjective, finalD);
     if (seeded.moves === 0 || points <= beaten) return best;
-    return { selection: build.select(seeded.columns), scale: finalScale, points, rank: 0, method: 'local-search' };
+    this.checkTarget(build, seeded.columns, finalScale, 'local search');
+    return this.foundOf(build, seeded.columns, finalScale, { rank: 0, method: 'local-search' });
   }
 
   async go(): Promise<SolveOutcome> {
     const { ledger } = this;
+    let restrictedInfeasible = false;
     for (let round = 0; ; round++) {
-      if ((await this.restricted()) === 'infeasible') return { kind: 'infeasible', scale: this.scale };
-      const stage = await this.relaxed();
-      if (stage.infeasible) return { kind: 'infeasible', scale: this.scale };
+      restrictedInfeasible = (await this.restricted()) === 'infeasible';
+      // Without a goal the current lineup is a witness for the restricted MIP; with one, no lineup may reach the target.
+      if (restrictedInfeasible && !this.goal) return { kind: 'infeasible', scale: this.scale, proven: false };
+      const stage = await this.relaxed(restrictedInfeasible);
+      if (stage.infeasible) return { kind: 'infeasible', scale: this.scale, proven: true };
       if (ledger.proven() || round >= this.limits.refineRounds || stage.active === null || !this.refine(stage.active)) break;
     }
+    if (restrictedInfeasible && ledger.best === null) return { kind: 'infeasible', scale: scaleFor(this.space), proven: false };
     const finalScale = scaleFor(this.space);
+    const finalD = this.rankD(finalScale);
     const { upper } = ledger;
     const bestSoFar = ledger.best === null ? null : await this.tieBreak(ledger.best, finalScale);
     const chosen = this.fallback(bestSoFar, finalScale);
     if (chosen === null) {
-      return { kind: 'non_result', upperScaled: upper === null ? null : rescale(upper.points, upper.D, finalScale.D), scale: finalScale };
+      return { kind: 'non_result', upperScaled: upper === null ? null : rescale(upper.points, upper.D, finalD), scale: finalScale };
     }
-    const bestAtFinal = rescale(chosen.points, chosen.scale.D, finalScale.D);
-    const upperAtFinal = upper === null ? null : rescale(upper.points, upper.D, finalScale.D);
+    const bestAtFinal = rescale(chosen.points, chosen.rankD, finalD);
+    const upperAtFinal = upper === null ? null : rescale(upper.points, upper.D, finalD);
     if (upperAtFinal !== null && bestAtFinal > upperAtFinal) {
       autoBuildFail('model_mismatch', `the upper bound ${upperAtFinal} is below the lineup found, ${bestAtFinal}`);
     }
@@ -341,7 +393,8 @@ class Sequence {
       method: chosen.method,
       scale: chosen.scale,
       bestScaled: chosen.points,
-      bound: { D: finalScale.D, best: bestAtFinal, upper: upperAtFinal },
+      valueScaled: chosen.value,
+      bound: { D: finalD, best: bestAtFinal, upper: upperAtFinal },
     };
   }
 }
