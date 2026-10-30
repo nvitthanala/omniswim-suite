@@ -139,3 +139,11 @@ Default today: the AutoBuilder refuses goal seek with "prefer" and says so.
 an event where they have no usable time, the AutoBuilder cannot value that
 entry, so every mode may replace it. Default: allow it, and list the removal
 with reason "replaced". Other option: always keep such entries as entered.
+
+**A10. What Accept writes when you accept a roster swap (new, A9).** With
+the opt-in "propose swaps" setting, the AutoBuilder may suggest taking a
+tagged scorer off the scoring roster. When you accept, should the app:
+- (a) delete that swimmer's scorer tag, so the next run may add them back
+  as an untagged swimmer, or
+- (b) tag them "non-scorer", which keeps them off until you change it?
+Default until you answer: U1 asks at Accept time, with (b) preselected.
