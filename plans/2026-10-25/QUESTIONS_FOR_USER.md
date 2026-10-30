@@ -109,3 +109,15 @@ later?
 **E4. Live UI check.** The meet planner and the page schedule editor pass
 their tests but have not been checked in your Chrome. May I open SwimCloud's
 simulator in a new tab and check them, read-only?
+
+## A (continued)
+
+**A7. Session load for your swimmers the AutoBuilder cannot move (new,
+A5).** Under "respect", the AutoBuilder keeps every swimmer it may move
+within the races-per-session limit. Some of your swimmers stay fixed:
+non-members of the scoring roster, non-scorer roles, and swimmers on a
+relay the AutoBuilder cannot rebuild. A proposal can still change their
+race count, for example by moving one of them up into a final. Default:
+allow it and show a warning. Other option: refuse any proposal that puts
+a fixed swimmer of yours over the limit (opponents always get only a
+warning).
