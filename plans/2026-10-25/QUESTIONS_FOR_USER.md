@@ -12,7 +12,10 @@ fewer swims is frozen: never added, never dropped, shown as "not enough
 swims". Other option: value those pairs at their best time. That makes the
 solver prefer swimmers with no history.
 The robust mode (slice A7) is built on the default; an answer changes
-only how thin histories are valued.
+only how thin histories are valued. A frozen entry that is already in your lineup
+stays, even for an untagged swimmer, without forcing a roster spot. One
+exception: an entry with no recorded time at all can still be replaced, in
+every mode (see A9).
 
 **A2. One swimmer on both the A and B relays (14.2).** NSISC v5 does not
 forbid it. Default: never. No archived NSISC source allows it, and NCAA
@@ -129,3 +132,8 @@ the fewest changes that reach a target score. Under "prefer", extra races
 in one session cost penalty points. Should the target count the penalty
 (reach the target after the penalty) or ignore it (raw points only)?
 Default today: the AutoBuilder refuses goal seek with "prefer" and says so.
+
+**A9. Entries with no recorded time (new, A7).** If a swimmer is entered in
+an event where they have no usable time, the AutoBuilder cannot value that
+entry, so every mode may replace it. Default: allow it, and list the removal
+with reason "replaced". Other option: always keep such entries as entered.
