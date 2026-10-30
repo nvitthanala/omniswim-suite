@@ -81,7 +81,7 @@ export interface AutoBuildRequest {
   readonly ownTeamId: TeamId;
   readonly genders: readonly Gender[];
   readonly objective: AutoBuildObjective;
-  /** null: no session-load rows (same as mode 'off'). Slice A1 builds no load rows; a set `load` is refused. */
+  /** null: no session-load rows (same as mode 'off'). Slice A3 builds the rows of mode 'respect' and 'prefer'. */
   readonly load: { readonly schedule: SessionPreset; readonly preference: LoadPreference } | null;
   readonly limits: AutoBuildLimits;
   /**
@@ -262,7 +262,7 @@ export type AutoBuildErrorCode =
   | 'robust_no_spread'
   | 'scale_unsupported'
   | 'model_mismatch'
-  /** Slice A1 only: the request asks for an objective or a load setting a later slice builds. */
+  /** The request asks for an objective a later slice builds (margin, goal seek, robust). Session load is built (slice A3). */
   | 'mode_not_built';
 
 export class AutoBuildError extends Error {

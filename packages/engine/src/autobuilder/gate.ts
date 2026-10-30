@@ -7,11 +7,14 @@
  * `model_mismatch` and no lineup leaves this module.
  */
 import { scoreMeet } from '../model/results';
+import { sessionLoad } from '../planner/sessionLoad';
 import type { Results, Violation } from '../model/results';
 import { entryKey } from '../model/lineup';
 import type { IndividualEntry, LineupEntry, RelayEntry, ScorerTag } from '../model/lineup';
 import type { Gender, SwimmerId, TeamId } from '../model/primitives';
 import type { Selection, Scale } from './lp';
+import { ownPenalty, scorerIds, violationsOf } from './load';
+import type { SessionLoadResult } from './load';
 import { freshRelays, squadKeyOfEntry } from './squads';
 import { pairKey } from './space';
 import type { Problem, Space } from './space';
@@ -22,11 +25,15 @@ const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 export const ownPointsOf = (results: Results, own: TeamId): number => (results.teams.find((t) => t.teamId === own) as { points: number }).points;
 
-/** A violation the gate refuses to add. The others are warnings or settings the engine only reports. */
-export function isHard(v: Violation): boolean {
+/**
+ * A violation the gate refuses to add. The others are warnings or settings the engine only reports. A `session_load` violation
+ * is hard in `respect` mode only: in `prefer` mode it is the cost the penalty prices.
+ */
+export function isHard(v: Violation, respect: boolean): boolean {
   switch (v.kind) {
-    case 'entry_cap':
     case 'session_load':
+      return respect;
+    case 'entry_cap':
     case 'scoring_team_size':
     case 'relay_swimmer_repeated':
     case 'relay_entries_over_limit':
@@ -43,9 +50,11 @@ const isWarning = (v: Violation): boolean =>
   v.kind === 'scorer_without_entry' || v.kind === 'seed_time_missing' || (v.kind === 'relay_leg' && v.reason === 'off_scoring_roster');
 
 /** Hard violations of a lineup that name a decision swimmer or an own built side: what the solver can repair. */
-export function repairable(problem: Problem, results: Results): Violation[] {
-  return results.violations.filter((v) => {
-    if (v.kind === 'entry_cap' || v.kind === 'session_load') return problem.decision.has(v.swimmerId);
+export function repairable(problem: Problem): Violation[] {
+  const respect = problem.support.load !== null && !problem.support.load.prefer;
+  return problem.currentViolations.filter((v) => {
+    if (v.kind === 'entry_cap') return problem.decision.has(v.swimmerId);
+    if (v.kind === 'session_load') return respect && problem.decision.has(v.swimmerId);
     if (v.kind === 'scoring_team_size') return v.teamId === problem.req.ownTeamId && problem.genders.includes(v.gender);
     // Own relays of a built event are solver-owned: an over-limit count there is repaired by choosing fewer relays (D5 amendment 2, 3.3).
     if (v.kind === 'relay_entries_over_limit') return v.teamId === problem.req.ownTeamId && problem.built.some((e) => e.eventKey === v.eventKey && e.gender === v.gender);
@@ -145,29 +154,32 @@ export function buildLineup(problem: Problem, space: Space, selection: Selection
   };
 }
 
-/** The own points of a built lineup must equal the MIP's points, scaled (D5 8.3.2). */
-function checkPoints(results: Results, own: TeamId, scale: Scale, mip: number): void {
-  const points = ownPointsOf(results, own);
+/** The objective of a built lineup (own points, less the own-only penalty in `prefer` mode) must equal the MIP's, scaled (D5 8.3.2). */
+function checkPoints(points: number, scale: Scale, mip: number): void {
   const x = points * scale.D;
   if (Math.abs(x - Math.round(x)) >= 1e-6 || Math.round(x) !== mip) {
-    autoBuildFail('model_mismatch', `scoreMeet gives ${points} own points (${x} at scale ${scale.D}); the solver proved ${mip}`);
+    autoBuildFail('model_mismatch', `scoreMeet gives ${points} own points less the penalty (${x} at scale ${scale.D}); the solver proved ${mip}`);
   }
 }
 
 /** D5 8.3.3 and 8.3.4. */
-function checkViolations(problem: Problem, built: Built, results: Results, current: Results): Violation[] {
-  const before = new Set(current.violations.map((v) => JSON.stringify(v)));
-  for (const v of results.violations) {
-    if (!isHard(v)) continue;
+function checkViolations(problem: Problem, built: Built, violations: readonly Violation[]): Violation[] {
+  const before = new Set(problem.currentViolations.map((v) => JSON.stringify(v)));
+  const respect = problem.support.load !== null && !problem.support.load.prefer;
+  for (const v of violations) {
+    if (!isHard(v, respect)) continue;
     if (v.kind === 'entry_cap' && problem.decision.has(v.swimmerId) && (isPinned(problem, v.swimmerId) || built.joined.has(v.swimmerId))) {
       autoBuildFail('model_mismatch', `swimmer "${v.swimmerId}" is over the ${v.which} entry cap in the built lineup (${v.count} of ${v.limit})`, v.swimmerId);
+    }
+    if (v.kind === 'session_load' && problem.decision.has(v.swimmerId) && (isPinned(problem, v.swimmerId) || built.joined.has(v.swimmerId))) {
+      autoBuildFail('model_mismatch', `swimmer "${v.swimmerId}" swims ${v.races} races in one session in the built lineup (limit ${v.limit})`, v.swimmerId);
     }
     if (v.kind === 'scoring_team_size' && v.teamId === problem.req.ownTeamId && problem.genders.includes(v.gender)) {
       autoBuildFail('model_mismatch', `the built ${v.gender} roster is over the scoring-team size`, v.gender);
     }
     if (!before.has(JSON.stringify(v))) autoBuildFail('model_mismatch', `the built lineup adds a ${v.kind} violation that the current lineup lacks`, v.kind);
   }
-  return results.violations.filter((v) => isWarning(v) && !before.has(JSON.stringify(v)));
+  return violations.filter((v) => isWarning(v) && !before.has(JSON.stringify(v)));
 }
 
 /** Build, re-score and check. Throws `model_mismatch` on any difference. */
@@ -175,10 +187,14 @@ export function gate(problem: Problem, space: Space, selection: Selection, scale
   const { req } = problem;
   const built = buildLineup(problem, space, selection);
   const results = scoreMeet(req.model, built.lineup, built.tagsForScoring, req.rules, req.sourcing);
-  checkPoints(results, req.ownTeamId, scale, mipPoints);
-  const newWarnings = checkViolations(problem, built, results, problem.currentResults);
+  // D5 8.2: the load of the built lineup, and a penalty over the own swimmers on the roster only (never `sessionLoad`'s own total).
+  const rule = problem.support.load;
+  const load: SessionLoadResult | null = rule === null ? null : sessionLoad(req.model, built.lineup, results, rule.schedule, rule.preference, req.rules);
+  const penaltyPoints = ownPenalty(problem.support.load, load, scorerIds(built.tagsForScoring, req.ownTeamId));
   const ownPoints = ownPointsOf(results, req.ownTeamId);
-  const evaluation: AutoBuildEvaluation = { objective: ownPoints, ownPoints, rival: null, robustOwnPoints: null, penaltyPoints: 0, results, load: null };
+  checkPoints(ownPoints - penaltyPoints, scale, mipPoints);
+  const newWarnings = checkViolations(problem, built, violationsOf(results, load, rule === null ? null : rule.schedule));
+  const evaluation: AutoBuildEvaluation = { objective: ownPoints - penaltyPoints, ownPoints, rival: null, robustOwnPoints: null, penaltyPoints, results, load };
   return {
     lineup: built.lineup,
     rosterAdds: built.rosterAdds,

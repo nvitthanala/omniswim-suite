@@ -7,13 +7,16 @@
  * relay event are the sets of at most R disjoint squads (`squads.ts`).
  */
 import { buildIndex, resolveLineup } from '../model/results';
-import type { Results } from '../model/results';
+import type { Results, Violation } from '../model/results';
+import { sessionLoad } from '../planner/sessionLoad';
 import { entryKey } from '../model/lineup';
 import type { IndividualEntry, Lineup, LineupEntry, RelayEntry, ScorerRole } from '../model/lineup';
 import type { MeetEvent } from '../model/meet';
 import type { Gender, SwimmerId } from '../model/primitives';
 import { Evaluator, eventId } from './evaluate';
 import type { ColumnEval } from './evaluate';
+import { fixedRaces, scheduledOf, violationsOf } from './load';
+import type { Races, SessionLoadResult } from './load';
 import { buildLegSources, currentSquad, generateSquads, legOptions } from './squads';
 import type { LegSources, Positions, Squad } from './squads';
 import { eventCap } from './support';
@@ -44,6 +47,18 @@ export interface Problem {
   /** Relay events of a built gender that hold an own relay with a leg off the decision set: they stay as entered. */
   readonly fixedRelayEvents: ReadonlySet<string>;
   readonly currentResults: Results;
+  /**
+   * Held split entries (D5 4.6), `swimmerId NUL eventKey`: a free swimmer's current entry in a `timed-final-split` event, when load
+   * rows exist. The entry stays whatever `z` is (`x = z`), and every column evaluation keeps it, because `sessionLoad` ranks a split
+   * heat over every entry.
+   */
+  readonly held: ReadonlySet<string>;
+  /** The races of the own swimmers in the events the search does not build: constants of the load rows. Empty without load rows. */
+  readonly fixedRaces: Races;
+  /** `sessionLoad` on the current lineup when the request has a `load` (any mode), else `null`. */
+  readonly currentLoad: SessionLoadResult | null;
+  /** The violations of the current lineup that can name a built lineup: `scoreMeet`'s and the load's (see `violationsOf`). */
+  readonly currentViolations: readonly Violation[];
 }
 
 export const pairKey = (swimmerId: SwimmerId, eventKey: string): string => `${swimmerId}\u0000${eventKey}`;
@@ -124,6 +139,20 @@ export function buildProblem(req: AutoBuildRequest, support: Support, currentRes
     .filter((e) => who.genders.includes(e.gender) && !who.fixedRelayEvents.has(eventId(e.eventKey, e.gender)))
     .sort((a, b) => cmp(a.gender, b.gender) || cmp(a.eventKey, b.eventKey));
   const builtIds = new Set(built.map((e) => eventId(e.eventKey, e.gender)));
+  const rule = support.load;
+  const held = new Set<string>();
+  let races: Races = new Map();
+  if (rule !== null) {
+    for (const event of built) {
+      if (event.kind === 'relay' || scheduledOf(rule.schedule, event.eventKey, event.gender)?.format.kind !== 'timed-final-split') continue;
+      for (const id of who.freeSet) {
+        if (currentEntry.has(pairKey(id, event.eventKey)) && req.model.swimmers.some((m) => m.swimmerId === id && m.gender === event.gender)) held.add(pairKey(id, event.eventKey));
+      }
+    }
+    const own = new Set(req.model.swimmers.filter((m) => m.teamId === req.ownTeamId).map((m) => m.swimmerId));
+    races = fixedRaces(rule, req.model, req.lineup, currentResults, (e) => builtIds.has(eventId(e.eventKey, e.gender)), own, req.rules);
+  }
+  const currentLoad = rule === null ? null : sessionLoad(req.model, req.lineup, currentResults, rule.schedule, rule.preference, req.rules);
   return {
     req,
     support,
@@ -132,6 +161,10 @@ export function buildProblem(req: AutoBuildRequest, support: Support, currentRes
     currentEntry,
     built,
     currentResults,
+    held,
+    fixedRaces: races,
+    currentLoad,
+    currentViolations: violationsOf(currentResults, currentLoad, rule === null ? null : rule.schedule),
   };
 }
 
@@ -188,14 +221,17 @@ export class EventSpace {
     readonly pairs: ReadonlyMap<SwimmerId, Pair>,
     /** The current own entries' swimmers among the pinned: the current column (D5 3.3). */
     readonly currentColumn: readonly SwimmerId[],
-    k: number
+    k: number,
+    /** Held entries (D5 4.6): candidates whether or not they rank in the top K. */
+    readonly forced: readonly SwimmerId[] = []
   ) {
     const diving = event.kind === 'diving';
     this.scorable = [...pairs.values()]
       .filter((p) => p.scorable)
       .sort((a, b) => (diving ? (b.value as number) - (a.value as number) : (a.value as number) - (b.value as number)) || cmp(a.swimmerId, b.swimmerId))
       .map((p) => p.swimmerId);
-    this.candidates = this.scorable.slice(0, k);
+    const top = this.scorable.slice(0, k);
+    this.candidates = [...top, ...forced.filter((id) => !top.includes(id))];
   }
 
   /** Scorable pairs outside `C_e`. A relay event has none: its outside squads are the slot `oR`. */
@@ -231,6 +267,8 @@ export class Space {
       own: req.ownTeamId,
       decision: problem.decision,
       free: problem.freeSet,
+      load: support.load,
+      held: problem.held,
     });
     const values = this.seedValues();
     const pinned = new Set([...problem.pinned.values()].flat());
@@ -254,7 +292,8 @@ export class Space {
         pairs.set(swimmerId, { swimmerId, value, scorable, singleton });
       }
       const currentColumn = swimmers.filter((id) => pinned.has(id) && problem.currentEntry.has(pairKey(id, event.eventKey)));
-      const space = new EventSpace(event, eventId(event.eventKey, event.gender), pairs, currentColumn, k);
+      const forced = swimmers.filter((id) => problem.held.has(pairKey(id, event.eventKey)));
+      const space = new EventSpace(event, eventId(event.eventKey, event.gender), pairs, currentColumn, k, forced);
       this.events.push(space);
       this.refresh(space);
     }
@@ -303,7 +342,10 @@ export class Space {
       return;
     }
     const cap = eventCap(this.problem.req.rules, es.event);
-    const pruneAt = cap !== null && cap.overCap === 'removed-from-consideration' ? cap.cap : Infinity;
+    // A removed over-cap entry still races, and in a split heat it moves other entries between heats: with load rows no column is
+    // dominated by dropping it, so a split event keeps every column.
+    const split = this.problem.support.load !== null && scheduledOf(this.problem.support.load.schedule, es.event.eventKey, es.event.gender)?.format.kind === 'timed-final-split';
+    const pruneAt = cap !== null && cap.overCap === 'removed-from-consideration' && !split ? cap.cap : Infinity;
     const keyOf = (members: readonly SwimmerId[]): string => members.join('\u0001');
     const seen = new Set<string>();
     const columns: Column[] = [];

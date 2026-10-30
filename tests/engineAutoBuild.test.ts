@@ -765,7 +765,6 @@ describe('autoBuild (D5, slice A1)', () => {
       { label: 'the margin objective (slice A6)', req: request(fx, { objective: { kind: 'margin', rival: { kind: 'team', teamId: 'B' } } }), code: 'mode_not_built', subject: 'margin' },
       { label: 'the goal-seek objective (slice A6)', req: request(fx, { objective: { kind: 'goal-seek', target: { kind: 'total', points: 10 } } }), code: 'mode_not_built', subject: 'goal-seek' },
       { label: 'the robust objective (slice A7)', req: request(fx, { objective: { kind: 'robust', recentSwims: 5, minSwims: 3 } as AutoBuildObjective }), code: 'mode_not_built', subject: 'robust' },
-      { label: 'session-load rows (slice A3)', req: request(fx, { load: { schedule: schedule(FREE, BACK), preference: respect } }), code: 'mode_not_built', subject: 'load' },
     ];
     for (const c of cases) {
       const error = await autoError(() => autoBuild(c.req, nodeMipSolve()).then((r) => { throw new Error('did not throw: ' + c.label + ' gave ' + r.kind); }));

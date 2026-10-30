@@ -14,8 +14,11 @@ import type { MeetEvent, MeetModel, MeetSwim, RelaySplit } from '../model/meet';
 import type { Gender, SwimmerId, TeamId } from '../model/primitives';
 import type { CompleteRulePreset } from '../rules/rulePreset';
 import type { ConversionSettings } from '../sourcing/convert';
+import { columnRaces, NO_RACES } from './load';
+import type { Races } from './load';
 import { freshRelays, squadKeyOfEntry } from './squads';
 import type { Squad } from './squads';
+import type { LoadRule } from './support';
 
 export const eventId = (eventKey: string, gender: Gender): string => `${gender}\u0000${eventKey}`;
 const memberKey = (members: readonly SwimmerId[]): string => members.join('\u0001');
@@ -27,6 +30,8 @@ export interface ColumnEval {
   /** Sizes (2 or more) of the groups of rows that share a place: the denominators of the points the rows hold. */
   readonly tieSizes: readonly number[];
   readonly rows: readonly ResultRow[];
+  /** D5 5.3: the races of the decision swimmers in this column, by session key. Empty when the request has no load rows. */
+  readonly races: Races;
 }
 
 export interface EvalBase {
@@ -40,6 +45,10 @@ export interface EvalBase {
   readonly decision: ReadonlySet<SwimmerId>;
   /** The decision swimmers the coach did not tag: a column member among them is tagged a scorer in the evaluation. */
   readonly free: ReadonlySet<SwimmerId>;
+  /** The session-load rows, or `null` (D5 4.5). */
+  readonly load: LoadRule | null;
+  /** Held split entries (D5 4.6), `swimmerId NUL eventKey`: the entry stays in the sub-lineup whether or not the swimmer is in the column. */
+  readonly held: ReadonlySet<string>;
 }
 
 /** The sizes of the tie groups in a result: rows with one place. Only a place held by 2 or more rows gives a size. */
@@ -131,14 +140,15 @@ export class Evaluator {
       own: rows.reduce((sum, r) => (r.teamId === base.own ? sum + r.points : sum), 0),
       tieSizes: tieSizesOf(rows),
       rows,
+      races: base.load === null ? NO_RACES : columnRaces(base.load, model, lineup, results, event, base.decision, base.rules),
     };
     this.cache.set(key, evaluated);
     return evaluated;
   }
 
   /**
-   * The sub-lineup of column `members` (D5 5.1): the current entries of the event in lineup order, keeping each fixed entry
-   * and each current entry of a member in place, then the members without a current entry, sorted by entry key, with the
+   * The sub-lineup of column `members` (D5 5.1): the current entries of the event in lineup order, keeping each fixed entry,
+   * each held entry and each current entry of a member in place, then the members without a current entry, sorted by entry key, with the
    * engine's own seed pick.
    */
   subLineup(event: MeetEvent, members: readonly SwimmerId[]): Lineup {
@@ -147,8 +157,10 @@ export class Evaluator {
     const have = new Set<SwimmerId>();
     for (const e of this.entriesByEvent.get(eventId(event.eventKey, event.gender)) ?? []) {
       if (e.kind === 'individual' && this.base.decision.has(e.swimmerId)) {
-        if (!memberSet.has(e.swimmerId)) continue;
-        have.add(e.swimmerId);
+        // A held entry (D5 4.6) stays beside the column, whoever is in it: a split heat counts every entry.
+        const held = this.base.held.has(`${e.swimmerId}\u0000${e.eventKey}`);
+        if (!memberSet.has(e.swimmerId) && !held) continue;
+        if (memberSet.has(e.swimmerId)) have.add(e.swimmerId);
       }
       kept.push(e);
     }
@@ -180,6 +192,7 @@ export class Evaluator {
       own: rows.reduce((sum, r) => (r.teamId === base.own ? sum + r.points : sum), 0),
       tieSizes: tieSizesOf(rows),
       rows,
+      races: base.load === null ? NO_RACES : columnRaces(base.load, model, lineup, results, event, base.decision, base.rules),
     };
     this.cache.set(key, evaluated);
     return evaluated;

@@ -628,6 +628,7 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
+    "RESUME after the budget reset (2026-10-29 late): A3 is committed and pushed. 1) git status. 2) SendMessage executor ad2051c440db6ce85 with the A4 brief (D5 sections for the fast evaluator and the 351-point gap), first fixing A3-refusal-order. 3) Ask the user the config C schedule question.",
     "RESUME after the limit: 1) git status; diff packages/engine/src/autobuilder, tests/engineAutoBuild.test.ts, tests/helpers/nodeMipSolve.ts, plans/2026-10-25/D5-AUTOBUILDER.md (amendment 1 appended, uncommitted). 2) If the executor report is missing, resume it with SendMessage (A1 agent) rather than re-briefing. 3) npm run build:extension, then full gates; check defaultLimitsConfigC returns improved within 11 s, 3 runs. 4) Commit A1 + amendment as one commit (Codex J8 review: no defect, on the pre-amendment diff; re-review the amendment diff with Codex J terminal term_a6fd5787 first). 5) Next: D5 slice A2 (relays). Open user questions: D5 14.1-14.5, R70 x3, P4 fetch approval, cap-boundary tie rule.",
     "RESUME (if interrupted 2026-10-29 afternoon): read N2 and J4 reports (orca orchestration inbox); review sessionLoad.ts against D2 3.11; rebuild + full gates; commit planner core, then planner UI.",
     "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
@@ -867,10 +868,10 @@
     "d22375ee Show simulator parity in the docked panel"
   ],
   "lowPriority": {
-    "since": "2026-10-29 evening",
-    "trigger": "Claude usage limit reached mid-turn",
-    "resumePoint": "A1 + D5 amendment 1 uncommitted. Executor (agent A1) was applying the amendment and running mutation checks when the limit hit; it may have finished in the tree.",
-    "endedAt": "2026-10-29: limit reset; executor resumed and finished A1"
+    "since": "2026-10-29 late",
+    "trigger": "Budget tier critical: 5h 80% used, resets in about 2h",
+    "resumePoint": "A3 committed. Nothing in flight. Next after reset: A4 via SendMessage to executor ad2051c440db6ce85 (refusal order first).",
+    "rule": "one agent at a time; no new heavy Claude agents until reset"
   },
   "codexRuns": [
     {
@@ -1006,6 +1007,26 @@
       "J4": "DONE: planner UI slice 1 committed (per-meet session preset + load preference, dashboard schedule editor, athlete outlook). Full gates: vitest 2924 (after the suppression fix), npm test 65, golden OK, mutation 413, harness 2/2, lint 0.",
       "next": "F3 acceptance met at test level; live UI check in Chrome pending. Next candidates need the user: P4 fetches (LCM swims, wider window, roster season), cap-boundary tie rule, R70 questions.",
       "J6": "DONE: page Meet schedule editor + relayRepeatsForSchedule. Gates: vitest 2928, npm test 65, golden OK, mutation 413, harness 2/2, lint 0."
+    },
+    "D5.A3": {
+      "status": "COMMITTED 2026-10-29 (commit follows this state edit). Lead gates green: lint, vitest 3010, npm test 65, golden unchanged, mutation 413, extension build, harness 2/2. Codex J12 review: no findings (82 focused tests). Advisor audit: guard, refusals, provenance checked.",
+      "files": [
+        "packages/engine/src/autobuilder/{evaluate,gate,index,lp,space,support,types,load}.ts",
+        "tests/engineAutoBuild.test.ts (one mode_not_built load case removed)",
+        "tests/engineAutoBuildLoad.test.ts"
+      ],
+      "blockedOnUser": "Config C cannot run with the shipped NSISC session preset: smallFieldSession for 1650 Free Men is pending, and Table C has no row for 100 IM Men (unscheduled_event). Which schedule should config C use? Executor did not guess.",
+      "knownDeviations": [
+        "refusal order: schedule/pending checks run after search space is built (D5 2.1 says before)",
+        "over-cap pruning off for split events when load is active",
+        "held swimmers are forced candidates and may exceed K"
+      ],
+      "fixedAlong": [
+        "gate.ts/space.ts read req.load instead of support.load (mode off threw model_mismatch)",
+        "index.ts literal NUL byte escaped"
+      ],
+      "next": "A4 after the budget reset; first item: fix the refusal order (D5 2.1).",
+      "acceptanceGap": "D5 12.3 config C timing with load on is UNMEASURED: blocked on the user schedule question (blockedOnUser)."
     }
   },
   "followUps": [
@@ -1020,7 +1041,24 @@
     "D5 15.1: results.ts:980 comment vs :1002 code disagree on who counts as a diver (rosterSuggest.ts:726 copies the code). User question D5 14.4.",
     "D5 15.2: sessionLoad penaltyPoints sums every team (sessionLoad.ts:130-139). Never show it as the own team penalty.",
     "D5 15.3: D2 3.11 still shows rules? optional; sessionLoad requires rules. Dead rules? branches at sessionLoad.ts:75-77, :93.",
-    "rosterSuggest.ts:163 accepts 5-decimal point tables (scale 10^5) while its message says more than 4 (D5 amendment 1 (e)). Not reproduced."
+    "rosterSuggest.ts:163 accepts 5-decimal point tables (scale 10^5) while its message says more than 4 (D5 amendment 1 (e)). Not reproduced.",
+    {
+      "id": "A3-refusal-order",
+      "first": "A4",
+      "note": "D5 2.1 mismatch: pending_setting and unscheduled_event refusals run after the search space is built, so a space-build refusal can surface first, and the wasted build cost about 0.5 s on config C."
+    },
+    {
+      "id": "A3-split-overcap-pruning",
+      "note": "Over-cap pruning is off for split events when load is active."
+    },
+    {
+      "id": "A3-held-exceed-K",
+      "note": "Held split-entry swimmers are forced candidates and may push a column past K."
+    },
+    {
+      "id": "A3-current-infeasible-load",
+      "note": "Respect mode: a session_load violation already in the current lineup returns current_infeasible (same path as entry_cap). Confirm with user under D5 14.3."
+    }
   ],
   "p3CoreA": {
     "status": "DONE: Codex review accepted (ctx_5b81979038a5, released); advisor audit passed; lead gates green incl. harness 2/2; D2 section 9 records the deviations",

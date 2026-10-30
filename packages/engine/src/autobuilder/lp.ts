@@ -14,6 +14,7 @@ import type { MeetEvent } from '../model/meet';
 import { autoBuildFail } from './types';
 import type { Column, EventSpace, Problem, Space } from './space';
 import { pairKey } from './space';
+import { certainSession, scorerIds } from './load';
 import type { Support } from './support';
 
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
@@ -32,7 +33,7 @@ export interface Scale {
 }
 
 export function makeScale(support: Support, tieSizes: Iterable<number>): Scale {
-  let D = support.decScale;
+  let D = lcm(support.decScale, support.load?.penaltyScale ?? 1);
   for (const n of tieSizes) D = lcm(D, n);
   return {
     D,
@@ -150,6 +151,22 @@ function constantPoints(problem: Problem, space: Space, scale: Scale): number {
   return total;
 }
 
+/** One term of a swimmer's races in one session: the variable, its coefficient and its largest value (D5 4.5). */
+interface RaceTerm {
+  readonly name: string;
+  readonly coef: number;
+  readonly ub: number;
+}
+
+const SLOT_ORDER = ['morning', 'afternoon', 'evening'];
+
+/** Session keys (`day/slot`) in meet order. */
+const bySession = (a: string, b: string): number => {
+  const [da, sa] = a.split('/') as [string, string];
+  const [db, sb] = b.split('/') as [string, string];
+  return Number(da) - Number(db) || SLOT_ORDER.indexOf(sa) - SLOT_ORDER.indexOf(sb);
+};
+
 class Builder {
   readonly rows: Row[] = [];
   readonly binaries: string[] = [];
@@ -160,6 +177,16 @@ class Builder {
   /** every x, o and w variable of a swimmer, with its event (`w`: a relay slot a swimmer may fill, relaxed only) */
   private readonly pairVars = new Map<SwimmerId, { name: string; event: MeetEvent; kind: 'x' | 'o' | 'w'; ub: number }[]>();
   private readonly generals: General[] = [];
+  /** D5 4.5: `race(s,e,σ)` terms per swimmer and session key. */
+  private readonly raceTerms = new Map<SwimmerId, Map<string, RaceTerm[]>>();
+  /** The `-pen·v` terms of `prefer` mode: part of the objective and of the points floor, never of `y`. */
+  private readonly penTerms: Term[] = [];
+  /** Each `v` row: the constant races and the terms, to read the least `v` of a solution (an incumbent's `v` may be larger). */
+  private readonly penaltyRows: { readonly k0: number; readonly terms: readonly RaceTerm[] }[] = [];
+  /** Extra races (above the maximum) that no variable can change: they cost `pen` each in every solution. */
+  private constantExtra = 0;
+  /** Every `g` and `v` variable, read back to fail on a fractional value. */
+  private readonly loadVars: string[] = [];
   readonly points: Term[] = [];
   readonly objective: Term[] = [];
   constant = 0;
@@ -176,6 +203,41 @@ class Builder {
   private general(name: string, ub: number): string {
     this.generals.push({ name, ub });
     return name;
+  }
+
+  /** An outside pair or relay slot charges only the race it certainly swims (D5 6.2). */
+  private addCertainRace(id: SwimmerId, event: MeetEvent, name: string): void {
+    const load = this.problem.support.load;
+    const session = load === null ? null : certainSession(load, event);
+    if (session !== null) this.addRace(id, session, { name, coef: 1, ub: 1 });
+  }
+
+  private addRace(id: SwimmerId, session: string, term: RaceTerm): void {
+    const bySwimmer = this.raceTerms.get(id) ?? new Map<string, RaceTerm[]>();
+    bySwimmer.set(session, [...(bySwimmer.get(session) ?? []), term]);
+    this.raceTerms.set(id, bySwimmer);
+  }
+
+  /** The `race(s,e,σ)` terms of one swimmer in one event (D5 4.5): `c·x` when every column that holds him gives the same count c, else `g`. */
+  private addEventRaces(es: EventSpace, ei: number, ys: EventVars['ys'], id: SwimmerId, x: string): void {
+    const holding = ys.filter(({ column }) => column.members.includes(id));
+    const sessions = new Set<string>();
+    for (const { column } of holding) for (const k of column.eval.races.get(id)?.keys() ?? []) sessions.add(k);
+    const unit = (column: Column): boolean => (column.squads ?? []).filter((q) => q.swimmers.includes(id)).length <= 1;
+    for (const session of [...sessions].sort(bySession)) {
+      const counts = holding.map(({ column }) => column.eval.races.get(id)?.get(session) ?? 0);
+      const first = counts[0] as number;
+      if (counts.every((c) => c === first) && holding.every(({ column }) => unit(column))) {
+        if (first > 0) this.addRace(id, session, { name: x, coef: first, ub: 1 });
+        continue;
+      }
+      const top = Math.max(...counts);
+      const name = `g${this.si(id)}_${ei}_${session.replace('/', '')}`;
+      const g = top === 1 ? this.bin(name) : this.general(name, top);
+      this.loadVars.push(g);
+      this.row([[g, 1], ...holding.map(({ name: y, column }) => [y, -(column.eval.races.get(id)?.get(session) ?? 0)] as Term).filter(([, k]) => k !== 0)], '=', 0);
+      this.addRace(id, session, { name: g, coef: 1, ub: top });
+    }
   }
 
   private bin(name: string): string {
@@ -208,6 +270,7 @@ class Builder {
       const holding = ys.filter(({ column }) => column.members.includes(id)).map(({ name, column }) => [name, mult(column)] as Term);
       this.row([...holding, [x, -1]], '=', 0);
       this.pairVars.set(id, [...(this.pairVars.get(id) ?? []), { name: x, event: es.event, kind: 'x', ub: maxMult }]);
+      if (this.problem.support.load !== null && this.problem.decision.has(id)) this.addEventRaces(es, ei, ys, id, x);
     }
     const os = new Map<SwimmerId, string>();
     if (this.opts.relaxed) {
@@ -220,6 +283,7 @@ class Builder {
         const x = xs.get(id);
         if (x !== undefined) this.row([[x, 1], [o, 1]], '<=', 1);
         this.pairVars.set(id, [...(this.pairVars.get(id) ?? []), { name: o, event: es.event, kind: 'o', ub: 1 }]);
+        this.addCertainRace(id, es.event, o);
       }
     }
     const oR = this.opts.relaxed && es.relay !== null ? this.addOutsideRelay(es, ei, ys, xs) : null;
@@ -245,6 +309,7 @@ class Builder {
       const w = this.bin(`w${this.si(id)}_${ei}`);
       ws.push(w);
       this.pairVars.set(id, [...(this.pairVars.get(id) ?? []), { name: w, event: es.event, kind: 'w', ub: 1 }]);
+      this.addCertainRace(id, es.event, w);
       const x = xs.get(id);
       if (x !== undefined) {
         // `x` counts the swimmer's squads in the column (up to `ub`): a swimmer who fills an outside slot is in none of them.
@@ -264,6 +329,8 @@ class Builder {
       const z = this.bin(`z${this.si(id)}`);
       this.zVar.set(id, z);
       for (const v of vars) this.row([[v.name, 1], [z, -v.ub]], '<=', 0);
+      // Z3 (D5 4.6): a held split entry stays whatever `z` is, so `x = z`.
+      for (const v of vars) if (v.kind === 'x' && this.problem.held.has(pairKey(id, v.event.eventKey))) this.row([[v.name, 1], [z, -1]], '=', 0);
       this.row([[z, 1], ...vars.map((v) => [v.name, -1] as Term)], '<=', 0);
     }
   }
@@ -286,6 +353,37 @@ class Builder {
       // A fixed relay count over the relay cap cannot be repaired: the row has no variable and is infeasible.
       if (entryCaps.relay !== 'unlimited' && reach(relayVars) + kR > entryCaps.relay) this.row(relays, '<=', entryCaps.relay - kR);
       if (entryCaps.total !== 'unlimited' && reach(vars) + kR > entryCaps.total) this.row([...individual, ...relays], '<=', entryCaps.total - kR);
+    }
+  }
+
+  /**
+   * L1 and L2 (D5 4.5): per decision swimmer and session, the races of the built events plus the constant races of the fixed ones.
+   * A row that no assignment can break is left out. `respect` is a hard row. `prefer` adds `v >= races - max` and charges `pen` for each `v`.
+   */
+  private addLoad(constRaces: ReadonlyMap<SwimmerId, ReadonlyMap<string, number>>): void {
+    const load = this.problem.support.load;
+    if (load === null) return;
+    const penalty = load.prefer ? this.scale.scaled(load.penalty, 'the preference penalty') : 0;
+    for (const id of [...this.problem.decision].sort(cmp)) {
+      const terms = this.raceTerms.get(id) ?? new Map<string, RaceTerm[]>();
+      const fixed = constRaces.get(id) ?? new Map<string, number>();
+      for (const session of [...new Set([...terms.keys(), ...fixed.keys()])].sort(bySession)) {
+        const list = terms.get(session) ?? [];
+        const k0 = fixed.get(session) ?? 0;
+        const reach = list.reduce((sum, t) => sum + t.coef * t.ub, 0);
+        if (reach + k0 <= load.max) continue;
+        if (!load.prefer) {
+          this.row(list.map((t) => [t.name, t.coef] as Term), '<=', load.max - k0);
+        } else if (list.length === 0) {
+          this.constantExtra += k0 - load.max;
+        } else {
+          const v = this.general(`v${this.si(id)}_${session.replace('/', '')}`, reach + k0 - load.max);
+          this.loadVars.push(v);
+          this.row([[v, 1], ...list.map((t) => [t.name, -t.coef] as Term)], '>=', k0 - load.max);
+          this.penTerms.push([v, -penalty]);
+          this.penaltyRows.push({ k0, terms: list });
+        }
+      }
     }
   }
 
@@ -327,7 +425,7 @@ class Builder {
 
   /** The tie-break objective: the negative change count of D5 4.9, and the points floor. */
   private addTieBreak(minPoints: number): void {
-    this.row(this.points, '>=', minPoints - this.constant);
+    this.row([...this.points, ...this.penTerms], '>=', minPoints - this.constant);
     let constant = 0;
     for (const id of [...this.problem.decision].sort(cmp)) {
       const vars = this.pairVars.get(id) ?? [];
@@ -361,14 +459,35 @@ class Builder {
     space.events.filter((es) => es.columns.length > 1).forEach((es, ei) => this.addEvent(es, ei));
     this.addRoster();
     this.addCaps();
+    const constRaces = new Map<SwimmerId, Map<string, number>>();
+    const bump = (id: SwimmerId, session: string, n: number): void => {
+      const m = constRaces.get(id) ?? new Map<string, number>();
+      m.set(session, (m.get(session) ?? 0) + n);
+      constRaces.set(id, m);
+    };
+    for (const [id, sessions] of problem.fixedRaces) for (const [k, n] of sessions) bump(id, k, n);
+    for (const es of space.events.filter((e) => e.columns.length === 1)) {
+      for (const [id, sessions] of (es.columns[0] as Column).eval.races) for (const [k, n] of sessions) bump(id, k, n);
+    }
+    this.addLoad(constRaces);
     this.addDivers();
     this.addTeamSize();
-    const pointsConstant = fixed;
+    const loadRule = problem.support.load;
+    // An own swimmer on the roster who is not a decision swimmer (another gender) keeps the races he has: a constant penalty.
+    let extra = this.constantExtra;
+    if (loadRule !== null && loadRule.prefer) {
+      for (const id of scorerIds(problem.req.tags, problem.req.ownTeamId)) {
+        if (problem.decision.has(id)) continue;
+        for (const n of problem.fixedRaces.get(id)?.values() ?? []) if (n > loadRule.max) extra += n - loadRule.max;
+      }
+    }
+    const penaltyUnit = loadRule !== null && loadRule.prefer ? scale.scaled(loadRule.penalty, 'the preference penalty') : 0;
+    const pointsConstant = fixed - extra * penaltyUnit;
     if (this.opts.tieBreak !== undefined) {
       this.constant = pointsConstant;
       this.addTieBreak(this.opts.tieBreak.minPoints);
     } else {
-      this.objective.unshift(...this.points);
+      this.objective.unshift(...this.points, ...this.penTerms);
       this.constant = pointsConstant;
     }
     const sum = this.objective.reduce((s, [, k]) => s + Math.abs(k), 0) + Math.abs(this.constant);
@@ -378,6 +497,7 @@ class Builder {
     const objective = this.objective;
     const constant = this.constant;
     const points = this.points;
+    const penaltyRows = this.penaltyRows;
     const text = render(objective, constant, this.rows, this.binaries, this.generals);
     const sumTerms = (terms: readonly Term[], columns: Readonly<Record<string, number>>): number =>
       terms.reduce((s, [name, k]) => s + k * readColumn(columns, name), 0);
@@ -387,7 +507,15 @@ class Builder {
       cols: this.binaries.length + this.generals.length + 1,
       relaxed: this.opts.relaxed,
       objectiveOf: (columns) => constant + sumTerms(objective, columns),
-      pointsOf: (columns) => pointsConstant + sumTerms(points, columns),
+      // The least `v` of the solution: an incumbent may carry a larger `v`, and the gate re-scores the lineup itself.
+      pointsOf: (columns) => {
+        let extraRaces = 0;
+        for (const row of penaltyRows) {
+          const races = row.k0 + row.terms.reduce((sum, t) => sum + t.coef * readColumn(columns, t.name), 0);
+          if (races > (loadRule?.max ?? 0)) extraRaces += races - (loadRule?.max ?? 0);
+        }
+        return pointsConstant + sumTerms(points, columns) - extraRaces * penaltyUnit;
+      },
       select: (columns) => this.select(columns),
     };
   }
@@ -415,6 +543,7 @@ class Builder {
     const joined = new Set<SwimmerId>();
     for (const [id, z] of this.zVar) if (readColumn(columns, z) === 1) joined.add(id);
     for (const d of this.dVar.values()) readColumn(columns, d); // fail on a missing or fractional indicator
+    for (const name of this.loadVars) readColumn(columns, name);
     return { chosen, joined, outside, relayOutside };
   }
 }

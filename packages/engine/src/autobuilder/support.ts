@@ -9,6 +9,7 @@ import type { Cap } from '../rules/cap';
 import type { CompleteRulePreset, DiverWeight, TieRule } from '../rules/rulePreset';
 import type { MeetEvent, MeetModel } from '../model/meet';
 import type { ScorerTag } from '../model/lineup';
+import type { LoadPreference, SessionPreset } from '../planner/types';
 import type { TeamId } from '../model/primitives';
 import { autoBuildFail } from './types';
 import type { AutoBuildLimits, AutoBuildObjective, AutoBuildRequest } from './types';
@@ -17,6 +18,20 @@ import type { AutoBuildLimits, AutoBuildObjective, AutoBuildRequest } from './ty
 export interface EventCap {
   readonly cap: number;
   readonly overCap: 'holds-place' | 'removed-from-consideration';
+}
+
+/** The session-load rows of a request whose preference is not 'off' (D5 4.5, slice A3). */
+export interface LoadRule {
+  readonly schedule: SessionPreset;
+  readonly preference: Exclude<LoadPreference, { readonly mode: 'off' }>;
+  /** Races one swimmer may swim in one session. */
+  readonly max: number;
+  /** `prefer` mode: an extra race costs `penalty` points. `respect` mode: it is a hard row. */
+  readonly prefer: boolean;
+  /** Points per extra race (0 in `respect` mode). */
+  readonly penalty: number;
+  /** The power of ten (at most 10^4) that makes `penalty` whole: the integer scale must hold it. */
+  readonly penaltyScale: number;
 }
 
 export interface Support {
@@ -33,6 +48,8 @@ export interface Support {
   /** The power of ten that makes every table value a whole number (rosterSuggest.ts:163). */
   readonly decScale: number;
   readonly rules: CompleteRulePreset;
+  /** The session-load rows, or `null` when the request has no load or its mode is 'off'. Set by `loadRuleOf`, after the refusals. */
+  readonly load: LoadRule | null;
 }
 
 const WHOLE = 1e-9;
@@ -98,6 +115,7 @@ export function checkRules(rules: CompleteRulePreset): Support {
     tables,
     decScale,
     rules,
+    load: null,
   };
 }
 
@@ -166,6 +184,24 @@ export function checkLoadSettings(load: NonNullable<AutoBuildRequest['load']>): 
       autoBuildFail('rule_unsupported', 'a prefer penalty needs at most 4 decimals', 'load.preference.penaltyPointsPerExtraRace');
     }
   }
+}
+
+/** The load rows of a request, after `checkLoadSettings` has refused a pending setting. `null`: no load, or mode 'off'. */
+export function loadRuleOf(load: AutoBuildRequest['load']): LoadRule | null {
+  if (load === null || load.preference.mode === 'off') return null;
+  const pref = load.preference;
+  if (pref.maxRacesPerSession.state !== 'set') return autoBuildFail('pending_setting', 'load.preference.maxRacesPerSession is pending', 'load.preference.maxRacesPerSession');
+  const prefer = pref.mode === 'prefer';
+  let penalty = 0;
+  if (pref.mode === 'prefer') {
+    if (pref.penaltyPointsPerExtraRace.state !== 'set') {
+      return autoBuildFail('pending_setting', 'load.preference.penaltyPointsPerExtraRace is pending', 'load.preference.penaltyPointsPerExtraRace');
+    }
+    penalty = pref.penaltyPointsPerExtraRace.value;
+  }
+  let penaltyScale = 1;
+  while (penaltyScale < 10000 && Math.abs(penalty * penaltyScale - Math.round(penalty * penaltyScale)) > 1e-6) penaltyScale *= 10;
+  return { schedule: load.schedule, preference: pref, max: pref.maxRacesPerSession.value, prefer, penalty, penaltyScale };
 }
 
 /** D5 2.1 item 6: a candidate event missing from the schedule. */
