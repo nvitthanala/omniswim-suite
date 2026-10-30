@@ -1,0 +1,102 @@
+# Open questions for the user
+
+Updated 2026-10-29. Each question names the default the build uses now.
+Answer by number. Write "keep" to accept the default. Answers go to the
+README decision table as new R rows.
+
+## A. AutoBuilder (plans/2026-10-25/D5-AUTOBUILDER.md section 14)
+
+**A1. Robust spread (14.1).** Default: value a swimmer by the slower middle
+of their 5 most recent dated SCY swims, with at least 3 swims. A pair with
+fewer swims is frozen: never added, never dropped, shown as "not enough
+swims". Other option: value those pairs at their best time. That makes the
+solver prefer swimmers with no history.
+
+**A2. One swimmer on both the A and B relays (14.2).** NSISC v5 does not
+forbid it. Default: never. No archived NSISC source allows it, and NCAA
+5-7-1-g forbids it for timed finals. Allow it?
+
+**A3. The current lineup already breaks a hard rule (14.3).** For example an
+8th event under a cap of 7, or (new in A3) too many races in one session
+under "respect". Default: return the best legal lineup as
+`current_infeasible`, with its point change shown even when negative. Other
+option: refuse until the coach fixes the current lineup.
+
+**A4. Diver weight (14.4).** `scoreMeet` counts a swimmer who dives and swims
+no relay at 1/3 (`results.ts:1002`). Its comment says only all-diving
+swimmers count at 1/3 (`results.ts:980`). The AutoBuilder uses the strict
+rule. Which rule is correct for NSISC?
+
+**A5. Legs 2 to 4 without a flying split (14.5).** Default: not built until
+the flyover setting (R14) lands. Current relays that use flat starts on
+those legs stay candidates. Other option: SwimCloud's method, which uses the
+flat-start time and flags it.
+
+**A6. Session schedule for config C (new, A3).** The shipped NSISC session
+schedule refuses config C:
+- the 1650 free leaves `smallFieldSession` pending (which session swims a
+  small field);
+- there is no row for the men's 100 IM.
+
+Give the session for the small 1650 field and the day and session of the
+100 IM, or point me to a published meet schedule. Nothing was guessed.
+
+## B. Opponent scoring rosters (R70, D2 section 3.14)
+
+**B1. What an edit does.** Default: an edit pins that swimmer, and the
+suggester refills around it. Other option: the first edit saves the whole
+roster as coach tags and freezes it.
+
+**B2. When a suggestion refreshes.** Default: recompute whenever the coach
+edits their own lineup. Opponent rosters can then shift between two what-if
+lineups. Other option: freeze until the coach presses "Recompute" (needs a
+new store).
+
+**B3. The field for the other opponents.** Default: every entered swimmer of
+the other opponents counts as a scorer. Other option: a second pass against
+the first-pass suggestions. It changes the numbers, not the API.
+
+## C. Scoring rules
+
+**C1. A tie at the cap boundary (D2 9.5).** Two teammates tie exactly at the
+per-team scorer cap. Today the engine removes one by internal id order. The
+team total is right; which swimmer gets the points is arbitrary. Pick a
+rule: split the points, keep the earlier seed, keep the swimmer with fewer
+events, or leave it arbitrary and hide per-swimmer points for tied pairs.
+
+## D. Data sourcing (P4): fetch approval
+
+Each item needs extra SwimCloud requests. Say yes or no to each.
+
+**D1. LCM swims.** Fetch long-course swims so the LCM to SCY conversion
+(R58, R63) has inputs.
+
+**D2. A wider date window** than the current one.
+
+**D3. Roster season.** Fetch each team's roster for the season, so the
+eligibility roster and class years can fill.
+
+**D4. Relay splits.** Fetch the team simulator relay splits
+(`/api/teams/{id}/simulator/`) for flying-start legs.
+
+**D5. Class year source.** No recon shows which SwimCloud page carries a
+class year. May I look for it (one roster page, read-only)?
+
+## E. Other open items
+
+**E1. Class year codes.** The new engine uses FR/SO/JR/SR/GR. The legacy
+engine uses FR/SO/JR/SR/HS (HS = recruit). Which set wins, and where do
+recruits go?
+
+**E2. Dark-mode good and bad colors.** Light mode and dark "warn" are
+answered (R46, R57). The Material 800 good and bad shades fail 4.5:1
+contrast on the dark background. Pick shades, or approve the 300 shades
+(lighter, pass contrast).
+
+**E3. Backup before a database upgrade (D3 5.7).** Not built. A P1 build
+cannot open a v2 database. Build the "export a backup" prompt now, or
+later?
+
+**E4. Live UI check.** The meet planner and the page schedule editor pass
+their tests but have not been checked in your Chrome. May I open SwimCloud's
+simulator in a new tab and check them, read-only?
