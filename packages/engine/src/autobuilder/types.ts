@@ -210,9 +210,11 @@ export type AutoBuildRestriction =
  * `upperBound` is a lower bound on them. A `target_unreachable` result found no lineup: its `bestFound` is 0 (the current lineup's own
  * changes), `upperBound` and `gap` are null, and the status is `proven_optimal` only when the reason is `proven`. A `current_meets_target`
  * result is `proven_optimal` at 0 changes. `proven_optimal` holds within `searchSpace.restrictions` only. The fewest-changes tie-break (4.9) is
- * minimal within the columns actually built (pruning under a numeric per-event cap removes some multi-member columns), and
- * it runs only when time is left. It is a tie-break, not a guarantee. The current column is never pruned, so a zero-change
- * tie is always reachable inside the space.
+ * minimal within the columns actually built, and it runs only when time is left. It is a tie-break, not a guarantee. The column prune
+ * under a numeric per-event cap removes only a column that another column dominates: same points, no more changes, no more races, and the
+ * same strict diver weight. The last holds because the prune skips every diving event when the team size is finite (a dive entry that scores
+ * nothing can still turn a rostered swimmer into a diver, D5 4.4), and a swim entry never raises a swimmer's weight. So the prune loses no optimal
+ * lineup. The current column is never pruned, so a zero-change tie is always reachable inside the space.
  */
 export interface AutoBuildProof {
   readonly status: 'proven_optimal' | 'gap' | 'unknown';

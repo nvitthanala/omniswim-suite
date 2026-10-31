@@ -1163,8 +1163,8 @@
     },
     {
       "id": "A6-goalseek-proven-overstated",
-      "priority": "fix next (false proven label)",
-      "note": "Pre-existing, reproduced with the swap flag off (tests/engineAutoBuildSwaps.test.ts 3b): with a numeric removed-from-consideration per-event cap, the column prune drops a column holding two own scorers; the goal-seek tie-break then reports one more change than the brute force while proof.status stays proven_optimal. Fix the prune or downgrade the status, then tighten tests 3/3b from >= to equality."
+      "status": "closed 2026-10-30 (D5 amendment 9)",
+      "note": "Prune counts only droppable members with no current entry; boards excluded with a finite team size. Codex review docs/reference/A6FIX_CODEX_REVIEW.md."
     },
     {
       "id": "U1a-harness-worker",
@@ -1181,6 +1181,14 @@
     {
       "id": "P7-architect-findings",
       "note": "dashboard ignores settings.theme (main.tsx:100); accent validator accepts any string (validate.ts:322); two meet keys (main.tsx:48 vs 109); snapshots record no tags; legacy CSV escaper misses \r. All in D6."
+    },
+    {
+      "id": "lp-baseline-texts-stale",
+      "note": "The executor no-flag LP baseline texts changed for the numeric-cap fixtures (engineAutoBuild, Modes, Robust) after amendment 9. Regenerate before a later slice uses them as a regression check."
+    },
+    {
+      "id": "C1-review-checks",
+      "note": "C1: fix two eslint-disable-next-line complexity lines in packages/engine/src/report/index.ts (reason or split). Check the new ClassYearCode does not duplicate an existing class-year type (user question E1 open)."
     }
   ],
   "p3CoreA": {

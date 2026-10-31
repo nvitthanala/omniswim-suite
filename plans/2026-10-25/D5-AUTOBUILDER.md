@@ -997,3 +997,24 @@ Test `cappedLegsDoNotCrowdQ`: the top 12 squads of an event all hold a swimmer w
    `'\u0000'` until unused.
 8. **User question A10** (what Accept writes for a removal) stays open. U1
    asks at Accept time, with "tag them non-scorer" preselected.
+
+## Amendment 9 (lead rulings, 2026-10-30): the column prune
+
+1. **Rule.** Under a numeric `removed-from-consideration` per-event cap, a
+   column is pruned only when more than `cap` of its members have no current
+   entry in the event and can be dropped (not frozen, not held). At most
+   `cap` members score, so one of them is over the cap. The column without
+   that member has the same points, no more races, and one change fewer.
+   The old rule also counted members with a current entry. It pruned
+   columns that avoid the change of dropping that entry, and goal seek could
+   then report one change too many with a `proven_optimal` status.
+2. **Exclusions.** A diving event is never pruned when the team size is
+   finite. A dive entry that scores nothing still changes the strict diver
+   weight (4.4), so the column that keeps it can be the only feasible one. A
+   split event is never pruned under load (as before).
+3. **Result.** The prune loses no optimal lineup, so the fewest-changes
+   tie-break (4.9) is exact within the space. Under a numeric cap, proposals
+   can differ from before: when G beats F, the proposal keeps F's entry,
+   because dropping it is a second change that buys nothing.
+4. **Real meets.** The shipped NSISC v5 preset has no numeric removal cap,
+   so the prune does not run there, and config C results do not change.

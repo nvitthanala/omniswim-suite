@@ -800,9 +800,8 @@ it('3 goalSeekOneChange: the target is reached with 1 change where max-own uses 
           expect(result.proposal.evaluation.objective, label).toBeCloseTo(metricOfResults(again, metric), 9);
           expect(result.proposal.changeCount, label).toBe(result.proposal.entryChanges.length + result.proposal.rosterAdds.length);
           expect(result.proof.bestFound, label).toBe(result.proposal.changeCount);
-          // A per-event cap of 1 with removal prunes the columns that hold more than one swimmer, so the count is minimal only within them.
-          if (key.startsWith('mini') && Math.floor(Number(key.slice(4)) / 2) % 3 === 1) expect(result.proposal.changeCount, label).toBeGreaterThanOrEqual(fewest);
-          else expect(result.proposal.changeCount, label).toBe(fewest);
+          // Exact with a per-event cap of 1 with removal too: the column prune keeps every column a fewest-changes lineup needs.
+          expect(result.proposal.changeCount, label).toBe(fewest);
         }
       }
     }

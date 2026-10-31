@@ -205,7 +205,7 @@ interface Script {
   /** The restricted solve (the first call). */
   readonly restricted: 'real' | 'current-incumbent' | MipSolution | ((lp: string) => MipSolution);
   /** The relaxed solve (the second call): `'bound'` is "Time limit reached" with the real optimum as the dual bound. */
-  readonly relaxed: 'real' | 'bound' | 'time-limit';
+  readonly relaxed: 'real' | 'bound' | 'time-limit' | { readonly boundAt: number };
   /** Later calls (the tie-break). */
   readonly later: 'real' | 'time-limit';
 }
@@ -241,6 +241,7 @@ function scripted(script: Script): Scripted {
         solve.bounds.push(exact.objective);
         return { ...TIME_LIMIT, dualBound: exact.objective };
       }
+      if (typeof script.relaxed === 'object') return { ...TIME_LIMIT, dualBound: script.relaxed.boundAt };
       return TIME_LIMIT;
     }
     solve.stages.push('later');
@@ -377,7 +378,7 @@ describe('autoBuild fallback (D5 10, slice A5)', () => {
       const { model } = build;
       const rand = rng(seed);
       const seeds: (readonly number[])[] = [choiceOfCurrent(model) as number[]];
-      for (let draw = 0; draw < 400 && seeds.length < 5; draw++) {
+      for (let draw = 0; draw < 20000 && seeds.length < 5; draw++) {
         const choice = model.events.map((ev) => Math.floor(rand() * ev.columns.length));
         if (assignmentOf(model, choice).feasible) seeds.push(choice);
       }
@@ -458,9 +459,17 @@ describe('autoBuild fallback (D5 10, slice A5)', () => {
 
   it('4 neverProven: a local-search lineup that meets the bound exactly is reported with status "gap" and gap 0, not "proven_optimal"', async () => {
     const w = tightWorld(1);
-    const r = await run(w, scripted({ restricted: 'current-incumbent', relaxed: 'bound', later: 'time-limit' }));
+    // The local search stops at a local optimum below the real optimum (196.67). This fixture's is 192.17 = 11530 / 60 at the scale of 60 (D = 60 here
+    // from the tie groups of the field). The relaxed solve is scripted to give a dual bound of exactly that, which stands for a solver whose bound is that tight.
+    const FOUND = 11530;
+    const D = 60;
+    const r = await run(w, scripted({ restricted: 'current-incumbent', relaxed: { boundAt: FOUND }, later: 'time-limit' }));
     const p = proposalOf(r) as Proposal;
     expect(p.method).toBe('local-search');
+    // The expected objective is fixed here, not read from the run: the proposal must score it, and whole-meet `scoreMeet` must agree.
+    expect(p.evaluation.objective).toBeCloseTo(FOUND / D, 9);
+    expect(independentOwn(w, p)).toBeCloseTo(FOUND / D, 9);
+    expect(r.proof.upperBound as number).toBeCloseTo(FOUND / D, 9);
     expect(r.proof.gap).toBe(0);
     expect(r.proof.bestFound).toBe(r.proof.upperBound);
     expect(r.proof.status).toBe('gap');
@@ -635,8 +644,9 @@ describe('autoBuild fallback (D5 10, slice A5)', () => {
       const kinds = new Set<string>();
       for (const d of build.model.derived) {
         kinds.add(d.kind);
-        if (d.kind === 'sum' || d.kind === 'excess' || d.kind === 'any') expect(Math.abs((derived.columns[d.name] as number) - (columns[d.name] as number)), `${mode} ${d.name}`).toBe(0);
-        if (d.kind === 'diver') expect(derived.columns[d.name] as number, d.name).toBeGreaterThanOrEqual(columns[d.name] as number);
+        // The solver reports integers with float noise (1e-16 seen on a board world), so the match is to 1e-9, not exact.
+        if (d.kind === 'sum' || d.kind === 'excess' || d.kind === 'any') expect(Math.abs((derived.columns[d.name] as number) - (columns[d.name] as number)), `${mode} ${d.name}`).toBeLessThan(1e-9);
+        if (d.kind === 'diver') expect(derived.columns[d.name] as number, d.name).toBeGreaterThanOrEqual((columns[d.name] as number) - 1e-9);
       }
       expect(build.model.derived.some((d) => d.kind === 'sum' && d.name.startsWith('g')), `${mode}: the world has a race count that differs by column (a g row)`).toBe(true);
       expect(build.model.derived.some((d) => d.kind === 'diver'), `${mode}: the world has a diver row`).toBe(true);

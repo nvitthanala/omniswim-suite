@@ -806,6 +806,30 @@ function overLoadIdle(): Fx {
   };
 }
 
+/**
+ * Size 2 (6 thirds), a cap of one scorer per team and event removed from the places. Pinned: p1 (FREE 47.00, entered, 3 thirds) and m (a slow diver, 24000,
+ * no entry now: a rostered swimmer with no entry is 3 thirds). Roster {p1, m} is 6 thirds: full. d (28000, free) is the fastest diver, ahead of the three rival
+ * divers (25000 to 26000). By the strict rule (D5 4.4) d can join only if m enters the board too: m with only a dive is 1 third, so {p1, m, d} is 5 thirds,
+ * and m's dive entry is over the cap (d is faster), so it scores nothing. It is the one entry that makes room.
+ */
+function diveFill(): Fx {
+  const r = rivalR();
+  const board: Spec[] = ['rd1', 'rd2', 'rd3'].map((id, i) => ({ id, team: 'R', times: { [DIVE]: 25000 + i * 500 } }));
+  const specs: Spec[] = [
+    { id: 'p1', team: 'A', times: { [FREE]: 4700 } },
+    { id: 'm', team: 'A', times: { [DIVE]: 24000 } },
+    { id: 'd', team: 'A', times: { [DIVE]: 28000 } },
+    ...r.specs,
+    ...board,
+  ];
+  return {
+    model: buildModel(specs, [FREE, BACK, DIVE]),
+    lineup: lineup(ind('A', 'p1', FREE), ...r.entries, ...board.map((b) => ind('R', b.id, DIVE))),
+    tags: [...tags('A', ['p1', 'm']), ...r.tags, ...tags('R', board.map((b) => b.id))],
+    rules: rulesOf({ size: 2, maxTotal: 2, cap: { cap: 1, overCap: 'removed-from-consideration' } }),
+  };
+}
+
 const SEEDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 describe('slice A9 roster swaps', () => {
@@ -820,9 +844,14 @@ describe('slice A9 roster swaps', () => {
       const fixed = await autoBuild(request(fx), nodeMipSolve());
       expect(fixed.proof.status, `seed ${seed}`).toBe('proven_optimal');
       expect(objectiveOf(fixed), `seed ${seed} fixed`).toBeCloseTo(bestFixed, 9);
+      // The fewest-changes tie-break is exact too (the column prune keeps every column a fewest-changes lineup needs).
+      const fewest = (rows: readonly { own: number; changes: number }[], best: number): number => Math.min(...rows.filter((r) => r.own >= best - 1e-9).map((r) => r.changes));
+      const changesOf = (r: AutoBuildResult): number => (r.kind === 'improved' ? r.proposal.changeCount : 0);
+      expect(changesOf(fixed), `seed ${seed} fixed changes`).toBe(fewest(fixedRows, bestFixed));
       const flagged = await autoBuild(swaps(fx), nodeMipSolve());
       expect(flagged.proof.status, `seed ${seed}`).toBe('proven_optimal');
       expect(objectiveOf(flagged), `seed ${seed} swaps`).toBeCloseTo(bestSwap, 9);
+      expect(changesOf(flagged), `seed ${seed} swaps changes`).toBe(fewest(swapRowsAll, bestSwap));
       if (bestSwap > bestFixed) better++;
     }
     expect(better).toBeGreaterThan(2);
@@ -859,9 +888,6 @@ describe('slice A9 roster swaps', () => {
     for (const seed of [...SEEDS, 12, 13]) {
       const fx = world(seed);
       const rows = swapRows(`w${seed}`, fx, true);
-      // A numeric per-event cap prunes the columns that hold two own scorers (AutoBuildProof: the tie-break is minimal within the columns built), so
-      // the fewest-changes tie-break is exact only without one (it reproduces with the flag off: test 3b). With a cap the proposal still reaches the target and needs at least the fewest.
-      const exact = Math.floor(seed / 2) % 3 === 0;
       const current = ownOf(fx, fx.lineup, fx.tags);
       const above = [...new Set(rows.map((r) => r.own).filter((o) => o > current))].sort((a, b) => a - b);
       if (above.length === 0) continue;
@@ -873,8 +899,9 @@ describe('slice A9 roster swaps', () => {
         expect(result.kind, label).toBe('improved');
         const p = proposalOf(result);
         if (p === null) continue;
-        if (exact) expect(p.changeCount, label).toBe(fewest);
-        else expect(p.changeCount, label).toBeGreaterThanOrEqual(fewest);
+        // Equal to the brute force with or without a numeric cap, and so the proven label is true (the column prune keeps every column a fewest-changes lineup needs).
+        expect(p.changeCount, label).toBe(fewest);
+        if (result.proof.status === 'proven_optimal') expect(result.proof.bestFound, label).toBe(fewest);
         expect(p.evaluation.ownPoints, label).toBeGreaterThanOrEqual(points);
         expect(p.changeCount, label).toBe(p.rosterAdds.length + p.rosterRemoves.length + p.entryChanges.length);
         if (p.rosterRemoves.length > 0) sawRemoval = true;
@@ -885,14 +912,13 @@ describe('slice A9 roster swaps', () => {
     expect(sawRemoval).toBe(true);
   }, 600_000);
 
-  it('3b goalSeekWithoutFlag: the same sweep with the roster fixed, at size 3 (no swap needed), matches the brute force without a numeric cap and never beats it with one', async () => {
-    // Pre-existing (slice A6), not a swap effect: with a numeric per-event cap the column prune drops a column that holds two own scorers, so the fewest-changes
-    // tie-break can report one more change than the brute force finds, with a `proven_optimal` status. It reproduces here with the flag off.
+  it('3b goalSeekWithoutFlag: the same sweep with the roster fixed, at size 3 (no swap needed), equals the brute force with and without a numeric cap', async () => {
+    // Was a false proven label (follow-up A6-goalseek-proven-overstated): the column prune dropped a column that holds an over-cap entry the current lineup already has,
+    // so the fewest-changes tie-break reported one more change than the brute force, with a `proven_optimal` status. It reproduced here with the flag off.
     let checked = 0;
     for (const seed of [0, 1, 2, 3, 6, 7, 8, 9]) {
       const fx = world(seed, 3);
       const rows = swapRows(`g${seed}-3`, fx, false);
-      const exact = Math.floor(seed / 2) % 3 === 0;
       const current = ownOf(fx, fx.lineup, fx.tags);
       const above = [...new Set(rows.map((r) => r.own).filter((o) => o > current))].sort((a, b) => a - b);
       if (above.length === 0) continue;
@@ -901,8 +927,9 @@ describe('slice A9 roster swaps', () => {
         const fewest = Math.min(...rows.filter((r) => r.own >= points).map((r) => r.changes));
         const label = `seed ${seed} target ${points}`;
         expect(result.kind, label).toBe('improved');
-        if (exact) expect(proposalOf(result)?.changeCount, label).toBe(fewest);
-        else expect(proposalOf(result)?.changeCount as number, label).toBeGreaterThanOrEqual(fewest);
+        expect(proposalOf(result)?.changeCount, label).toBe(fewest);
+        expect(result.proof.status, label).toBe('proven_optimal');
+        expect(result.proof.bestFound, label).toBe(fewest);
         checked++;
       }
     }
@@ -1459,4 +1486,23 @@ describe('slice A9 restore, delta review', () => {
       return { status: 'Time limit reached', objective: 0, columns: {}, incumbent: { objective: run.objective, columns: run.columns }, dualBound: free.objective + slack };
     };
   }
+
+  it('28 pruneKeepsDivingFill: with a cap of 1 on the board and a binding team size, a non-scoring dive entry that turns a rostered swimmer into a diver is kept, so the lineup that needs it is found and the label is true', async () => {
+    const fx = diveFill();
+    const result = await autoBuild(request(fx), nodeMipSolve());
+    // The oracle is scoreMeet. Every legal choice of who enters the board (strict weight written out): {} 3 + 3 thirds; m alone 3 + 1; d alone 3 + 3 + 1 (illegal);
+    // m and d 3 + 1 + 1.
+    const own = (lines: readonly LineupEntry[], extra: readonly string[]): number => ownOf(fx, lineup(...fx.lineup.entries, ...lines), [...fx.tags, ...tags('A', extra)]);
+    const current = own([], []);
+    const mAlone = own([ind('A', 'm', DIVE)], []);
+    const both = own([ind('A', 'm', DIVE), ind('A', 'd', DIVE)], ['d']);
+    expect(both).toBeGreaterThan(Math.max(current, mAlone));
+    expect(result.kind).toBe('improved');
+    expect(objectiveOf(result)).toBe(both);
+    expect(result.proof.status).toBe('proven_optimal');
+    const p = proposalOf(result);
+    expect(p?.rosterAdds.map((x) => x.swimmerId)).toEqual(['d']);
+    expect(p?.lineup.entries.filter((e) => e.kind === 'individual' && e.teamId === 'A' && e.eventKey === DIVE).map((e) => e.kind === 'individual' && e.swimmerId).sort()).toEqual(['d', 'm']);
+    expect(p?.changeCount).toBe(3);
+  }, 60_000);
 });

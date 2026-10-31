@@ -322,10 +322,13 @@ describe('autoBuild (D5, slice A7: robust)', () => {
       ];
       return { model: buildModel(specs, [E1]), lineup: lineup(ind('A', 'F', E1), ind('B', 'R1', E1), ind('D', 'R2', E1)), tags: [...tags('A', ['F', 'G']), ...tags('B', ['R1']), ...tags('D', ['R2'])], rules: rulesOf({ cap: 1 }) };
     };
-    // The control: F has three swims, a spread of 49.00, and G replaces him.
+    // The control: F has three swims, a spread of 49.00, so his entry is not held. G beats him under the cap of 1, which takes F's entry out of the
+    // places. The fewest-changes tie-break then keeps F's entry (dropping it is a second change that buys nothing): G is added, F stays.
     const control = await autoBuild(request(make([4900, 4900, 4900])), nodeMipSolve());
     expect(control.kind).toBe('improved');
-    expect(control.kind === 'improved' && entered(control.proposal.lineup)).toEqual(['G']);
+    expect(control.kind === 'improved' && entered(control.proposal.lineup)).toEqual(['F', 'G']);
+    expect(control.kind === 'improved' && control.proposal.changeCount).toBe(1);
+    expect(control.proof.searchSpace.frozenPairs).toEqual([]);
     // Frozen: F has two swims, so his entry stays. G is not frozen, so he may be added beside F: the cap of 1 removes F's entry from the places
     // (F is the slower of the two), G takes 2nd (17) and F's entry is still in the lineup. A column prune that ignored the frozen entry would miss this.
     const frozen = await autoBuild(request(make([4900, 4900])), nodeMipSolve());
@@ -518,9 +521,11 @@ describe('autoBuild (D5, slice A7: robust)', () => {
     expect(withV.kind).toBe('improved');
     if (withV.kind !== 'improved') return;
     expect(withV.current).toMatchObject({ objective: 15, robustOwnPoints: 15, ownPoints: 20 });
-    expect(withV.proposal.evaluation).toMatchObject({ objective: 16, robustOwnPoints: 16, ownPoints: 17 });
+    // C is added and V's entry stays (one change): by the robust seeds C is ahead of V and V is over the cap, so the objective is 16. By the normal seeds
+    // V is ahead and keeps his 20 points, so the lineup as built scores 20 and the two numbers differ on purpose.
+    expect(withV.proposal.evaluation).toMatchObject({ objective: 16, robustOwnPoints: 16, ownPoints: 20 });
+    expect(withV.proposal.changeCount).toBe(1);
     expect(withV.proposal.evaluation.objective).toBeGreaterThan(withV.current.objective);
-    expect(withV.proposal.evaluation.ownPoints).toBeLessThan(withV.current.ownPoints);
     const own = await autoBuild(request(volatile('V'), { objective: { kind: 'max-own' } }), nodeMipSolve());
     expect(own).toMatchObject({ kind: 'unchanged', reason: 'proven_no_better' });
     // C is entered: robust mode finds nothing better and proves it, though V would add 3 normal points.

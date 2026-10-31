@@ -416,10 +416,9 @@ describe('autoBuild (D5, slice A1)', () => {
         expect(ownPoints(again), `seed ${seed}`).toBeCloseTo(brute.best, 9);
         expect(result.proposal.evaluation.ownPoints).toBeCloseTo(ownPoints(again), 9);
         // Among the optimal lineups the proposal changes the fewest entries and roster spots (the tie-break, D5 4.9).
-        // A per-event cap of 1 with removal prunes the columns that hold more than one swimmer (D5 3.3), so a joining swimmer cannot
-        // keep a dominated current entry: the tie-break is then minimal only within the pruned columns, never below the brute force.
-        if (Math.floor(seed / 2) % 3 === 1) expect(result.proposal.changeCount, `seed ${seed}`).toBeGreaterThanOrEqual(brute.minChanges);
-        else expect(result.proposal.changeCount, `seed ${seed}`).toBe(brute.minChanges);
+        // Also with a per-event cap of 1 with removal: the column prune drops only a column that another column dominates (a swimmer who is not
+        // entered now and is over the cap), so the tie-break is exact (follow-up A6-goalseek-proven-overstated).
+        expect(result.proposal.changeCount, `seed ${seed}`).toBe(brute.minChanges);
       } else if (result.kind === 'unchanged') {
         expect(result.reason).toBe('proven_no_better');
       }

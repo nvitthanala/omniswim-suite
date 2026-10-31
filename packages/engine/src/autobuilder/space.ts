@@ -427,7 +427,10 @@ export class Space {
     // A removed over-cap entry still races, and in a split heat it moves other entries between heats: with load rows no column is
     // dominated by dropping it, so a split event keeps every column.
     const split = this.problem.support.load !== null && scheduledOf(this.problem.support.load.schedule, es.event.eventKey, es.event.gender)?.format.kind === 'timed-final-split';
-    const pruneAt = cap !== null && cap.overCap === 'removed-from-consideration' && !split ? cap.cap : Infinity;
+    // A dive entry that is removed from the places still changes the strict diver weight (D5 4.4): a rostered swimmer whose only entry is a dive is a
+    // third of a spot, and without it a whole one. With a team size the column that keeps it can be the only feasible one, so a board is never pruned.
+    const board = es.event.kind === 'diving' && this.problem.support.size !== 'unlimited';
+    const pruneAt = cap !== null && cap.overCap === 'removed-from-consideration' && !split && !board ? cap.cap : Infinity;
     const keyOf = (members: readonly SwimmerId[]): string => members.join('\u0001');
     const seen = new Set<string>();
     const columns: Column[] = [];
@@ -442,9 +445,12 @@ export class Space {
     const stays = new Set([...es.frozenIn, ...es.forced.filter((id) => this.problem.frozenHeld.has(pairKey(id, es.event.eventKey)))]);
     for (let mask = 0; mask < 1 << cands.length; mask++) {
       const members = [...cands.filter((_, i) => (mask >> i) & 1), ...es.frozenIn].sort(cmp);
-      // Dropping an over-cap member only dominates when he can be dropped: a frozen entry stays (D5 5.4), and a held free entry is
-      // dropped only with his roster place. At least (droppable members - cap) droppable members are over the cap, so the test counts those.
-      if (members.filter((id) => !stays.has(id)).length <= pruneAt) add(members);
+      // A column is pruned only when another column provably does at least as well. An entry over the cap is removed from the places, so it adds no
+      // points and moves nobody. The column without it holds the same points and races less, and it changes less when the swimmer has no current entry
+      // here (entering him is a change, not entering him is not). So a member who has no current entry in the event and can be dropped (not frozen,
+      // D5 5.4, and not held) is dominated when he is over the cap. At most `cap` members score, so more than `cap` such members means one is over it.
+      // A member with a current entry is never counted, a free swimmer's too: with his roster place his entry is kept, and dropping it is a change.
+      if (members.filter((id) => !stays.has(id) && !this.problem.currentEntry.has(pairKey(id, es.event.eventKey))).length <= pruneAt) add(members);
     }
     add(es.currentColumn);
     columns.sort((a, b) => cmp(keyOf(a.members), keyOf(b.members)));
