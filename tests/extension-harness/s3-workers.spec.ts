@@ -74,12 +74,68 @@ interface Harness {
   panel(): { accepted: number; rejected: number; pings: number } | null;
   seedAutoBuild(snapshot: unknown, ownTeamId: string, scorerIds: readonly string[]): Promise<string>;
   lineupCount(): Promise<number>;
+  clearSetting(key: 'cutCloseThresholdPct' | 'theme' | 'accent'): Promise<void>;
   lineupIds(): Promise<readonly string[]>;
   storeCounts(): Promise<Readonly<Record<string, number>>>;
   deleteLineupExternally(lineupId: string): Promise<void>;
   workerStarts(): readonly string[];
 }
 type WithHarness = { osxHarness: Harness };
+
+/**
+ * What a page shows that a coach cannot read or reach: text under 4.5:1 against its effective background (3:1 for large text), and a page or the open
+ * tab panel that scrolls sideways. Runs inside the page or frame. Disabled controls and hidden elements are skipped.
+ */
+const VISUAL_AUDIT = (): { low: string[]; sideways: string[] } => {
+  type Rgba = { r: number; g: number; b: number; a: number };
+  const parse = (value: string): Rgba | null => {
+    const srgb = /^color\(srgb ([^)]+)\)$/.exec(value);
+    if (srgb) {
+      const [rgb = '', alpha = '1'] = (srgb[1] ?? '').split('/');
+      const [r = 0, g = 0, b = 0] = rgb.trim().split(/\s+/).map(Number);
+      return { r: r * 255, g: g * 255, b: b * 255, a: Number(alpha) };
+    }
+    const m = /^rgba?\(([^)]+)\)$/.exec(value);
+    if (!m) return null;
+    const [r = 0, g = 0, b = 0, a = 1] = (m[1] ?? '').split(/[\s,/]+/).filter(Boolean).map(Number);
+    return { r, g, b, a };
+  };
+  const over = (top: Rgba, under: Rgba): Rgba => ({ r: top.r * top.a + under.r * (1 - top.a), g: top.g * top.a + under.g * (1 - top.a), b: top.b * top.a + under.b * (1 - top.a), a: 1 });
+  const lum = (c: Rgba): number => { const f = (v: number): number => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const backdrop = (el: Element): Rgba => {
+    const chain: Rgba[] = [];
+    for (let n: Element | null = el; n; n = n.parentElement) { const c = parse(getComputedStyle(n).backgroundColor); if (c && c.a > 0) chain.push(c); if (c && c.a === 1) break; }
+    let acc: Rgba = { r: 255, g: 255, b: 255, a: 1 };
+    for (const c of chain.reverse()) acc = over(c, acc);
+    return acc;
+  };
+  const low: string[] = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = (node.textContent ?? '').trim();
+    const el = node.parentElement;
+    if (!text || !el || el.closest('[hidden], script, style, title, .osx-score-hidden') || (el as HTMLButtonElement).disabled) continue;
+    const box = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    if (box.width === 0 || box.height === 0 || style.visibility === 'hidden' || style.display === 'none') continue;
+    const fg = parse(el instanceof SVGElement ? style.fill : style.color);
+    if (!fg) continue;
+    const bg = backdrop(el);
+    const fgOver = over(fg, bg);
+    const [l1, l2] = [lum(fgOver), lum(bg)].sort((a, b) => b - a) as [number, number];
+    const ratio = (l1 + 0.05) / (l2 + 0.05);
+    const px = parseFloat(style.fontSize);
+    const large = px >= 24 || (px >= 18.66 && Number(style.fontWeight) >= 700);
+    if (ratio < (large ? 3 : 4.5)) low.push(`${ratio.toFixed(2)} "${text.slice(0, 28)}" <${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : ''}>`);
+  }
+  const sideways: string[] = [];
+  if (document.documentElement.scrollWidth > document.documentElement.clientWidth + 1) {
+    const wide = [...document.body.querySelectorAll('*')].filter((el) => el.getBoundingClientRect().right > document.documentElement.clientWidth + 1 && getComputedStyle(el).position !== 'fixed');
+    sideways.push(`page: ${wide.slice(0, 3).map((el) => `<${el.tagName.toLowerCase()}${typeof el.className === 'string' && el.className ? '.' + el.className.split(' ')[0] : ''}> right ${Math.round(el.getBoundingClientRect().right)}`).join(', ')}`);
+  }
+  for (const panel of document.querySelectorAll('.osx-tabpanel:not([hidden]), .osx-hostpanel')) if (panel.scrollWidth > panel.clientWidth + 1) sideways.push(panel.getAttribute('data-testid') ?? 'panel');
+  return { low: [...new Set(low)].slice(0, 8), sideways };
+};
 
 /** Size the page, read the expanded docked panel and the fixture Options button, and refuse a panel outside the viewport, over the button, or no larger than the compact one. */
 async function expandedGeometry(page: Page, width: number, compact: { width: number; height: number } | null): Promise<string> {
@@ -153,6 +209,8 @@ interface Result {
 test.describe('S3 workers and the docked iframe', () => {
   for (const variant of VARIANTS) {
     test(variant.name, async () => {
+      // Variant 1 also runs the record 14 visual sweep, which needs more than the 120 s default.
+      if (variant.csp === null) test.setTimeout(360_000);
       const testInfo = test.info();
       const userDataDir = mkdtempSync(join(tmpdir(), 'omniswim-s3-profile-'));
       let context: BrowserContext | undefined;
@@ -161,7 +219,7 @@ test.describe('S3 workers and the docked iframe', () => {
         try {
           results.set(n, { ok: true, detail: await body() });
         } catch (e) {
-          results.set(n, { ok: false, detail: e instanceof Error ? e.message.split('\n').filter((line) => line.trim() !== '').slice(0, 5).join(' | ') : String(e) });
+          results.set(n, { ok: false, detail: e instanceof Error ? e.message.split('\n').filter((line) => line.trim() !== '').slice(0, 14).join(' | ') : String(e) });
         }
         const r = results.get(n)!;
         console.log(`[s3] ${variant.name} | ${n}. ${label}: ${r.ok ? 'PASS' : 'FAIL'} | ${r.detail}`);
@@ -674,6 +732,116 @@ test.describe('S3 workers and the docked iframe', () => {
           } finally { await tabPage.close(); }
         });
 
+        await record(14, 'F visual sweep: every view in light, dark and a custom accent, with a contrast and sideways-scroll audit', async () => {
+          if (variant.csp !== null) return 'swept in the first variant only: the views do not depend on the page CSP';
+          if (!frame) throw new Error('no iframe');
+          const dir = process.env.OSX_SHOT_DIR ?? join(tmpdir(), 'omniswim-f1-screenshots');
+          mkdirSync(dir, { recursive: true });
+          await page.setViewportSize({ width: 1280, height: 800 });
+          const frameEl = page.locator('[data-osx-host] iframe');
+          const pagePanel = page.locator('[data-osx-page-panel]');
+          const putSetting = (key: 'theme' | 'accent', value: string): Promise<unknown> =>
+            frame!.evaluate(([k, v]) => (globalThis as unknown as WithHarness).osxHarness.putSetting(k as 'theme', v), [key, value] as const);
+          const findings: string[] = [];
+          let shots = 0;
+          const audit = async (where: Frame | Page, label: string): Promise<void> => {
+            const found = await where.evaluate(VISUAL_AUDIT);
+            for (const item of found.low) findings.push(`${label}: contrast ${item}`);
+            for (const item of found.sideways) findings.push(`${label}: scrolls sideways (${item})`);
+          };
+          const shoot = async (name: string, take: () => Promise<Buffer>): Promise<void> => {
+            try {
+              writeFileSync(join(dir, name), await take());
+            } catch (cause) {
+              throw new Error(`screenshot ${name}: ${cause instanceof Error ? (cause.message.split('\n')[0] ?? '') : String(cause)}`);
+            }
+            shots += 1;
+          };
+
+          // Two snapshots of the meet, so the tab can compare them.
+          await frame.locator('[data-testid="tab-save"]').click();
+          for (const name of ['Sweep earlier', 'Sweep later']) {
+            await frame.locator('[data-testid="snapshot-name"]').fill(name);
+            await frame.locator('[data-testid="snapshot-save"]').click();
+            await expect(frame.locator('[data-testid="snapshot-status"]')).toHaveAttribute('data-phase', 'saved', { timeout: 90_000 });
+          }
+
+          const tabPage = await context!.newPage();
+          const tabLog: string[] = [];
+          tabPage.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') tabLog.push(m.text().slice(0, 160)); });
+          tabPage.on('pageerror', (e) => tabLog.push(`pageerror ${e.message.slice(0, 160)}`));
+          try {
+            await tabPage.setViewportSize({ width: 1280, height: 800 });
+            await tabPage.goto(`${extensionBase}/dashboard.html?host=tab`);
+            await expect(tabPage.locator('[data-testid="host-shell"]')).toBeVisible({ timeout: 15_000 });
+            const variants = [
+              { id: 'light', theme: 'light', accent: false },
+              { id: 'dark', theme: 'dark', accent: false },
+              { id: 'light-accent', theme: 'light', accent: true },
+              { id: 'dark-accent', theme: 'dark', accent: true },
+            ] as const;
+            for (const v of variants) {
+              // Earlier records left an accent in the store: the plain variants start without one.
+              if (v.accent) await putSetting('accent', '#aa5500');
+              else await frame.evaluate(() => (globalThis as unknown as WithHarness).osxHarness.clearSetting('accent'));
+              await putSetting('theme', v.theme);
+              for (const target of [frame.locator('html'), tabPage.locator('html'), pagePanel]) await expect(target).toHaveAttribute('data-osx-theme', v.theme, { timeout: 10_000 });
+              // Docked: five tabs at the compact and the expanded size.
+              for (const size of ['compact', 'expanded'] as const) {
+                const expanded = (await frameEl.getAttribute('data-osx-size')) === 'expanded';
+                if ((size === 'expanded') !== expanded) await frame.locator('[data-testid="size-toggle"]').click();
+                await expect(frameEl).toHaveAttribute('data-osx-size', size, { timeout: 10_000 });
+                for (const id of ['score', 'chart', 'build', 'plan', 'save']) {
+                  await frame.locator(`[data-testid="tab-${id}"]`).click();
+                  await expect(frame.locator(`[data-testid="panel-${id}"]`)).toBeVisible();
+                  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+                  await shoot(`docked-${id}-${size}-${v.id}-f1.png`, () => frameEl.screenshot());
+                  await audit(frame, `docked ${id} ${size} ${v.id}`);
+                }
+              }
+              await frame.locator('[data-testid="size-toggle"]').click();
+              await expect(frameEl).toHaveAttribute('data-osx-size', 'compact', { timeout: 10_000 });
+              await shoot(`pagepanel-${v.id}-f1.png`, async () => {
+                // An element screenshot of the host fails on its closed shadow root: clip the page to the host's box instead.
+                await pagePanel.scrollIntoViewIfNeeded();
+                const box = await pagePanel.boundingBox();
+                if (!box) throw new Error('the page panel has no box');
+                return page.screenshot({ clip: { ...box, width: Math.min(box.width, 340) } });
+              });
+              // Tab: Meets with a report and with a comparison, Presets, Settings.
+              await tabPage.locator('[data-testid="tab-meets"]').click();
+              await tabPage.locator('[data-testid="record-open"]').first().click();
+              await expect(tabPage.locator('[data-testid="record-view"]')).toContainText('(you)', { timeout: 15_000 });
+              await shoot(`tab-meets-report-${v.id}-f1.png`, () => tabPage.screenshot({ fullPage: true }));
+              await audit(tabPage, `tab meets report ${v.id}`);
+              const picks = tabPage.locator('[data-testid="diff-pick"]');
+              await picks.nth(0).check();
+              await picks.nth(1).check();
+              await expect(tabPage.locator('[data-testid="diff-view"]')).toBeVisible({ timeout: 15_000 });
+              await shoot(`tab-meets-diff-${v.id}-f1.png`, () => tabPage.screenshot({ fullPage: true }));
+              await audit(tabPage, `tab meets diff ${v.id}`);
+              await picks.nth(0).uncheck();
+              await picks.nth(1).uncheck();
+              for (const id of ['presets', 'settings']) {
+                await tabPage.locator(`[data-testid="tab-${id}"]`).click();
+                await expect(tabPage.locator(`[data-testid="${id === 'presets' ? 'presets-slot' : 'settings'}"]`)).toBeVisible();
+                await shoot(`tab-${id}-${v.id}-f1.png`, () => tabPage.screenshot({ fullPage: true }));
+                await audit(tabPage, `tab ${id} ${v.id}`);
+              }
+            }
+          } catch (cause) {
+            throw new Error(`${cause instanceof Error ? cause.message.split('\n').slice(0, 3).join(' ') : String(cause)} | tab console: ${tabLog.join(' ; ') || 'none'}`);
+          } finally {
+            await tabPage.close();
+          }
+          await putSetting('theme', 'light');
+          if (findings.length > 0) {
+            writeFileSync(join(dir, 'sweep-findings-f1.txt'), findings.join('\n'));
+            throw new Error(`${findings.length} findings, listed in sweep-findings-f1.txt: ${findings.slice(0, 4).join(' || ')}`);
+          }
+          return `${shots} screenshots in ${dir}, no contrast below 4.5:1 and no sideways scroll`;
+        });
+
         // Console problems the injection added: those on the simulator page that the baseline page lacks.
         const extra = consoleProblems.filter((m) => !baselineProblems.includes(m));
         console.log(
@@ -691,7 +859,7 @@ test.describe('S3 workers and the docked iframe', () => {
 
       const failed = [...results].filter(([, r]) => !r.ok).map(([n, r]) => `${n}: ${r.detail}`);
       expect(failed, 'failed assertions').toStrictEqual([]);
-      expect(results.size).toBe(13);
+      expect(results.size).toBe(14);
     });
   }
 });

@@ -3,6 +3,7 @@ import type { CutTag, MeetSwim, ScorerTag } from '@omniswim/engine';
 import type { RulePreset } from '@omniswim/engine';
 import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../shared/bridgeSchema';
+import { swimmerLabel, teamLabel } from '../shared/names';
 
 export interface ScorerTagScoringState {
   readonly scored: boolean;
@@ -62,8 +63,8 @@ export function panelCutTagsForModel(model: import('@omniswim/engine').MeetModel
     const estimated = estimateFolded.find((tag) => tag.kind === 'estimated-achieved');
     const converted = estimateFolded.find((tag) => tag.kind === 'converted');
     const estimateUnknown = estimateFolded.find((tag) => tag.kind === 'unknown');
-    const displayName = model.display?.swimmers[group.swimmerId]?.name ?? group.swimmerId;
-    const teamName = model.display?.teams[group.teamId]?.name ?? group.teamId;
+    const displayName = swimmerLabel(group.swimmerId, model.display?.swimmers[group.swimmerId]?.name);
+    const teamName = teamLabel(group.teamId, model.display?.teams[group.teamId]?.name);
     const estimateText = estimated?.kind === 'estimated-achieved' ? `${formatHundredths(estimated.convertedHundredths)} · ${describeTag(estimated)}`
       : converted ? 'No cut achieved (converted LCM time)' : estimateUnknown?.kind === 'unknown' ? `Unknown: ${estimateUnknown.detail}` : 'No converted LCM swim';
     const provenance = estimated?.kind === 'estimated-achieved' && estimated.basis.method === 'lcm_scy_tool_derived'

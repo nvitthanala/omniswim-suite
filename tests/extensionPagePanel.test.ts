@@ -57,4 +57,14 @@ describe('in-page extension panel', () => {
     expect((f.root as ShadowRoot).querySelector('[data-osx-compatibility-error]')?.textContent).toBe('Simulator rejected settings write');
     f.panel.disconnect();
   });
+
+  it('sets its own font inside the closed root, on the panel and not only on the host, so a page rule for the host cannot reach it', () => {
+    const f = fixture();
+    const css = (f.root as ShadowRoot).querySelector('style')?.textContent ?? '';
+    // The dashboard's stack is --osx-font (shared/theme.ts). The panel element carries the font, so the host's own style cannot replace it.
+    expect(css).toMatch(/\.panel\{font:14px\/1\.45 var\(--osx-font,/);
+    expect(css).toMatch(/--osx-font:/);
+    f.panel.disconnect();
+  });
 });
+

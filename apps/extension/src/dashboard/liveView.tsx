@@ -14,6 +14,7 @@ import { readScorerOwnTeam, readSessionPreset } from '../storage';
 import type { StorageRepo } from '../storage';
 import type { UndoStack } from '../storage';
 import { meetKeyForSnapshot } from './meetKey';
+import { teamLabel } from '../shared/names';
 import { resolveRival } from './rival';
 import { readRival } from './settingsStore';
 import { ScoreChart } from './ScoreChart';
@@ -29,7 +30,7 @@ export type View =
 
 export type ScoredView = Extract<View, { kind: 'scored' }>;
 
-const teamName = (snapshot: SimSnapshot, id: string): string => snapshot.teams.find((t) => String(t.id) === id)?.name ?? id;
+const teamName = (snapshot: SimSnapshot, id: string): string => teamLabel(id, snapshot.teams.find((t) => String(t.id) === id)?.name);
 
 /** What the docked panel says before there is a scored view. The Score tab shows the status; the other tabs say they wait for it. */
 export function WaitingNote({ view }: { view: View }): React.ReactElement {
@@ -99,7 +100,7 @@ export function ChartTab({ view, repoForMeet, expanded, active }: { view: Scored
     <section data-testid="chart">
       <ScoreChart progression={state.progression} ownTeamId={state.own} rivalTeamId={state.rival} teamNames={names} width={expanded ? 600 : 320} height={expanded ? 300 : 180} />
       <p className="osx-chart-note" data-testid="chart-rival">
-        {state.rival === null ? 'No rival: there is no other team.' : `Rival: ${names[state.rival] ?? state.rival} (${state.chosen ? 'your choice, set in Settings' : 'the team closest to you on points'}).`}
+        {state.rival === null ? 'No rival: there is no other team.' : `Rival: ${teamLabel(state.rival, names[state.rival])} (${state.chosen ? 'your choice, set in Settings' : 'the team closest to you on points'}).`}
       </p>
     </section>
   );

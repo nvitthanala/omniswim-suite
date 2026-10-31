@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Progression, TeamId } from '@omniswim/engine';
+import { teamLabel } from '../shared/names';
 
 export interface ScoreChartProps {
   progression: Progression;
@@ -68,7 +69,7 @@ export function ScoreChart({
   // Every team any step names, not only the first step's. A step that leaves a team out is reported below, and the team's line stops there.
   const teamIds = [...new Set(points.flatMap(point => Object.keys(point.totals)))] as TeamId[];
   const last = points[points.length - 1]!;
-  const nameOf = (id: TeamId): string => teamNames[id] ?? String(id);
+  const nameOf = (id: TeamId): string => teamLabel(String(id), teamNames[id]);
   const lastKnown = (id: TeamId): number | null => {
     for (let index = points.length - 1; index >= 0; index -= 1) {
       const value = totalAt(points[index]!, id);
@@ -197,7 +198,9 @@ export function ScoreChart({
           {missing.length > 4 ? `; and ${missing.length - 4} more` : ''}. A team's line stops where its total is missing. It is never drawn as 0.
         </p>
       )}
-      <table className="osx-score-hidden">
+      {/* A table grows to fit its text whatever its width, so the hidden box is a wrapper, not the table. */}
+      <div className="osx-score-hidden">
+      <table>
         <caption>Final team totals</caption>
         <thead>
           <tr><th>Team</th><th>Points</th></tr>
@@ -211,6 +214,7 @@ export function ScoreChart({
           ))}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }

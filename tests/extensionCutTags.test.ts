@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Window as HappyWindow } from 'happy-dom';
+import { swimmerLabel, teamLabel } from '../apps/extension/src/shared/names';
 import { panelCutTags, panelCutTagsForModel } from '../apps/extension/src/dashboard/scorerTagScoring';
 import { builtinLcmToScy, scyStatementFor } from '@omniswim/engine';
 import type { MeetModel } from '@omniswim/engine';
@@ -108,4 +109,28 @@ describe('extension cut tags', () => {
     expect(row?.estimated).toContain('no_conversion_available');
     expect(row?.estimatedIsEstimate).toBe(false);
   });
+
+  it('says a name is not loaded instead of showing a bare id as the name', () => {
+    const { snapshot } = buildSnapshot('A');
+    const outcome = adaptSimulatorSnapshot(snapshot, { meetKey: 'cut-test', snapshotId: 'fixture' });
+    if (outcome.kind !== 'ready') throw new Error('not ready');
+    const model = outcome.adapted.model;
+    const named = panelCutTagsForModel(model, undefined, 1);
+    expect(named.length).toBeGreaterThan(0);
+    // With the names present the rows carry them, unchanged.
+    expect(named.every((r) => !/name not loaded/.test(r.swimmerName) && !/name not loaded/.test(r.teamName))).toBe(true);
+    // With the display data gone, each row says the name is absent and keeps the id.
+    const { display: _display, ...bare } = model;
+    const rows = panelCutTagsForModel(bare as MeetModel, undefined, 1);
+    expect(rows.length).toBe(named.length);
+    for (const row of rows) {
+      expect(row.swimmerName).toBe(`Swimmer ${row.swimmerId} (name not loaded)`);
+      expect(row.teamName).toBe(`Team ${row.teamId} (name not loaded)`);
+    }
+    // A blank name counts as absent.
+    expect(swimmerLabel('148001', '  ')).toBe('Swimmer 148001 (name not loaded)');
+    expect(teamLabel('58', undefined)).toBe('Team 58 (name not loaded)');
+    expect(teamLabel('58', 'Henderson State University')).toBe('Henderson State University');
+  });
 });
+

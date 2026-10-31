@@ -9,6 +9,7 @@
  */
 import { createRoot } from 'react-dom/client';
 import * as React from 'react';
+import { swimmerLabel, teamLabel } from '../shared/names';
 import { installHarness } from './harness';
 import { listenForPanelPort, postPanelMessageSafely, readNonce } from './panelPort';
 import { bindTheme, createAccentSync } from '../shared/theme';
@@ -207,13 +208,13 @@ async function publishTagState(error?: string): Promise<void> {
     if (pendingSnapshot !== snapshot || !latestPanelPort) return;
     const scored = scoreScorerTags(snapshot, meetKey, selectedOwnTeam !== undefined, [...tags, ...suggestedTags(suggestions)] as ScorerTag[], rulePreset.found ? rulePreset.value : undefined);
       postPanelMessage({ kind: 'scorer-tag-state', meetKey,
-      teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })),
-      swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })),
+      teams: snapshot.teams.map(t => ({ id: String(t.id), name: teamLabel(String(t.id), t.name) })),
+      swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: swimmerLabel(String(s.id), s.display_name || s.name || undefined), gender: s.gender || 'Unknown' })),
       tags, ownTeamId: selectedOwnTeam, rulePresetRef, rulePreset: rulePreset.found ? rulePreset.value : undefined, rulePresetChoices: choices.map(c => ({ ref: c.ref, label: c.label })),
       scoringTeamSize: scored.scoringTeamSize, warnings: scored.warnings,
         suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey, (await readSetting(repo, 'cutCloseThresholdPct')) ?? 1), planner, sessionSchedule, ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
   } catch (cause) {
-    postPanelMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
+    postPanelMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: teamLabel(String(t.id), t.name) })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: swimmerLabel(String(s.id), s.display_name || s.name || undefined), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
   }
 }
 async function handleTagAction(action: ScorerTagActionMessage): Promise<void> {

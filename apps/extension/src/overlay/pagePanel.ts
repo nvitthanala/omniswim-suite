@@ -1,3 +1,4 @@
+import { swimmerLabel, teamLabel } from '../shared/names';
 import { simulatorSettingsFromRulePreset } from '@omniswim/swimcloud/browser';
 import type { ParityReport, SimulatorRuleSettings } from '@omniswim/swimcloud/browser';
 import type { CompleteRulePreset } from '@omniswim/engine';
@@ -32,7 +33,8 @@ export function autoBuildStatusText(message: AutoBuildStatusMessage): string {
   }
 }
 
-const css = tokenCss('.panel') + `:host{all:initial;color:var(--osx-fg,CanvasText);font:14px/1.45 system-ui,sans-serif}*{box-sizing:border-box}.panel{border:1px solid var(--osx-border,GrayText);border-radius:8px;background:var(--osx-bg,Canvas);padding:12px;min-width:220px;max-width:300px;color:var(--osx-fg,CanvasText)}.head{display:flex;justify-content:space-between;align-items:center;gap:12px}h2{font-size:16px;margin:0}button,select{font:inherit;color:inherit;background:var(--osx-bg,Canvas);border:1px solid var(--osx-border,GrayText);border-radius:5px;padding:4px 8px;cursor:pointer}.body[hidden]{display:none}.error{color:var(--osx-bad,Mark)}p{margin:10px 0 0}.group{border-top:1px solid var(--osx-border,GrayText);margin-top:10px;padding-top:8px}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;margin:6px 0}.row label{min-width:0}.row select{max-width:140px}.warning{background:var(--osx-warn-bg);color:var(--osx-warn-fg);padding:2px 5px;border-radius:4px}.cut-row{display:grid;grid-template-columns:minmax(55px,1fr) 1fr 1fr;gap:5px;margin:6px 0;font-size:12px}.cut-head{font-weight:600}.cut-tag{overflow-wrap:anywhere}`;
+// The font is set on `.panel`, inside the closed root. A rule on the host (`:host`) loses to the page's own rules for that element, so the page's serif would reach the panel.
+const css = tokenCss('.panel') + `:host{all:initial;color:var(--osx-fg,CanvasText);font:14px/1.45 system-ui,sans-serif}*{box-sizing:border-box}.panel{font:14px/1.45 var(--osx-font,system-ui,sans-serif);border:1px solid var(--osx-border,GrayText);border-radius:8px;background:var(--osx-bg,Canvas);padding:12px;min-width:220px;max-width:300px;color:var(--osx-fg,CanvasText)}.head{display:flex;justify-content:space-between;align-items:center;gap:12px}h2{font-size:16px;margin:0}button,select{font:inherit;color:inherit;background:var(--osx-bg,Canvas);border:1px solid var(--osx-border,GrayText);border-radius:5px;padding:4px 8px;cursor:pointer}.body[hidden]{display:none}.error{color:var(--osx-bad,Mark)}p{margin:10px 0 0}.group{border-top:1px solid var(--osx-border,GrayText);margin-top:10px;padding-top:8px}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;margin:6px 0}.row label{min-width:0}.row select{max-width:140px}.warning{background:var(--osx-warn-bg);color:var(--osx-warn-fg);padding:2px 5px;border-radius:4px}.cut-row{display:grid;grid-template-columns:minmax(55px,1fr) 1fr 1fr;gap:5px;margin:6px 0;font-size:12px}.cut-head{font-weight:600}.cut-tag{overflow-wrap:anywhere}`;
 
 function appendRulePresetPicker(doc: Document, scorer: HTMLElement, state: ScorerTagStateMessage, send: (action: PanelUiActionMessage) => void, apply: (settings: SimulatorRuleSettings | null) => void, applyStatus: string): void {
   const label = doc.createElement('label'); label.textContent = 'OmniSwim scoring rules';
@@ -77,7 +79,7 @@ type SuggestionResult = NonNullable<ScorerTagStateMessage['suggestions']>[number
 function renderSuggestion(doc: Document, state: ScorerTagStateMessage, result: SuggestionResult): HTMLElement {
   const summary = doc.createElement('p'); summary.dataset.osxSuggestion = '';
   if (result.kind === 'suggested') {
-    const names = result.swimmerIds.map(id => state.swimmers.find(s => s.id === id)?.name ?? id);
+    const names = result.swimmerIds.map(id => swimmerLabel(id, state.swimmers.find(s => s.id === id)?.name));
     summary.textContent = `Suggested: ${names.join(', ')} · ${result.points} points · ${result.spots.numerator}/${result.spots.denominator} spots · ${result.method}`;
   } else if (result.kind === 'absent') {
     summary.textContent = `Suggested roster unavailable: ${result.reason}`;
@@ -95,7 +97,7 @@ function renderCutTags(doc: Document, state: ScorerTagStateMessage | null, open:
   for (const teamId of [...new Set(rows.map(r => r.teamId))]) {
     const teamRows = rows.filter(r => r.teamId === teamId);
     const group = doc.createElement('div'); group.className = 'group';
-    const teamHeading = doc.createElement('strong'); teamHeading.textContent = teamRows[0]?.teamName ?? teamId; group.append(teamHeading);
+    const teamHeading = doc.createElement('strong'); teamHeading.textContent = teamLabel(teamId, teamRows[0]?.teamName); group.append(teamHeading);
     for (const eventKey of [...new Set(teamRows.map(r => r.eventKey))]) {
       const heading = doc.createElement('p'); heading.textContent = eventKey; group.append(heading);
       const header = doc.createElement('div'); header.className = 'cut-row cut-head';
@@ -117,7 +119,7 @@ function renderAthleteOutlook(doc: Document, state: ScorerTagStateMessage | null
   for (const item of planner.perSwimmer) {
     const swimmer = state?.swimmers.find(s => s.id === item.swimmerId);
     const group = doc.createElement('div'); group.className = 'group';
-    const heading = doc.createElement('strong'); heading.textContent = swimmer?.name ?? item.swimmerId; group.append(heading);
+    const heading = doc.createElement('strong'); heading.textContent = swimmerLabel(item.swimmerId, swimmer?.name); group.append(heading);
     if (item.sessions.length === 0) { const pending = doc.createElement('p'); pending.textContent = 'No scheduled sessions are available for this swimmer.'; group.append(pending); }
     for (const session of item.sessions) { const row = doc.createElement('p'); row.textContent = `Day ${session.session.day}, ${session.session.slot}: ${session.races} races · ${session.eventKeys.join(', ')}`; group.append(row); }
     details.append(group);

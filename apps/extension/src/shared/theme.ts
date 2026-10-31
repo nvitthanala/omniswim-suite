@@ -100,7 +100,8 @@ export const DARK_TOKENS: TokenSet = {
   '--osx-bg': 'Canvas',
   '--osx-surface': 'color-mix(in srgb, Canvas 92%, CanvasText)',
   '--osx-fg': 'CanvasText',
-  '--osx-fg-muted': 'GrayText',
+  // 72% of the text colour: GrayText is 3.9:1 on the dark surface, below the 4.5:1 a muted caption needs.
+  '--osx-fg-muted': 'color-mix(in srgb, CanvasText 72%, Canvas)',
   '--osx-border': 'color-mix(in srgb, Canvas 80%, CanvasText)',
   // The recorded Q15 accent, lightened with color-mix() so it reads on a dark surface.
   '--osx-accent': `color-mix(in srgb, ${Q15_ACCENT} 65%, CanvasText)`,

@@ -11,6 +11,7 @@
  * default tables below repeat `AUTOBUILD_DEFAULT_LIMITS` and `AUTOBUILD_DEFAULT_ROBUST`, and a test compares them.
  */
 import { requireComplete } from '@omniswim/engine';
+import { swimmerLabel, teamLabel } from '../shared/names';
 import type {
   AutoBuildLimits,
   AutoBuildObjective,
@@ -134,9 +135,9 @@ export async function readCoachTags(repo: StorageRepo, meetKey: string): Promise
   return rows.map((t) => ({ teamId: String(t.teamId) as TeamId, swimmerId: String(t.swimmerId) as ScorerTag['swimmerId'], role: t.role })).sort(byTeamSwimmer);
 }
 
-/** The text of a name lookup over the lineup display, falling back to the id. */
+/** The text of a name lookup over the lineup display. A missing name says so (`shared/names.ts`), never the bare id. */
 export function namesOf(display: { readonly swimmers: Readonly<Record<string, { readonly name: string }>>; readonly teams: Readonly<Record<string, { readonly name: string }>> } | undefined): Names {
-  return { swimmer: (id) => display?.swimmers[id]?.name ?? id, team: (id) => display?.teams[id]?.name ?? id };
+  return { swimmer: (id) => swimmerLabel(id, display?.swimmers[id]?.name), team: (id) => teamLabel(id, display?.teams[id]?.name) };
 }
 
 /**

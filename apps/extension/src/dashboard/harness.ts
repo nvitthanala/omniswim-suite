@@ -31,6 +31,8 @@ export interface OsxHarness {
   /** Create the setting, or update it at the stored `rev`. Returns the stored record. */
   putSetting<K extends HarnessSetting>(key: K, value: SettingsMap[K]): Promise<unknown>;
   getSetting(key: HarnessSetting): Promise<GetResult<'settings'>>;
+  /** Remove the setting row, so its default applies again. */
+  clearSetting(key: HarnessSetting): Promise<void>;
   /**
    * Store what an AutoBuilder run needs for a meet, as a coach would choose it: the own team, the built-in NSISC v5 rules and a scorer tag per swimmer.
    * Returns the meet key it wrote under.
@@ -76,6 +78,11 @@ export function installHarness(host: string, panel: PanelStats | null): OsxHarne
       const r = await repo();
       const current = await r.get('settings', key);
       return r.put('settings', { key, value } as Parameters<typeof r.put<'settings'>>[1], current.found ? current.value.rev : 'new');
+    },
+    async clearSetting(key) {
+      const r = await repo();
+      const current = await r.get('settings', key);
+      if (current.found) await r.delete('settings', key, current.value.rev);
     },
     async getSetting(key) {
       return (await repo()).get('settings', key);

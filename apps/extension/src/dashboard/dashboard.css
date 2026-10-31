@@ -27,7 +27,7 @@
   --osx-bg: Canvas;
   --osx-surface: color-mix(in srgb, Canvas 92%, CanvasText);
   --osx-fg: CanvasText;
-  --osx-fg-muted: GrayText;
+  --osx-fg-muted: color-mix(in srgb, CanvasText 72%, Canvas);
   --osx-border: color-mix(in srgb, Canvas 80%, CanvasText);
   --osx-accent: color-mix(in srgb, #1565C0 65%, CanvasText);
   --osx-accent-fg: Canvas;
@@ -103,7 +103,7 @@ body {
 .osx-ab-stale { margin: 6px 0; padding: 7px 9px; border: 2px solid var(--osx-fg); border-radius: var(--osx-radius); font-size: 12px; color: var(--osx-fg) !important; background: var(--osx-surface); }
 .osx-ab details summary { cursor: pointer; font-size: 12px; }
 @media (prefers-reduced-motion: no-preference) { .osx-ab button { transition: background-color 120ms ease-out; } }
-.osx-score-chart { color: var(--osx-fg); }
+.osx-score-chart { color: var(--osx-fg); position: relative; }
 .osx-score-order, .osx-score-empty { color: var(--osx-fg); font-size: 12px; }
 .osx-score-chart svg { display: block; max-width: 100%; overflow: visible; }
 .osx-score-grid line { stroke: var(--osx-border); stroke-width: 1; }
@@ -111,6 +111,13 @@ body {
 .osx-score-end-label { font-size: 11px; }
 .osx-score-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0; padding: 0; list-style: none; font-size: 12px; }
 .osx-score-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+/* Plan tab (sessionPlannerEditor.tsx): each label sits above its own control, so nothing wraps beside the wrong neighbour at 360 px. */
+.osx-planner label { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin: 8px 0; font-size: 12px; color: var(--osx-fg); }
+.osx-planner select, .osx-planner input[type="number"] { max-width: 100%; }
+.osx-planner ol { margin: 8px 0; padding-left: 20px; }
+.osx-planner li { margin: 0 0 12px; }
+.osx-planner li > button { margin: 2px 4px 2px 0; }
+.osx-shell input[type="number"] { color: var(--osx-fg); background: var(--osx-surface); border: 1px solid var(--osx-border); border-radius: 5px; padding: 4px 6px; width: 7em; }
 /* A line is stroke only: `fill: none` here, and no rule gives a line a fill. A label is fill only (text has no outline). */
 .osx-score-line { fill: none; }
 .osx-score-line--own { stroke: var(--osx-accent); stroke-width: 3; }
@@ -166,6 +173,7 @@ body {
 @media (max-width: 560px) { .osx-shell--tab { grid-template-columns: 1fr; } .osx-hostnav { border-inline-end: 0; border-bottom: 1px solid var(--osx-border); } .osx-sidenav { flex-direction: row; } }
 
 .osx-chart-note { font-size: 12px; }
+.osx-save a { white-space: nowrap; }
 .osx-save label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; max-width: 320px; }
 .osx-meets-body { display: block; }
 .osx-meets-list ul { list-style: none; margin: 0 0 8px; padding: 0; }

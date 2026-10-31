@@ -246,4 +246,32 @@ describe('Settings follows another context', () => {
     expect(listeners, 'the view stopped listening').toBe(0);
     db.close();
   });
+
+  it('keeps the threshold the coach is typing when another context changes a setting', async () => {
+    const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'typing' });
+    const bus = createMemoryChangeBus();
+    const mine = createStorageRepo(db, { now: steppingClock(), bus });
+    const other = createStorageRepo(db, { now: steppingClock(), bus });
+    const subscribe: SettingsSubscribe = (listener) => {
+      let stop: (() => void) | undefined;
+      let stopped = false;
+      void watchChanges(db, bus, (change) => { if (change.stores === 'unknown' || change.stores.includes('settings')) listener(); }).then((watch) => {
+        stop = watch.stop;
+        if (stopped) stop();
+      });
+      return () => { stopped = true; stop?.(); };
+    };
+    await mount(React.createElement(SettingsView, { repo: mine, subscribe }));
+    await change(q('cut-threshold'), '1.5');
+    await saveTheme(other, 'dark');
+    await settle();
+    expect((q('theme-dark') as HTMLInputElement).checked, 'the refresh did run').toBe(true);
+    expect((q('cut-threshold') as HTMLInputElement).value, 'the draft survived it').toBe('1.5');
+    await act(async () => { q('cut-threshold')?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    for (let i = 0; i < 5; i += 1) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    expect(await readSetting(mine, 'cutCloseThresholdPct')).toBe(1.5);
+    await act(async () => root?.unmount());
+    root = undefined;
+    db.close();
+  });
 });

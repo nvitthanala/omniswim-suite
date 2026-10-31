@@ -10,6 +10,7 @@
  * - Settings: the theme, the accent and the rival of each meet.
  */
 import * as React from 'react';
+import { teamLabel } from '../shared/names';
 import { diffResults, parseResults, ReportDiffError } from '@omniswim/engine';
 import type { Lineup, Results, ResultsDiff, RivalRef, RoleLabel, TeamId } from '@omniswim/engine';
 import { readScorerOwnTeam, listRulePresetChoices, listSessionPresetChoices, newerBuiltinVersion, exportData, importData, openOmniDb } from '../storage';
@@ -45,7 +46,7 @@ export function meetTitle(group: MeetGroup): string {
   try {
     const parsed = JSON.parse(group.meetKey.slice(group.meetKey.indexOf(':') + 1)) as { teams?: string[]; startDate?: string; endDate?: string };
     const names = teamNamesOf(group.records[0] as LineupRecord);
-    const teams = (parsed.teams ?? []).map((id) => names[id as TeamId] ?? id).join(', ');
+    const teams = (parsed.teams ?? []).map((id) => teamLabel(id, names[id as TeamId])).join(', ');
     const dates = parsed.startDate && parsed.endDate ? ` · ${parsed.startDate} to ${parsed.endDate}` : '';
     return `${teams}${dates}` || group.meetKey;
   } catch {
@@ -311,6 +312,8 @@ export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo
   const [conflict, setConflict] = React.useState<OnConflict>('skip');
   const [includeSwimCloudData, setIncludeSwimCloudData] = React.useState(false);
   const mounted = React.useRef(false);
+  // True from the first keystroke in the threshold box until it is saved: a refresh from the change bus must not replace what the coach is typing.
+  const thresholdDirty = React.useRef(false);
   const refresh = React.useCallback(async () => {
     const records = await repo.list('lineups');
     if (!mounted.current) return;
@@ -325,8 +328,10 @@ export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo
     if (mounted.current) {
       setMeets(nextMeets);
       setTheme(nextTheme);
-      setThresholdText(nextThreshold === undefined ? '1.0' : String(nextThreshold));
-      setThresholdSaved(nextThreshold !== undefined);
+      if (!thresholdDirty.current) {
+        setThresholdText(nextThreshold === undefined ? '1.0' : String(nextThreshold));
+        setThresholdSaved(nextThreshold !== undefined);
+      }
     }
   }, [repo]);
   React.useEffect(() => { let live = true; void readStorageEstimate(navigator.storage).then(result => { if (live) setEstimate(result.text); }); return () => { live = false; }; }, []);
@@ -349,6 +354,7 @@ export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo
     }
   };
   const handleThresholdChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    thresholdDirty.current = true;
     setThresholdText(event.currentTarget.value);
   };
   const saveThreshold = (): void => {
@@ -356,8 +362,12 @@ export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo
     const value = Number(text);
     if (text === '' || !Number.isFinite(value)) {
       setMessage('Cut threshold not saved: enter a number.');
+      // End the draft, so the box shows the stored value again and later changes from other tabs reach it.
+      thresholdDirty.current = false;
+      void refresh();
       return;
     }
+    thresholdDirty.current = false;
     void run(() => saveCutCloseThreshold(repo, value), `Cut threshold: ${value}%.`);
   };
   const handleThresholdKey = (event: React.KeyboardEvent<HTMLInputElement>): void => {

@@ -269,3 +269,17 @@ snapshot writes back into SwimCloud, and Recharts versus a custom chart.
    copy's base, and "v<n> available" when the built-in is newer.
 5. **The conflict choice comes before the file input**, because choosing a
    file starts the import.
+
+## Amendment 6 (lead rulings, 2026-10-31, slice F)
+
+1. **A missing name is labelled, never replaced by an id.** `shared/names.ts`
+   gives "Swimmer <id> (name not loaded)" and "Team <id> (name not
+   loaded)". Every panel, chart, explanation and heading uses it.
+2. **Dark muted text** is `color-mix(in srgb, CanvasText 72%, Canvas)`.
+   `GrayText` gave 3.88:1 on the dark surface.
+3. **The hidden chart table sits in a hidden wrapper.** A table ignores
+   `width: 1px`, so it widened the page; the chart itself is not clipped.
+4. **Harness record 14** is a visual sweep with a contrast audit, in
+   variant 1 only, with its own 360 s timeout.
+5. **Known, not fixed:** the page panel's cut-tag table is tall and narrow
+   at 340 px. It needs a layout change.
