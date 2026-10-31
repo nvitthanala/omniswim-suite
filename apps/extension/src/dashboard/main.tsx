@@ -21,13 +21,14 @@ import type { RulePreset, LoadPreference, SessionPreset } from '@omniswim/engine
 import { sessionLoad, relayRepeatsForSchedule, requireComplete, scoreMeet } from '@omniswim/engine';
 import { createChromeChangeBus, createStorageRepo, openOmniDb, readScorerOwnTeam, saveScorerOwnTeam, readScorerRulePreset, saveScorerRulePreset, listRulePresetChoices, resolveRulePreset, watchChanges, toSwimCloudId, readSessionPreset, readSessionLoadPreference, saveEditedSessionPreset } from '../storage';
 import type { StorageRepo } from '../storage';
-import type { ScorerTagActionMessage, ScorerTagStateMessage } from '../shared/panelProtocol';
+import type { AutoBuildStatusMessage, ScorerTagActionMessage, ScorerTagStateMessage } from '../shared/panelProtocol';
 import { panelCutTags, scoreScorerTags } from './scorerTagScoring';
 import { createOptimizerClient } from './optimizerClient';
 import { suggestOpponentRosters, suggestedTags } from './suggestedRosters';
 import './dashboard.css';
 import { postDockedParityReport } from './parity';
 import { SessionPlannerEditor } from './sessionPlannerEditor';
+import { AutoBuilderPanel } from './autoBuilderPanel';
 
 export type DashboardHost = 'tab' | 'docked';
 
@@ -92,6 +93,7 @@ export function App({ host }: { host: DashboardHost | null }) {
         </>}
       </section>}
       {host === 'docked' && view.kind === 'scored' && <SessionPlannerEditor snapshot={view.snapshot} repoForMeet={repoForTags} />}
+      {host === 'docked' && view.kind === 'scored' && <AutoBuilderPanel snapshot={view.snapshot} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} onStatus={postAutoBuildStatus} />}
     </main>
   );
 }
@@ -106,6 +108,9 @@ let latestPanelPort: { postMessage(message: unknown): void } | null = null;
 let sessionScheduleError: string | undefined;
 let tagRepo: Promise<StorageRepo> | undefined;
 const optimizer = createOptimizerClient();
+const solveForAutoBuilder = (lp: string, options: Readonly<Record<string, string | number | boolean>>): ReturnType<typeof optimizer.solveLp> => optimizer.solveLp(lp, options);
+/** The page panel shows one status line about a build (D5 amendment 7 item 3). */
+const postAutoBuildStatus = (message: AutoBuildStatusMessage): void => latestPanelPort?.postMessage(message);
 const meetKeyFor = (snapshot: SimSnapshot): string => `swimcloud-simulator:${JSON.stringify({ teams: [...new Set(snapshot.teams.map(t => String(t.id)))].sort(), startDate: snapshot.settings.startDate, endDate: snapshot.settings.endDate })}`;
 function buildPlannerState(snapshot: SimSnapshot, meetKey: string, rules: RulePreset | undefined, schedule: SessionPreset | undefined, preference: LoadPreference): ScorerTagStateMessage['planner'] {
   if (!rules) return { perSwimmer: [], violations: ['Choose the meet\'s OmniSwim rule preset before calculating session load.'] };

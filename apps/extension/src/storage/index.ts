@@ -13,7 +13,7 @@ export type { Migration } from './migrations';
 export { openOmniDb } from './open';
 export type { OpenOmniDbOptions } from './open';
 export { createStorageRepo } from './repo';
-export type { GetResult, StorageRepo, StorageRepoOptions } from './repo';
+export type { GetResult, PutManyOp, PutManyOptions, StorageRepo, StorageRepoOptions } from './repo';
 export * from './changeBus';
 export { assertValidRecord, validateRecord, validateLineup, validateSessionPreset, assertJsonSafe } from './validate';
 export { BUNDLED_SOURCE_MANIFESTS, publishedSourceProblem } from './sourceManifests';

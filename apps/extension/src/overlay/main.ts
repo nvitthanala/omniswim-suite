@@ -8,7 +8,7 @@
 import { mountDockedPanel } from './dockedPanel';
 import { mountShadowHost, startOverlay, writeSimulatorSettings } from './overlay';
 import { mountPagePanel } from './pagePanel';
-import { isScorerTagState } from '../shared/panelProtocol';
+import { isAutoBuildStatus, isScorerTagState } from '../shared/panelProtocol';
 import type { ParityReport } from '@omniswim/swimcloud/browser';
 import { trustedParityReport } from './parity';
 
@@ -19,6 +19,7 @@ let latestError: string | undefined;
 const pagePanel = mountPagePanel(document, () => ({ parity: latestParity, error: latestError }));
 panel.onMessage((message) => {
   if (isScorerTagState(message)) { pagePanel.setScorerState(message); return; }
+  if (isAutoBuildStatus(message)) { pagePanel.setAutoBuildStatus(message); return; }
   if (message && typeof message === 'object' && 'kind' in message && (message as {kind?: unknown}).kind === 'scorer-tag-error') {
     const detail = (message as { message?: unknown }).message;
     latestError = typeof detail === 'string' ? detail : 'Scorer tag storage failed';

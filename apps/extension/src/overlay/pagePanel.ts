@@ -1,14 +1,28 @@
 import { simulatorSettingsFromRulePreset } from '@omniswim/swimcloud/browser';
 import type { ParityReport, SimulatorRuleSettings } from '@omniswim/swimcloud/browser';
 import type { CompleteRulePreset } from '@omniswim/engine';
-import type { PanelUiActionMessage, ScorerTagStateMessage } from '../shared/panelProtocol';
+import type { AutoBuildStatusMessage, PanelUiActionMessage, ScorerTagStateMessage } from '../shared/panelProtocol';
 
 export interface PagePanel {
   readonly host: HTMLElement;
   update(parity: ParityReport | null, compatibilityError?: string): void;
   updateScorers(state: ScorerTagStateMessage | null, send: (action: PanelUiActionMessage) => void): void;
   setApplyStatus(status: string): void;
+  /** One line about an AutoBuilder run in the docked dashboard. `null` clears it. The host also carries the status in `data-osx-auto-build`. */
+  setAutoBuildStatus(message: AutoBuildStatusMessage | null): void;
   disconnect(): void;
+}
+
+const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
+
+/** The status line. It states the run's state in words and never by colour alone. */
+export function autoBuildStatusText(message: AutoBuildStatusMessage): string {
+  switch (message.status) {
+    case 'running': return `AutoBuilder running: ${seconds(message.elapsedMs)} of ${seconds(message.limitMs)}`;
+    case 'done': return `AutoBuilder finished in ${seconds(message.elapsedMs)}`;
+    case 'cancelled': return `AutoBuilder cancelled after ${seconds(message.elapsedMs)}`;
+    case 'failed': return `AutoBuilder stopped with an error after ${seconds(message.elapsedMs)}`;
+  }
 }
 
 const css = `:host{all:initial;color:var(--osx-fg,CanvasText);font:14px/1.45 system-ui,sans-serif}*{box-sizing:border-box}.panel{border:1px solid var(--osx-border,GrayText);border-radius:8px;background:var(--osx-bg,Canvas);padding:12px;min-width:220px;max-width:300px;color:inherit}.head{display:flex;justify-content:space-between;align-items:center;gap:12px}h2{font-size:16px;margin:0}button,select{font:inherit;color:inherit;background:var(--osx-bg,Canvas);border:1px solid var(--osx-border,GrayText);border-radius:5px;padding:4px 8px;cursor:pointer}.body[hidden]{display:none}.error{color:var(--osx-bad,Mark)}p{margin:10px 0 0}.group{border-top:1px solid var(--osx-border,GrayText);margin-top:10px;padding-top:8px}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;margin:6px 0}.row label{min-width:0}.row select{max-width:140px}.warning{background:var(--osx-warn-bg);color:var(--osx-warn-fg);padding:2px 5px;border-radius:4px}.cut-row{display:grid;grid-template-columns:minmax(55px,1fr) 1fr 1fr;gap:5px;margin:6px 0;font-size:12px}.cut-head{font-weight:600}.cut-tag{overflow-wrap:anywhere}`;
@@ -136,12 +150,13 @@ function attach(doc: Document, anchor: Element, apply: (settings: SimulatorRuleS
   const body = doc.createElement('div'); body.className = 'body';
   const parity = doc.createElement('p'); parity.setAttribute('aria-live', 'polite'); parity.dataset.osxParity = '';
   const error = doc.createElement('p'); error.className = 'error'; error.setAttribute('role', 'alert'); error.dataset.osxCompatibilityError = '';
+  const autoStatus = doc.createElement('p'); autoStatus.setAttribute('aria-live', 'polite'); autoStatus.dataset.osxAutoBuildStatus = ''; autoStatus.hidden = true;
   const scorer = doc.createElement('section'); scorer.dataset.osxScorerTags = '';
   let applyStatus = '';
   let lastState: ScorerTagStateMessage | null = null;
   let lastSend: (action: PanelUiActionMessage) => void = () => undefined;
   toggle.addEventListener('click', () => { const open = toggle.getAttribute('aria-expanded') !== 'true'; toggle.setAttribute('aria-expanded', String(open)); toggle.textContent = open ? 'Collapse' : 'Expand'; body.hidden = !open; });
-  heading.append(title, toggle); body.append(parity, error, scorer); panel.append(heading, body); root.append(style, panel);
+  heading.append(title, toggle); body.append(parity, error, autoStatus, scorer); panel.append(heading, body); root.append(style, panel);
   // eslint-disable-next-line complexity -- reason: one render pass keeps all existing panel sections synchronized with one trusted state.
   const renderScorers = (state: ScorerTagStateMessage | null, send: (action: PanelUiActionMessage) => void): void => {
     lastState = state; lastSend = send;
@@ -198,18 +213,25 @@ function attach(doc: Document, anchor: Element, apply: (settings: SimulatorRuleS
     },
     updateScorers: renderScorers,
     setApplyStatus(status) { applyStatus = status; renderScorers(lastState, lastSend); },
+    setAutoBuildStatus(message) {
+      // Text only, and no re-render of the scorer section: a running build reports several times a second.
+      autoStatus.hidden = message === null;
+      autoStatus.textContent = message === null ? '' : autoBuildStatusText(message);
+      if (message === null) delete host.dataset.osxAutoBuild; else host.dataset.osxAutoBuild = message.status;
+    },
     disconnect() { host.remove(); },
   };
 }
 
 /** Watches only the simulator results table; keeps at most one closed-root panel across React replacement. */
-export function mountPagePanel(doc: Document, getState: () => { parity: ParityReport | null; error?: string }, selector = '#simulator table'): { refresh(): void; setScorerState(state: ScorerTagStateMessage): void; onScorerAction(send: (action: PanelUiActionMessage) => void): void; onApplyRule(apply: (settings: SimulatorRuleSettings | null) => void): void; setApplyStatus(status: string): void; disconnect(): void } {
+export function mountPagePanel(doc: Document, getState: () => { parity: ParityReport | null; error?: string }, selector = '#simulator table'): { refresh(): void; setScorerState(state: ScorerTagStateMessage): void; onScorerAction(send: (action: PanelUiActionMessage) => void): void; onApplyRule(apply: (settings: SimulatorRuleSettings | null) => void): void; setApplyStatus(status: string): void; setAutoBuildStatus(message: AutoBuildStatusMessage | null): void; disconnect(): void } {
   let currentAnchor: Element | null = null;
   let panel: PagePanel | null = null;
   let scorerState: ScorerTagStateMessage | null = null;
   let scorerAction: (action: PanelUiActionMessage) => void = () => undefined;
   let applyRule: (settings: SimulatorRuleSettings | null) => void = () => undefined;
   let applyStatus = '';
+  let autoBuildStatus: AutoBuildStatusMessage | null = null;
   const sync = (): void => {
     const anchor = doc.querySelector(selector);
     if (anchor === currentAnchor && panel?.host.isConnected) { const s = getState(); panel.update(s.parity, s.error); panel.updateScorers(scorerState, scorerAction); return; }
@@ -217,11 +239,12 @@ export function mountPagePanel(doc: Document, getState: () => { parity: ParityRe
     if (!anchor) return;
     panel = attach(doc, anchor, settings => applyRule(settings));
     if (applyStatus) panel.setApplyStatus(applyStatus);
+    if (autoBuildStatus) panel.setAutoBuildStatus(autoBuildStatus);
     const s = getState(); panel.update(s.parity, s.error); panel.updateScorers(scorerState, scorerAction);
   };
   const Observer = doc.defaultView?.MutationObserver;
   const observer = Observer ? new Observer(sync) : null;
   observer?.observe(doc.documentElement, { childList: true, subtree: true });
   sync();
-  return { refresh: sync, setScorerState(state) { scorerState = state; sync(); }, onScorerAction(send) { scorerAction = send; sync(); }, onApplyRule(apply) { applyRule = apply; }, setApplyStatus(status) { applyStatus = status; panel?.setApplyStatus(status); }, disconnect() { observer?.disconnect(); panel?.disconnect(); } };
+  return { refresh: sync, setScorerState(state) { scorerState = state; sync(); }, onScorerAction(send) { scorerAction = send; sync(); }, onApplyRule(apply) { applyRule = apply; }, setApplyStatus(status) { applyStatus = status; panel?.setApplyStatus(status); }, setAutoBuildStatus(message) { autoBuildStatus = message; panel?.setAutoBuildStatus(message); }, disconnect() { observer?.disconnect(); panel?.disconnect(); } };
 }

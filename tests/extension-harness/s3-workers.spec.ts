@@ -18,16 +18,20 @@
  *   6. nothing left the fake network;
  *   7. at 1280, 800 and 390 px the docked panel stays in the viewport and never covers the page's
  *      narrow-layout "Options" button (a synthetic copy of SwimCloud's measured geometry).
+ *   11. (D5 12.10, the AutoBuilder panel) the docked iframe runs a build on simulator config C in the autobuilder worker, Cancel ends a
+ *      second build, and the page panel on the simulator page shows both statuses. A screenshot of the panel is attached per theme.
+ *      (Numbers 8 to 10 are the snapshot checks above; the next free number is 11.)
  *
  * Each assertion is recorded on its own, so one failure does not hide the others. A variant-2
  * failure is a finding (D3 section 3, CSP decision table), not something to retry or weaken.
  */
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, expect, test } from '@playwright/test';
 import type { BrowserContext, Frame, Page } from '@playwright/test';
 import { buildSnapshot } from '../helpers/simulatorFixtures';
+import { withNumericSwimmerIds } from '../helpers/numericSnapshot';
 
 const root = join(import.meta.dirname, '..', '..');
 /** The harness build (scripts/run-extension-harness.mjs makes it), not the production dist/. */
@@ -67,6 +71,8 @@ interface Harness {
   putSetting(key: 'cutCloseThresholdPct', value: number): Promise<unknown>;
   getSetting(key: 'cutCloseThresholdPct'): Promise<{ found: boolean; value?: { key: string; value: number; rev: number; updatedAt: string } }>;
   panel(): { accepted: number; rejected: number; pings: number } | null;
+  seedAutoBuild(snapshot: unknown, ownTeamId: string, scorerIds: readonly string[]): Promise<string>;
+  workerStarts(): readonly string[];
 }
 type WithHarness = { osxHarness: Harness };
 
@@ -372,6 +378,70 @@ test.describe('S3 workers and the docked iframe', () => {
           return seen.join('; ');
         });
 
+        await record(11, 'AutoBuilder runs in its worker, Cancel ends it, the page panel shows the status', async () => {
+          if (!frame) throw new Error('no iframe');
+          await page.setViewportSize({ width: 1280, height: 800 });
+          // Config C, men: own team 58. The fixture names swimmers "T58-S01"; the store takes numeric ids, so they are renamed.
+          const snapshot = withNumericSwimmerIds(buildSnapshot('C').snapshot);
+          const ownTeamId = '58';
+          const scorerIds = [...new Set(JSON.stringify(snapshot).match(/"158\d{3}"/g) ?? [])].map((id) => id.slice(1, -1)).sort().slice(0, 3);
+          if (scorerIds.length !== 3) throw new Error(`config C has ${scorerIds.length} swimmers on team 58, not 3`);
+          await frame.evaluate(([value, team, ids]) => (globalThis as unknown as WithHarness).osxHarness.seedAutoBuild(value, team, ids), [snapshot, ownTeamId, scorerIds] as const);
+          await page.evaluate((value) => window.postMessage({ source: 'osx-bridge', v: 1, kind: 'snapshot', snapshot: value }, location.origin), snapshot);
+          const panel = frame.locator('[data-testid="autobuilder-panel"]');
+          await expect(panel).toBeVisible({ timeout: 20_000 });
+          const status = panel.locator('[data-testid="ab-status"]');
+          const pagePanel = page.locator('[data-osx-page-panel]');
+          const limit = panel.locator('[data-testid="ab-limit"]');
+          await limit.fill('60');
+
+          const starts = (): Promise<readonly string[]> => frame!.evaluate(() => (globalThis as unknown as WithHarness).osxHarness.workerStarts());
+          const count = (urls: readonly string[], name: string): number => urls.filter((u) => u.endsWith(name)).length;
+          const optimizerBefore = count(await starts(), 'optimizer.worker.js');
+          expect(count(await starts(), 'autobuilder.worker.js'), 'no AutoBuilder worker before the first run').toBe(0);
+
+          // Run 1 finishes: the result view shows and the page panel reads "done".
+          await panel.locator('[data-testid="ab-run"]').click();
+          await expect(panel.locator('[data-testid="ab-result"]')).toBeVisible({ timeout: 90_000 });
+          await expect(status).toHaveAttribute('data-phase', 'done');
+          await expect(pagePanel).toHaveAttribute('data-osx-auto-build', 'done', { timeout: 10_000 });
+          const headline = (await panel.locator('[data-testid="ab-headline"]').innerText()).replace(/\s+/g, ' ');
+          // The build ran in its own worker: that script was started, the optimizer worker was reused, and no other worker took the job.
+          const afterRun1 = await starts();
+          expect(count(afterRun1, 'autobuilder.worker.js'), 'AutoBuilder workers started by run 1').toBe(1);
+          expect(count(afterRun1, 'optimizer.worker.js'), 'the optimizer worker is the same instance').toBe(Math.max(optimizerBefore, 1));
+          expect(afterRun1.filter((u) => !/(autobuilder|optimizer)\.worker\.js$/.test(u)), 'no other worker').toStrictEqual([]);
+
+          // One screenshot per theme of the panel with a result in it.
+          for (const theme of ['light', 'dark'] as const) {
+            await frame.evaluate((t) => document.documentElement.setAttribute('data-osx-theme', t), theme);
+            await panel.locator('[data-testid="ab-result"]').scrollIntoViewIfNeeded();
+            const shot = await page.screenshot();
+            const name = `autobuilder-${theme}-${variant.csp === null ? 'v1' : 'v2'}.png`;
+            await testInfo.attach(name, { body: shot, contentType: 'image/png' });
+            // A passing test drops its attachments; OSX_SHOT_DIR keeps the screenshots for a look.
+            if (process.env.OSX_SHOT_DIR) writeFileSync(join(process.env.OSX_SHOT_DIR, name), shot);
+          }
+          await frame.evaluate(() => document.documentElement.setAttribute('data-osx-theme', 'light'));
+
+          // Run 2 is cancelled as soon as it runs: the worker is stopped and the page panel reads "cancelled".
+          await panel.locator('[data-testid="ab-run"]').click();
+          await expect(panel.locator('[data-testid="ab-cancel"]')).toBeEnabled({ timeout: 60_000 });
+          // Progress arrives from the worker: the solve count rises above 0 while the build runs.
+          await expect(status).toHaveText(/Running: [1-9]\d* solves? done/, { timeout: 60_000 });
+          // The optimizer worker still answers during the build: a solve resolves while the panel is still in the running phase.
+          const during = await frame.evaluate((model) => (globalThis as unknown as WithHarness).osxHarness.solveLp(model), LP);
+          expect(during.status).toBe('Optimal');
+          expect(during.objective).toBeCloseTo(2.5, 6);
+          await expect(status).toHaveAttribute('data-phase', 'running');
+          expect(count(await starts(), 'autobuilder.worker.js'), 'the run-1 AutoBuilder worker serves run 2').toBe(1);
+          await panel.locator('[data-testid="ab-cancel"]').click();
+          await expect(status).toHaveAttribute('data-phase', 'cancelled', { timeout: 10_000 });
+          await expect(pagePanel).toHaveAttribute('data-osx-auto-build', 'cancelled', { timeout: 10_000 });
+          await expect(panel.locator('[data-testid="ab-result"]')).toHaveCount(0);
+          return `run 1 in autobuilder.worker.js (one start; the optimizer worker reused): "${headline}", page panel data-osx-auto-build=done; run 2 showed worker progress, an optimizer.worker solve (${during.objective}) resolved during it, then Cancel: page panel data-osx-auto-build=cancelled (the status text is in a closed shadow root: its wording is covered by tests/extensionAutoBuilderPanel.test.ts)`;
+        });
+
         // Console problems the injection added: those on the simulator page that the baseline page lacks.
         const extra = consoleProblems.filter((m) => !baselineProblems.includes(m));
         console.log(
@@ -389,7 +459,7 @@ test.describe('S3 workers and the docked iframe', () => {
 
       const failed = [...results].filter(([, r]) => !r.ok).map(([n, r]) => `${n}: ${r.detail}`);
       expect(failed, 'failed assertions').toStrictEqual([]);
-      expect(results.size).toBe(10);
+      expect(results.size).toBe(11);
     });
   }
 });

@@ -67,3 +67,39 @@ body {
 .osx-status--bad { color: var(--osx-bad); }
 .osx-status--warn { padding: 7px 9px; background: var(--osx-warn-bg); color: var(--osx-warn-fg) !important; border-radius: var(--osx-radius); }
 .osx-status ul { margin: 6px 0 0; padding-left: 18px; }
+
+/*
+ * AutoBuilder panel (autoBuilderPanel.tsx). Tokens only. State is never shown by colour alone: every delta has a sign and a word,
+ * every block has a sentence. The dark tokens have no good or bad colour on purpose.
+ */
+.osx-ab { display: flex; flex-direction: column; gap: 10px; }
+.osx-ab h3 { margin: 4px 0 0; font-size: 14px; font-weight: 600; }
+.osx-ab h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.osx-ab h5 { margin: 8px 0 4px; font-size: 12px; font-weight: 600; color: var(--osx-fg-muted); }
+.osx-ab p { margin: 4px 0; }
+.osx-ab-controls { display: flex; flex-direction: column; gap: 8px; }
+.osx-ab-controls label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--osx-fg); }
+.osx-ab-controls .osx-ab-check { flex-direction: row; align-items: flex-start; gap: 6px; }
+.osx-ab select, .osx-ab input[type="number"] { font: inherit; color: var(--osx-fg); background: var(--osx-surface); border: 1px solid var(--osx-border); border-radius: 5px; padding: 4px 6px; }
+.osx-ab button { font: inherit; color: var(--osx-fg); background: var(--osx-surface); border: 1px solid var(--osx-border); border-radius: 5px; padding: 5px 10px; cursor: pointer; }
+.osx-ab button:hover:not(:disabled) { background: var(--osx-accent-soft); }
+.osx-ab button:focus-visible, .osx-ab select:focus-visible, .osx-ab input:focus-visible { outline: 2px solid var(--osx-accent); outline-offset: 1px; }
+.osx-ab button:disabled { opacity: 0.55; cursor: not-allowed; }
+.osx-ab-buttons { display: flex; gap: 8px; }
+.osx-ab-status { min-height: 1.4em; font-size: 12px; }
+.osx-ab-status ul { margin: 4px 0 0; padding-left: 18px; }
+.osx-ab-result { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--osx-border); padding-top: 10px; }
+.osx-ab-block { border: 1px solid var(--osx-border); border-radius: var(--osx-radius); background: var(--osx-surface); padding: 8px 10px; font-size: 12px; }
+.osx-ab-points { font-size: 13px; color: var(--osx-fg) !important; }
+.osx-ab-note { font-size: 12px; color: var(--osx-fg-muted) !important; }
+.osx-ab-list { margin: 4px 0 0; padding-left: 0; list-style: none; font-size: 12px; }
+.osx-ab-list li { margin: 3px 0; padding-left: 0; }
+.osx-ab-list li ul { margin: 2px 0 2px 16px; padding: 0; list-style: disc; color: var(--osx-fg-muted); }
+.osx-ab-sign { display: inline-block; min-width: 1.2em; font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; text-align: center; }
+.osx-ab-fieldset { border: 1px solid var(--osx-border); border-radius: var(--osx-radius); margin: 8px 0; padding: 6px 10px; }
+.osx-ab-fieldset legend { font-size: 12px; padding: 0 4px; }
+.osx-ab-choice { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; font-size: 12px; }
+.osx-ab-choice label { display: flex; gap: 6px; align-items: flex-start; }
+.osx-ab-stale { margin: 6px 0; padding: 7px 9px; border: 2px solid var(--osx-fg); border-radius: var(--osx-radius); font-size: 12px; color: var(--osx-fg) !important; background: var(--osx-surface); }
+.osx-ab details summary { cursor: pointer; font-size: 12px; }
+@media (prefers-reduced-motion: no-preference) { .osx-ab button { transition: background-color 120ms ease-out; } }

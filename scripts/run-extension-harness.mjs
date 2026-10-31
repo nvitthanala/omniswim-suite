@@ -41,7 +41,7 @@ if (build.status !== 0) {
   console.log('[extension-harness] FAILED: the harness build did not finish.');
   process.exit(1);
 }
-for (const file of ['manifest.json', 'service-worker.js', 'sim-bridge.js', 'sim-overlay.js', 'dashboard.html', 'dashboard.js', 'optimizer.worker.js', 'highs.wasm']) {
+for (const file of ['manifest.json', 'service-worker.js', 'sim-bridge.js', 'sim-overlay.js', 'dashboard.html', 'dashboard.js', 'optimizer.worker.js', 'autobuilder.worker.js', 'highs.wasm']) {
   if (!existsSync(join(dist, file))) skip(`the harness build is missing (apps/extension/dist-harness/${file}).`, 'node apps/extension/build.mjs --harness');
 }
 

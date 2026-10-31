@@ -77,6 +77,25 @@ export interface ScorerTagStateMessage {
   readonly error?: string;
 }
 
+/**
+ * Iframe to overlay (D5 amendment 7 item 3): where an AutoBuilder run stands. The page panel shows it as one line. It carries no result:
+ * the result and Accept live in the docked dashboard. The overlay only reads it and writes text, as it does with every port message.
+ */
+export type AutoBuildStatus = 'running' | 'done' | 'cancelled' | 'failed';
+export const AUTO_BUILD_STATUSES: readonly AutoBuildStatus[] = ['running', 'done', 'cancelled', 'failed'];
+export interface AutoBuildStatusMessage {
+  readonly kind: 'auto-build-status';
+  readonly status: AutoBuildStatus;
+  readonly elapsedMs: number;
+  readonly limitMs: number;
+}
+
+export function isAutoBuildStatus(m: unknown): m is AutoBuildStatusMessage {
+  if (!m || typeof m !== 'object') return false;
+  const v = m as Partial<Record<keyof AutoBuildStatusMessage, unknown>>;
+  return v.kind === 'auto-build-status' && AUTO_BUILD_STATUSES.includes(v.status as AutoBuildStatus) && typeof v.elapsedMs === 'number' && Number.isFinite(v.elapsedMs) && typeof v.limitMs === 'number' && Number.isFinite(v.limitMs);
+}
+
 export interface ScorerTagActionMessage {
   readonly kind: 'scorer-tag-action';
   readonly action: 'choose-team' | 'choose-rule-preset' | 'set-role' | 'clear-role';

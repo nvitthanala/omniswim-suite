@@ -25,6 +25,18 @@ export class StaleWriteError extends Error {
   }
 }
 
+/** A batch was made against a `meta.changeRev` that another write has since moved. Nothing was written. Maps to broker code `stale`. */
+export class ChangeRevMovedError extends Error {
+  readonly code = 'stale' as const;
+  constructor(
+    readonly expected: number,
+    readonly actual: number
+  ) {
+    super(`The database changed since it was read (change ${expected} is now ${actual}). Nothing was written.`);
+    this.name = 'ChangeRevMovedError';
+  }
+}
+
 /** The database on disk has a higher version than this build knows. It is never downgraded or deleted. */
 export class NewerDatabaseError extends Error {
   readonly code = 'newer-database' as const;
