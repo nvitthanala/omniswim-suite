@@ -13,7 +13,7 @@
  * tests/engineAutoBuildFallback.test.ts builds it. No time or point value is typed here.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AutoBuildError, ScoreMeetError, autoBuild, builtinRulePreset, requireComplete } from '@omniswim/engine';
+import { AutoBuildError, ScoreMeetError, autoBuild, autoBuildObjective, builtinRulePreset, requireComplete } from '@omniswim/engine';
 import type { AutoBuildLimits, AutoBuildRequest, AutoBuildResult, ConversionSettings, RulePreset, ScorerTag } from '@omniswim/engine';
 import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
 import type { AutoBuildErrorMessage, AutoBuildProgress, AutoBuildWireRequest, AutoBuildWorkerResponse } from '../apps/extension/src/shared/autobuilderProtocol';
@@ -387,4 +387,65 @@ describe('createAutoBuildClient (acceptance 2 and 5)', () => {
     expect(run.loadMs).toBeGreaterThanOrEqual(0);
     expect(run.wallMs).toBeGreaterThan(0);
   }, 240_000);
+});
+
+// ---- score: autoBuildObjective in the worker (D5 amendment 10) -------------------------------------------
+
+describe('autobuilder.worker: the score message', () => {
+  it('answers a score with autoBuildObjective: the proposal scores its own evaluation, the current lineup its own', async () => {
+    const request = configC();
+    const direct = await autoBuild(request as AutoBuildRequest, nodeMipSolve());
+    if (direct.kind !== 'improved') throw new Error(`expected improved, got ${direct.kind}`);
+    const { proposal } = direct;
+    const w = await boot();
+
+    const proposalReply = w.finished(21);
+    w.send({ kind: 'score', id: 21, request, lineup: proposal.lineup, tags: proposal.tagsForScoring, scaleD: proposal.scaleD });
+    const scored = (await proposalReply)[0];
+    if (scored?.kind !== 'score-done') throw new Error(`no score: ${JSON.stringify(scored)}`);
+    expect(scored.score).toStrictEqual(structuredClone(autoBuildObjective(request, proposal.lineup, proposal.tagsForScoring, proposal.scaleD)));
+    expect(scored.score.objective).toBe(proposal.evaluation.objective);
+    expect(scored.score.meetsTarget).toBeNull();
+
+    const currentReply = w.finished(22);
+    w.send({ kind: 'score', id: 22, request, lineup: request.lineup, tags: request.tags });
+    const current = (await currentReply)[0];
+    if (current?.kind !== 'score-done') throw new Error(`no score: ${JSON.stringify(current)}`);
+    expect(current.score.objective).toBe(direct.current.objective);
+    expect(current.score.objective).toBeLessThan(scored.score.objective);
+    // A score never starts a run: no progress message, no HiGHS solve.
+    expect(w.posted.filter((m) => (m as { kind: string }).kind === 'auto-build-progress')).toStrictEqual([]);
+  }, 180_000);
+
+  it('a refusal of the engine comes back as an auto-build-error with its code and subject; a malformed score gets an internal error', async () => {
+    const request = configC();
+    const w = await boot();
+    const refused = w.finished(23);
+    w.send({ kind: 'score', id: 23, request: { ...request, ownTeamId: 'no-such-team' as never }, lineup: request.lineup, tags: request.tags });
+    expect((await refused)[0]).toMatchObject({ kind: 'auto-build-error', id: 23, source: 'autobuild', code: 'own_team_unknown', subject: 'no-such-team' });
+    const malformed = w.finished(24);
+    w.send({ kind: 'score', id: 24, request, lineup: request.lineup, tags: 'not a list' });
+    expect((await malformed)[0]).toMatchObject({ kind: 'auto-build-error', id: 24, source: 'internal' });
+  }, 60_000);
+});
+
+describe('createAutoBuildClient.score', () => {
+  it('resolves with the worker score, rejects with AutoBuildRunError for a refusal, and a cancel of the run rejects a score waiting on the worker', async () => {
+    stubWorkers();
+    const client = createAutoBuildClient();
+    const request = configC();
+    const score = await client.score(request, request.lineup, request.tags);
+    expect(score).toStrictEqual(structuredClone(autoBuildObjective(request, request.lineup, request.tags)));
+
+    const refused = await client.score({ ...request, ownTeamId: 'no-such-team' as never }, request.lineup, request.tags).catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(AutoBuildRunError);
+    expect((refused as AutoBuildRunError).code).toBe('own_team_unknown');
+
+    // A run is in flight on the same worker; cancelling it ends the worker, and the score that waits on it is rejected, not left hanging.
+    const run = client.run(request, () => undefined, { clock: 'none' });
+    const waiting = client.score(request, request.lineup, request.tags);
+    client.cancel();
+    await expect(run).rejects.toThrow(AUTOBUILD_CANCELLED);
+    await expect(waiting).rejects.toThrow(AUTOBUILD_CANCELLED);
+  }, 120_000);
 });

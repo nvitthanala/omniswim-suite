@@ -327,7 +327,7 @@ export function AutoBuilderPanel({ snapshot, repoForMeet, solveLp, onStatus, cli
     setAccept({ phase: 'checking' });
     try {
       const repo = await repoForMeet();
-      const outcome = await acceptProposal(tagged, choices, { repo, solveLp, currentSnapshot: () => snapshotRef.current, now: () => new Date().toISOString(), newId: () => crypto.randomUUID() });
+      const outcome = await acceptProposal(tagged, choices, { repo, solveLp, score: (req, lineup, tags, scaleD) => (clientRef.current as AutoBuildClient).score(req, lineup, tags, scaleD), currentSnapshot: () => snapshotRef.current, now: () => new Date().toISOString(), newId: () => crypto.randomUUID() });
       setAccept(outcome.kind === 'blocked' ? { phase: 'blocked', reason: outcome.reason } : { phase: 'accepted', outcome });
     } catch (cause) {
       setAccept({ phase: 'error', message: cause instanceof Error ? cause.message : String(cause) });

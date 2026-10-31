@@ -11,11 +11,13 @@
  *
  * The blocks, in order: no proposal; the simulator snapshot changed since the run; the stored tags, team or rules changed since the run;
  * opponents could not be re-suggested; the fresh score could not be computed; the re-scored proposal is not above the re-scored current
- * lineup. The last check uses the objective's metric (own points, a margin, or the closest margin) and, in goal seek, also the target.
- * A `current_infeasible` alternative skips the last check: it exists to leave a lineup that breaks a rule, not to score more.
+ * lineup. Both lineups are scored by `autoBuildObjective` in autobuilder.worker (D5 amendment 10), the number `autoBuild` ranks: own points in
+ * max-own, the robust own points in robust mode, a margin in the margin modes. Outside goal seek the proposal's objective must be strictly above
+ * the current's. In goal seek the score must say `meetsTarget`. A `current_infeasible` alternative skips the last check: it exists to leave a
+ * lineup that breaks a rule, not to score more.
  */
-import { scoreMeet } from '@omniswim/engine';
-import type { AutoBuildObjective, AutoBuildProposal, LpSolve, Results, ScorerTag } from '@omniswim/engine';
+import type { AutoBuildProposal, AutoBuildScore, LpSolve, ScorerTag } from '@omniswim/engine';
+import type { AutoBuildWireRequest } from '../shared/autobuilderProtocol';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import { readScorerOwnTeam, readScorerRulePreset, resolveRulePreset, ChangeRevMovedError, StaleWriteError, toSwimCloudId } from '../storage';
 import type { LineupRecord, PutManyOp, StorageRepo, TagRecord } from '../storage';
@@ -42,19 +44,9 @@ export function acceptBlock(tagged: TaggedResult, currentSnapshot: SimSnapshot):
   return null;
 }
 
-/** The value of the objective on a scored meet, in points. Margin modes subtract the rival's points. */
-export function metricValue(objective: AutoBuildObjective, results: Results, own: string): number {
-  const points = (teamId: string): number => (results.teams.find((t) => String(t.teamId) === teamId) as { points: number } | undefined)?.points ?? 0;
-  const ownPoints = points(own);
-  const rival = objective.kind === 'goal-seek' ? (objective.target.kind === 'margin' ? objective.target.rival : null) : objective.kind === 'margin' ? objective.rival : null;
-  if (rival === null) return ownPoints;
-  if (rival.kind === 'team') return ownPoints - points(String(rival.teamId));
-  const others = results.teams.filter((t) => String(t.teamId) !== own).map((t) => t.points);
-  return ownPoints - (others.length === 0 ? 0 : Math.max(...others));
-}
-
 export interface Verified {
   readonly ok: true;
+  /** The current lineup's objective, re-scored under the fresh opponent tags, in the units of the run (`metricLabel`). */
   readonly current: number;
   readonly proposal: number;
 }
@@ -67,6 +59,8 @@ export interface AcceptDeps {
   readonly repo: StorageRepo;
   /** The solver of `optimizer.worker`, for the opponent re-suggest. */
   readonly solveLp: LpSolve;
+  /** `autoBuildObjective` in autobuilder.worker (`AutoBuildClient.score`). The dashboard never imports the engine function itself. */
+  readonly score: (req: AutoBuildWireRequest, lineup: AutoBuildProposal['lineup'], tags: readonly ScorerTag[], scaleD?: number) => Promise<AutoBuildScore>;
   /**
    * The snapshot the page holds now. Pass a getter: Accept awaits for seconds, and it reads this again right before it writes.
    * A plain value is the snapshot at the call, and cannot show a change that happens during Accept.
@@ -95,7 +89,11 @@ async function inputsChanged(tagged: TaggedResult, repo: StorageRepo): Promise<s
 }
 
 /** The code of an engine error, when there is one. */
-const codeOf = (cause: unknown): string => (typeof (cause as { code?: unknown })?.code === 'string' ? ` (${(cause as { code: string }).code})` : '');
+const codeOf = (cause: unknown): string => {
+  const { code, subject } = (cause ?? {}) as { code?: unknown; subject?: unknown };
+  if (typeof code !== 'string') return '';
+  return typeof subject === 'string' ? ` (${code}, ${subject})` : ` (${code})`;
+};
 
 /**
  * Re-suggest the opponents through `optimizer.worker`, then score the current lineup and the proposal under the fresh opponent tags.
@@ -116,21 +114,32 @@ export async function verifyProposal(tagged: TaggedResult, proposal: AutoBuildPr
   }
   const fresh = suggestedTags(suggestions);
   const coachOnly = (tags: readonly ScorerTag[]): ScorerTag[] => tags.filter((t) => t.source !== 'suggested');
-  let before: Results;
-  let after: Results;
+  // Both lineups are scored in the request's objective under the same fresh opponent tags. `req.tags` is the current lineup's tag set; the worker
+  // reads the own scorer roster from the tags it is given with each lineup, so a roster add or remove counts in the proposal's score.
+  const currentTags = [...coachOnly(request.tags), ...fresh];
+  const proposalTags = [...coachOnly(proposal.tagsForScoring), ...fresh];
+  const req: AutoBuildWireRequest = { ...request, tags: currentTags };
+  let before: AutoBuildScore;
+  let after: AutoBuildScore;
   try {
-    before = scoreMeet(request.model, request.lineup, [...coachOnly(request.tags), ...fresh], request.rules, request.sourcing);
-    after = scoreMeet(request.model, proposal.lineup, [...coachOnly(proposal.tagsForScoring), ...fresh], request.rules, request.sourcing);
+    before = await deps.score(req, request.lineup, currentTags);
+    after = await deps.score(req, proposal.lineup, proposalTags, proposal.scaleD);
   } catch (cause) {
     return { ok: false, reason: `The fresh score could not be computed${codeOf(cause)}: ${cause instanceof Error ? cause.message : String(cause)}` };
   }
-  const current = metricValue(request.objective, before, inputs.ownTeamId);
-  const proposed = metricValue(request.objective, after, inputs.ownTeamId);
-  if (tagged.result.kind === 'current_infeasible') return { ok: true, current, proposal: proposed };
-  if (request.objective.kind === 'goal-seek' && proposed < request.objective.target.points) {
-    return { ok: false, reason: `With fresh opponent rosters the proposal scores ${plain(proposed)}, below the target of ${plain(request.objective.target.points)}. It is not accepted.` };
+  const current = before.objective;
+  const proposed = after.objective;
+  if (request.objective.kind === 'goal-seek') {
+    if (after.meetsTarget !== true) {
+      return { ok: false, reason: `With fresh opponent rosters the proposal scores ${plain(proposed)}, which does not reach the target of ${plain(request.objective.target.points)}. It is not accepted. Run the AutoBuilder again.` };
+    }
+    return { ok: true, current, proposal: proposed };
   }
-  if (!(proposed > current)) {
+  if (tagged.result.kind === 'current_infeasible') return { ok: true, current, proposal: proposed };
+  // Strictly above: a gain inside the engine's 1e-9 rounding is a tie. A real gain is at least one unit of the run's scale (1 / D, with D the
+  // lcm of the decimal scale and the tie-group sizes, so about 1e-5 at most), far above 1e-9. Comparing at `scaleD` instead would round a tie
+  // that the fresh opponents add and the run never saw.
+  if (!(proposed > current + 1e-9)) {
     return { ok: false, reason: `With fresh opponent rosters the proposal scores ${plain(proposed)} against ${plain(current)} for your current lineup (${signed(proposed - current)}). It is not above the current lineup, so it is not accepted. Run the AutoBuilder again.` };
   }
   return { ok: true, current, proposal: proposed };

@@ -8,12 +8,13 @@
  * One run at a time. `cancel()` terminates the worker (there is no cancel message), rejects the run with the error 'cancelled',
  * and the next run starts a fresh worker. `optimizer.worker` is a different worker, so a cancel never touches a solve in flight there.
  */
-import type { AutoBuildResult } from '@omniswim/engine';
+import type { AutoBuildResult, AutoBuildScore, Lineup, ScorerTag } from '@omniswim/engine';
 import type {
   AutoBuildClockMode,
   AutoBuildErrorSource,
   AutoBuildProgress,
   AutoBuildRequestMessage,
+  AutoBuildScoreRequestMessage,
   AutoBuildWireRequest,
   AutoBuildWorkerResponse,
 } from '../shared/autobuilderProtocol';
@@ -56,6 +57,12 @@ export interface AutoBuildClient {
   run(req: AutoBuildWireRequest, onProgress: (progress: AutoBuildProgressUpdate) => void, options?: { readonly clock?: AutoBuildClockMode }): Promise<AutoBuildResult>;
   /** Like `run`, and also resolves with the worker's `loadMs` and `wallMs`. */
   runTimed(req: AutoBuildWireRequest, onProgress: (progress: AutoBuildProgressUpdate) => void, options?: { readonly clock?: AutoBuildClockMode }): Promise<AutoBuildRun>;
+  /**
+   * Score `lineup` under `tags` in the terms of `req.objective` in the worker (`autoBuildObjective`). Pass `proposal.scaleD` as `scaleD`.
+   * Rejects with `AutoBuildRunError` for an engine refusal. May run while a run is in flight; cancelling that run ends the worker and rejects the
+   * score with `Error('cancelled')`.
+   */
+  score(req: AutoBuildWireRequest, lineup: Lineup, tags: readonly ScorerTag[], scaleD?: number): Promise<AutoBuildScore>;
   /** Terminate the worker and reject the run in flight with `Error('cancelled')`. Does nothing when no run is in flight. */
   cancel(): void;
 }
@@ -71,11 +78,19 @@ export function createAutoBuildClient(): AutoBuildClient {
   let worker: Worker | undefined;
   let nextId = 1;
   let active: Active | undefined;
+  const scoring = new Map<number, { resolve(score: AutoBuildScore): void; reject(error: Error): void }>();
 
-  /** Drop the worker. It is fresh on the next run. */
+  const rejectScoring = (error: Error): void => {
+    const pending = [...scoring.values()];
+    scoring.clear();
+    for (const p of pending) p.reject(error);
+  };
+
+  /** Drop the worker. It is fresh on the next run. A score still waiting on it can no longer be answered. */
   const discard = (): void => {
     worker?.terminate();
     worker = undefined;
+    rejectScoring(new Error(AUTOBUILD_CANCELLED));
   };
 
   const settle = (id: number): Active | undefined => {
@@ -95,6 +110,14 @@ export function createAutoBuildClient(): AutoBuildClient {
         if (active?.id === m.id) active.onProgress({ solvesDone: m.solvesDone, elapsedMs: m.elapsedMs, limitMs: m.limitMs });
       } else if (m.kind === 'auto-build-done') {
         settle(m.id)?.resolve({ result: m.result, loadMs: m.loadMs, wallMs: m.wallMs });
+      } else if (m.kind === 'score-done') {
+        const pending = scoring.get(m.id);
+        scoring.delete(m.id);
+        pending?.resolve(m.score);
+      } else if (scoring.has(m.id)) {
+        const pending = scoring.get(m.id);
+        scoring.delete(m.id);
+        pending?.reject(new AutoBuildRunError(m.source, m.code, m.subject, m.message));
       } else {
         settle(m.id)?.reject(new AutoBuildRunError(m.source, m.code, m.subject, m.message));
       }
@@ -106,7 +129,9 @@ export function createAutoBuildClient(): AutoBuildClient {
       const run = active;
       active = undefined;
       discard();
-      run?.reject(new Error(`autobuilder worker ${what}${detail ? `: ${detail}` : ''}`));
+      const error = new Error(`autobuilder worker ${what}${detail ? `: ${detail}` : ''}`);
+      run?.reject(error);
+      rejectScoring(error);
     };
     w.addEventListener('error', fail('failed'));
     w.addEventListener('messageerror', fail('sent an unreadable message'));
@@ -132,8 +157,23 @@ export function createAutoBuildClient(): AutoBuildClient {
     });
   };
 
+  const score: AutoBuildClient['score'] = (req, lineup, tags, scaleD) => {
+    const id = nextId++;
+    const message: AutoBuildScoreRequestMessage = { kind: 'score', id, request: req, lineup, tags, ...(scaleD === undefined ? {} : { scaleD }) };
+    return new Promise<AutoBuildScore>((resolve, reject) => {
+      scoring.set(id, { resolve, reject });
+      try {
+        start().postMessage(message);
+      } catch (cause) {
+        scoring.delete(id);
+        reject(cause instanceof Error ? cause : new Error(String(cause)));
+      }
+    });
+  };
+
   return {
     runTimed,
+    score,
     async run(req, onProgress, options) {
       return (await runTimed(req, onProgress, options)).result;
     },

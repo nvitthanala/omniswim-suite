@@ -8,7 +8,7 @@
  * It is a protocol of its own. `optimizerProtocol.ts` (optimizer.worker) stays as it is, imports nothing, and never carries an
  * AutoBuilder message. There is no cancel message: the client calls `terminate()` (see `dashboard/autobuilderClient.ts`).
  */
-import type { AutoBuildRequest, AutoBuildResult } from '@omniswim/engine';
+import type { AutoBuildRequest, AutoBuildResult, AutoBuildScore, Lineup, ScorerTag } from '@omniswim/engine';
 
 /** What the page sends. A request carries no `clock`: a function cannot cross `postMessage`, so the worker sets it. */
 export type AutoBuildWireRequest = Omit<AutoBuildRequest, 'clock'>;
@@ -22,6 +22,26 @@ export interface AutoBuildRequestMessage {
   readonly id: number;
   readonly request: AutoBuildWireRequest;
   readonly clock: AutoBuildClockMode;
+}
+
+/**
+ * Score one lineup in the terms of `request.objective` with `autoBuildObjective` (D5 amendment 10). The worker holds the engine, so the page
+ * never imports that function. `tags` are the tags the lineup is scored under; `scaleD` is `proposal.scaleD`. No HiGHS is needed.
+ * A refusal or failure comes back as `auto-build-error`, as for a run.
+ */
+export interface AutoBuildScoreRequestMessage {
+  readonly kind: 'score';
+  readonly id: number;
+  readonly request: AutoBuildWireRequest;
+  readonly lineup: Lineup;
+  readonly tags: readonly ScorerTag[];
+  readonly scaleD?: number;
+}
+
+export interface AutoBuildScoreDone {
+  readonly kind: 'score-done';
+  readonly id: number;
+  readonly score: AutoBuildScore;
 }
 
 /** Sent once per finished `MipSolve` call, in order. There are no stage names. */
@@ -62,4 +82,4 @@ export interface AutoBuildErrorMessage {
   readonly message: string;
 }
 
-export type AutoBuildWorkerResponse = AutoBuildProgress | AutoBuildDone | AutoBuildErrorMessage;
+export type AutoBuildWorkerResponse = AutoBuildProgress | AutoBuildDone | AutoBuildScoreDone | AutoBuildErrorMessage;

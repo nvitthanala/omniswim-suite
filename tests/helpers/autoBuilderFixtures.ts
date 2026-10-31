@@ -7,8 +7,9 @@
  * the committed fixture. No competition value is typed here.
  */
 import loadHighs from 'highs';
-import { autoBuild } from '@omniswim/engine';
+import { autoBuild, autoBuildObjective } from '@omniswim/engine';
 import type { AutoBuildResult, LpSolve } from '@omniswim/engine';
+import type { AcceptDeps } from '../../apps/extension/src/dashboard/autoBuilderAccept';
 import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../../apps/extension/src/shared/bridgeSchema';
 import { createStorageRepo, openOmniDb, saveScorerOwnTeam, saveScorerRulePreset, toSwimCloudId } from '../../apps/extension/src/storage';
@@ -33,6 +34,9 @@ export const realSolveLp: LpSolve = async (lp, options) => {
   if (result.Status === 'Optimal') for (const [name, col] of Object.entries(result.Columns)) columns[name] = col.Primal;
   return { status: result.Status, objective: result.ObjectiveValue, columns };
 };
+
+/** The worker's `score` call, in Node: the same `autoBuildObjective`, over the same arguments. */
+export const nodeScore: AcceptDeps['score'] = async (req, lineup, tags, scaleD) => autoBuildObjective(req, lineup, tags, scaleD);
 
 export interface ConfigCWorld {
   readonly snapshot: SimSnapshot;

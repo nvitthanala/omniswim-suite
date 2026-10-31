@@ -15,9 +15,9 @@
  */
 import loadHighs from 'highs';
 import type { Highs } from 'highs';
-import { AutoBuildError, ScoreMeetError, autoBuild } from '@omniswim/engine';
+import { AutoBuildError, ScoreMeetError, autoBuild, autoBuildObjective } from '@omniswim/engine';
 import type { AutoBuildRequest, AutoBuildResult, MipSolve } from '@omniswim/engine';
-import type { AutoBuildErrorMessage, AutoBuildRequestMessage, AutoBuildWorkerResponse } from '../shared/autobuilderProtocol';
+import type { AutoBuildErrorMessage, AutoBuildRequestMessage, AutoBuildScoreRequestMessage, AutoBuildWorkerResponse } from '../shared/autobuilderProtocol';
 import { solveMipOn } from './optimizerSolve';
 
 const scope = self as unknown as {
@@ -48,6 +48,24 @@ function isAutoBuildMessage(m: unknown): m is AutoBuildRequestMessage {
   if (r.kind !== 'auto-build' || typeof r.id !== 'number') return false;
   if (r.clock !== 'wall' && r.clock !== 'none') return false;
   return typeof r.request === 'object' && r.request !== null;
+}
+
+function isScoreMessage(m: unknown): m is AutoBuildScoreRequestMessage {
+  if (typeof m !== 'object' || m === null) return false;
+  const r = m as Record<string, unknown>;
+  if (r.kind !== 'score' || typeof r.id !== 'number') return false;
+  if (r.scaleD !== undefined && typeof r.scaleD !== 'number') return false;
+  return typeof r.request === 'object' && r.request !== null && typeof r.lineup === 'object' && r.lineup !== null && Array.isArray(r.tags);
+}
+
+/** Score one lineup in the request's objective (D5 amendment 10). Synchronous and HiGHS-free, so it never waits on the wasm load. */
+function score(message: AutoBuildScoreRequestMessage): void {
+  const { id } = message;
+  try {
+    scope.postMessage({ kind: 'score-done', id, score: autoBuildObjective(message.request, message.lineup, message.tags, message.scaleD) });
+  } catch (cause) {
+    scope.postMessage(errorMessageOf(id, cause));
+  }
 }
 
 /** `code` and `subject` are copied: an Error keeps only its name and message across `postMessage`. */
@@ -88,6 +106,10 @@ scope.onmessage = (event: MessageEvent) => {
   const message: unknown = event.data;
   if (isAutoBuildMessage(message)) {
     void run(message);
+    return;
+  }
+  if (isScoreMessage(message)) {
+    score(message);
     return;
   }
   // Every other message gets an error when it names a run. One that does not has nobody to answer.

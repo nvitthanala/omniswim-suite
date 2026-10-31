@@ -22,14 +22,14 @@ import { AUTOBUILD_DEFAULT_LIMITS, AUTOBUILD_DEFAULT_ROBUST } from '@omniswim/en
 import type { AutoBuildExplanation, AutoBuildProof, AutoBuildProposal, AutoBuildResult } from '@omniswim/engine';
 import { AutoBuildResultView } from '../apps/extension/src/dashboard/autoBuilderPanel';
 import type { AcceptView, AutoBuildResultViewProps } from '../apps/extension/src/dashboard/autoBuilderPanel';
-import { acceptBlock, acceptProposal, defaultRemoveChoices, DEFAULT_REMOVE_CHOICE, metricValue, writeRosterTags } from '../apps/extension/src/dashboard/autoBuilderAccept';
+import { acceptBlock, acceptProposal, defaultRemoveChoices, DEFAULT_REMOVE_CHOICE, writeRosterTags } from '../apps/extension/src/dashboard/autoBuilderAccept';
 import type { RemoveChoice } from '../apps/extension/src/dashboard/autoBuilderAccept';
 import { DEFAULT_LIMITS, DEFAULT_ROBUST, defaultControls, objectiveOf, prepareRequest, snapshotKey } from '../apps/extension/src/dashboard/autoBuilderRequest';
 import { changeLines, explanationLine, frozenPairsOf, headlineOf, proofText, refusalText } from '../apps/extension/src/dashboard/autoBuilderResult';
 import type { TaggedResult } from '../apps/extension/src/dashboard/autoBuilderResult';
 import { mountPagePanel } from '../apps/extension/src/overlay/pagePanel';
 import { isAutoBuildStatus } from '../apps/extension/src/shared/panelProtocol';
-import { configCWorld, realSolveLp, runWorld } from './helpers/autoBuilderFixtures';
+import { configCWorld, nodeScore, realSolveLp, runWorld } from './helpers/autoBuilderFixtures';
 import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
 import { toSwimCloudId } from '../apps/extension/src/storage';
 
@@ -323,7 +323,7 @@ describe('Accept: the blocks', () => {
   });
 
   const deps = (over: Partial<Parameters<typeof acceptProposal>[2]> = {}): Parameters<typeof acceptProposal>[2] => ({
-    repo: world.repo, solveLp: realSolveLp, currentSnapshot: world.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', ...over,
+    repo: world.repo, solveLp: realSolveLp, score: nodeScore, currentSnapshot: world.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', ...over,
   });
 
   it('blocks when the stored scorer tags changed after the run', async () => {
@@ -356,22 +356,12 @@ describe('Accept: the blocks', () => {
   }, 120_000);
 
   it('blocks a goal-seek proposal that misses its target on the fresh score', async () => {
-    const reachable = metricValue({ kind: 'max-own' }, current().current.results, base.inputs.ownTeamId);
+    const reachable = current().current.ownPoints;
     const goal: TaggedResult = { ...base, request: { ...base.request, objective: { kind: 'goal-seek', target: { kind: 'total', points: reachable + 100000 } } } };
     const out = await acceptProposal(goal, new Map(), deps());
     expect(out.kind).toBe('blocked');
-    if (out.kind === 'blocked') expect(out.reason).toMatch(/below the target of /);
+    if (out.kind === 'blocked') expect(out.reason).toMatch(/does not reach the target of \d+\. It is not accepted/);
   }, 120_000);
-
-  it('metricValue reads own points, a margin over a team, and the margin over the closest team', () => {
-    const results = { teams: [{ teamId: 'a', points: 100, rank: 1 }, { teamId: 'b', points: 90, rank: 2 }, { teamId: 'c', points: 40, rank: 3 }] } as never;
-    expect(metricValue({ kind: 'max-own' }, results, 'a')).toBe(100);
-    expect(metricValue({ kind: 'robust', recentSwims: 5, minSwims: 3 }, results, 'a')).toBe(100);
-    expect(metricValue({ kind: 'margin', rival: { kind: 'team', teamId: 'c' as never } }, results, 'a')).toBe(60);
-    expect(metricValue({ kind: 'margin', rival: { kind: 'closest' } }, results, 'a')).toBe(10);
-    expect(metricValue({ kind: 'goal-seek', target: { kind: 'margin', rival: { kind: 'closest' }, points: 5 } }, results, 'b')).toBe(-10);
-    expect(metricValue({ kind: 'goal-seek', target: { kind: 'total', points: 5 } }, results, 'b')).toBe(90);
-  });
 });
 
 describe('Accept: what it writes', () => {
@@ -383,7 +373,7 @@ describe('Accept: what it writes', () => {
       const accepted = tagged.result.proposal;
       const before = JSON.stringify(w.snapshot);
       const out = await acceptProposal(tagged, defaultRemoveChoices(accepted), {
-        repo: w.repo, solveLp: realSolveLp, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1',
+        repo: w.repo, solveLp: realSolveLp, score: nodeScore, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1',
       });
       if (out.kind !== 'accepted') throw new Error(`blocked: ${out.reason}`);
       expect(out.verified.proposal).toBeGreaterThan(out.verified.current);

@@ -13,13 +13,13 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import type { AutoBuildResult } from '@omniswim/engine';
+import type { AutoBuildResult, AutoBuildScore, Lineup, ScorerTag } from '@omniswim/engine';
 import { AutoBuilderPanel } from '../apps/extension/src/dashboard/autoBuilderPanel';
 import { AutoBuildRunError, AUTOBUILD_CANCELLED } from '../apps/extension/src/dashboard/autobuilderClient';
 import type { AutoBuildClient, AutoBuildRun } from '../apps/extension/src/dashboard/autobuilderClient';
 import type { AutoBuildWireRequest } from '../apps/extension/src/shared/autobuilderProtocol';
 import type { AutoBuildStatusMessage } from '../apps/extension/src/shared/panelProtocol';
-import { configCWorld, realSolveLp, runWorld } from './helpers/autoBuilderFixtures';
+import { configCWorld, nodeScore, realSolveLp, runWorld } from './helpers/autoBuilderFixtures';
 import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -40,6 +40,9 @@ class FakeClient implements AutoBuildClient {
   }
   async run(req: AutoBuildWireRequest, onProgress: (p: { solvesDone: number; elapsedMs: number; limitMs: number }) => void): Promise<AutoBuildResult> {
     return (await this.runTimed(req, onProgress)).result;
+  }
+  score(req: AutoBuildWireRequest, lineup: Lineup, tags: readonly ScorerTag[], scaleD?: number): Promise<AutoBuildScore> {
+    return nodeScore(req, lineup, tags, scaleD);
   }
   cancel(): void {
     this.cancels += 1;
