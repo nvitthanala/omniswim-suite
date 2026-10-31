@@ -80,6 +80,12 @@ const RELAYS: readonly { key: string; legs: readonly string[]; kind: 'medley' | 
 ];
 
 /** SYNTHETIC: ten teams of 14 swimmers, 16 individual events, 2 dives, 2 relays. Every time is generated here. */
+/** The per-swimmer total entry cap of the bench's rule preset, or no cap when the preset says unlimited. */
+function totalCap(): number {
+  const value = requireComplete(builtinRulePreset('nsisc', 5) as RulePreset).entries.maxTotalPerSwimmer;
+  return value.state === 'set' && typeof value.value === 'number' ? value.value : Number.POSITIVE_INFINITY;
+}
+
 function synthetic(): Scenario {
   const rand = rng(20261029);
   const teams = Array.from({ length: TEAMS }, (_, i) => `S${i}`);
@@ -129,15 +135,13 @@ function synthetic(): Scenario {
     observedScores: null,
   };
   const entries: LineupEntry[] = [];
+  // The current lineup must be legal under the preset, or the bench times the repair path instead of the improve path. Each
+  // swimmer's total entries stay within the preset's own per-swimmer total (read here, never typed): relays first, then individuals.
+  const cap = totalCap();
+  const count = new Map<string, number>();
+  const take = (id: string): boolean => { const n = count.get(id) ?? 0; if (n >= cap) return false; count.set(id, n + 1); return true; };
   for (const team of teams) {
     const mine = swimmers.filter((s) => s.teamId === team);
-    for (const s of mine) {
-      for (const eventKey of [...INDIVIDUAL, ...DIVES]) {
-        if (swims.some((w) => w.swimmerId === s.swimmerId && w.eventKey === eventKey) && rand() < 0.5) {
-          entries.push({ kind: 'individual', teamId: team, swimmerId: s.swimmerId, eventKey, gender: 'Men', seedSwimId: null });
-        }
-      }
-    }
     // Two relays of each kind per team.
     for (const relay of RELAYS) {
       const shuffled = [...mine].sort(() => rand() - 0.5);
@@ -153,6 +157,14 @@ function synthetic(): Scenario {
             basis: i === 0 ? { kind: 'flat-start-swim' as const, swimId: `${s.swimmerId}:${relay.legs[0]}` } : { kind: 'split' as const, splitId: `${s.swimmerId}:${relay.legs[i]}` },
           })) as unknown as Extract<LineupEntry, { kind: 'relay' }>['legs'],
         });
+        for (const s of group) take(s.swimmerId);
+      }
+    }
+    for (const s of mine) {
+      for (const eventKey of [...INDIVIDUAL, ...DIVES]) {
+        if (swims.some((w) => w.swimmerId === s.swimmerId && w.eventKey === eventKey) && rand() < 0.5 && take(s.swimmerId)) {
+          entries.push({ kind: 'individual', teamId: team, swimmerId: s.swimmerId, eventKey, gender: 'Men', seedSwimId: null });
+        }
       }
     }
   }
