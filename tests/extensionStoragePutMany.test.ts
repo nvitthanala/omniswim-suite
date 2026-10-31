@@ -38,7 +38,8 @@ describe('StorageRepo.putMany (D6 section 3)', () => {
     ]);
     expect(out).toHaveLength(3);
     expect((await repo.get('meets', 'm-1')).found).toBe(true);
-    expect(await repo.get('tags', tagKey('102'))).toMatchObject({ found: true, value: { rev: 1, role: 'scorer' } });
+    expect(await repo.get('tags', tagKey('102'))).toMatchObject({ found: true, value: { rev: 2, role: 'scorer' } });
+    // The batch commits changeRev 2, so a new row takes rev 2 and the update takes max(2, 1 + 1) = 2.
     expect(await repo.get('tags', tagKey('101'))).toMatchObject({ found: true, value: { rev: 2, role: 'non-scorer' } });
     expect(await readChangeRev(db as never)).toBe(before + 1);
     expect(notices.at(-1)?.stores.slice().sort()).toStrictEqual(['meets', 'tags']);

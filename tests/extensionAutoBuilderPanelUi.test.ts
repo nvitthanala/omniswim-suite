@@ -21,6 +21,8 @@ import type { AutoBuildWireRequest } from '../apps/extension/src/shared/autobuil
 import type { AutoBuildStatusMessage } from '../apps/extension/src/shared/panelProtocol';
 import { configCWorld, nodeScore, realSolveLp, runWorld } from './helpers/autoBuilderFixtures';
 import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
+import { createUndoStack } from '../apps/extension/src/storage';
+import type { UndoStack } from '../apps/extension/src/storage';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -84,7 +86,7 @@ interface Mounted {
   readonly text: () => string;
 }
 
-async function mount(over: { snapshot?: typeof world.snapshot; repo?: typeof world.repo; clock?: { t: number } } = {}): Promise<Mounted> {
+async function mount(over: { snapshot?: typeof world.snapshot; repo?: typeof world.repo; clock?: { t: number }; undoStack?: () => Promise<UndoStack> } = {}): Promise<Mounted> {
   const client = new FakeClient();
   const statuses: AutoBuildStatusMessage[] = [];
   host = document.createElement('div');
@@ -92,7 +94,7 @@ async function mount(over: { snapshot?: typeof world.snapshot; repo?: typeof wor
   root = createRoot(host);
   const clock = over.clock ?? { t: 0 };
   const element = (snapshot: typeof world.snapshot): React.ReactElement =>
-    React.createElement(AutoBuilderPanel, { snapshot, repoForMeet: async () => over.repo ?? world.repo, solveLp: realSolveLp, onStatus: (m) => statuses.push(m), client, now: () => clock.t });
+    React.createElement(AutoBuilderPanel, { snapshot, repoForMeet: async () => over.repo ?? world.repo, solveLp: realSolveLp, onStatus: (m) => statuses.push(m), client, now: () => clock.t, ...(over.undoStack ? { undoStack: over.undoStack } : {}) });
   await act(async () => root?.render(element(over.snapshot ?? world.snapshot)));
   return {
     client,
@@ -231,6 +233,50 @@ describe('AutoBuilderPanel run, progress, cancel and status', () => {
       empty.close();
     }
   }, 60_000);
+});
+
+describe('AutoBuilderPanel Accept and Undo', () => {
+  async function acceptIn(w: ConfigCWorld, undoStack?: () => Promise<UndoStack>) {
+    const m = await mount({ repo: w.repo, snapshot: w.snapshot, ...(undoStack ? { undoStack } : {}) });
+    await click(m.q('ab-run'));
+    await waitFor(() => m.client.requests.length === 1);
+    const own = await runWorld(w);
+    m.client.finish({ result: own.result, loadMs: 0, wallMs: 1 });
+    await waitFor(() => m.q('ab-accept-button') !== null);
+    await click(m.q('ab-accept-button'));
+    await waitFor(() => m.q('ab-accepted') !== null || m.q('ab-block') !== null);
+    expect(m.q('ab-block')).toBeNull();
+    return m;
+  }
+
+  it('hands its undoStack prop to Accept: the entry is recorded, says where to undo, and one undo removes the lineup and the new tags', async () => {
+    const w = await configCWorld();
+    try {
+      const stack = createUndoStack(w.repo);
+      const tagsBefore = (await w.repo.list('tags')).length;
+      const m = await acceptIn(w, async () => stack);
+      expect(stack.size).toBe(1);
+      expect(m.q('ab-undo-hint')?.textContent).toBe('Undo it from the Save tab.');
+      expect((await w.repo.list('lineups')).length).toBe(1);
+      expect((await w.repo.list('tags')).length).toBeGreaterThan(tagsBefore);
+      expect(await stack.undo()).toEqual({ status: 'undone' });
+      expect((await w.repo.list('lineups')).length).toBe(0);
+      expect((await w.repo.list('tags')).length).toBe(tagsBefore);
+    } finally {
+      w.close();
+    }
+  }, 180_000);
+
+  it('without an undoStack prop nothing is recorded and no undo line is shown', async () => {
+    const w = await configCWorld();
+    try {
+      const m = await acceptIn(w);
+      expect(m.q('ab-undo-hint')).toBeNull();
+      expect((await w.repo.list('lineups')).length).toBe(1);
+    } finally {
+      w.close();
+    }
+  }, 180_000);
 });
 
 describe('AutoBuilderPanel Accept', () => {

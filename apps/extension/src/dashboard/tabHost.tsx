@@ -13,8 +13,9 @@ import * as React from 'react';
 import { teamLabel } from '../shared/names';
 import { diffResults, parseResults, ReportDiffError } from '@omniswim/engine';
 import type { Lineup, Results, ResultsDiff, RivalRef, RoleLabel, TeamId } from '@omniswim/engine';
-import { readScorerOwnTeam, listRulePresetChoices, listSessionPresetChoices, newerBuiltinVersion, exportData, importData, openOmniDb } from '../storage';
-import type { ExportOptions, LineupRecord, StorageRepo, OnConflict } from '../storage';
+import type { IDBPDatabase } from 'idb';
+import { createChromeChangeBus, readScorerOwnTeam, listRulePresetChoices, listSessionPresetChoices, newerBuiltinVersion, exportData, importData, openOmniDb } from '../storage';
+import type { ChangeBus, ExportOptions, LineupRecord, OmniDbSchema, StorageRepo, OnConflict } from '../storage';
 import { EntryCsvButton } from './EntryCsvButton';
 import { MeetReport } from './MeetReport';
 import { resolveRival } from './rival';
@@ -300,7 +301,26 @@ interface MeetRival {
  */
 export type SettingsSubscribe = (listener: () => void) => () => void;
 
-export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo; onApplied?: () => void; subscribe?: SettingsSubscribe }): React.ReactElement {
+/** The bus of this extension page: `chrome.storage.local`, as the repo's own bus. `undefined` outside an extension page. */
+function pageChangeBus(): ChangeBus | undefined {
+  const storage = (globalThis as { chrome?: { storage?: unknown } }).chrome?.storage;
+  return storage === undefined ? undefined : createChromeChangeBus(storage as never);
+}
+
+export interface SettingsViewProps {
+  readonly repo: StorageRepo;
+  readonly onApplied?: () => void;
+  readonly subscribe?: SettingsSubscribe;
+  /**
+   * Import and Clear cache write through a raw database handle, not the repo. They announce what they changed on this bus, so the docked panel,
+   * the theme and the other tabs refresh without a reload. Default: the page's `chrome.storage` bus.
+   */
+  readonly bus?: ChangeBus;
+  /** The raw database handle for Import and Clear cache. Default: `openOmniDb`. */
+  readonly openDb?: () => Promise<IDBPDatabase<OmniDbSchema>>;
+}
+
+export function SettingsView({ repo, onApplied, subscribe, bus, openDb = () => openOmniDb() }: SettingsViewProps): React.ReactElement {
   const [theme, setTheme] = React.useState<ThemeSettings | null>(null);
   const [meets, setMeets] = React.useState<readonly MeetRival[]>([]);
   const [message, setMessage] = React.useState('');
@@ -376,7 +396,8 @@ export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo
   const handleClearCache = async (): Promise<void> => {
     setConfirmCache(false);
     try {
-      const count = await clearFetchedSwimCloudData(await openOmniDb());
+      const pageBus = bus ?? pageChangeBus();
+      const count = await clearFetchedSwimCloudData(await openDb(), pageBus === undefined ? {} : { bus: pageBus });
       setMessage(`Deleted ${count} fetched SwimCloud records.`);
     } catch (cause) {
       setMessage(`Cache clear failed: ${cause instanceof Error ? cause.message : String(cause)}`);
@@ -399,10 +420,14 @@ export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo
   const handleImportBackup = async (file: File): Promise<void> => {
     try {
       const json: unknown = JSON.parse(await file.text());
-      const report = await importData(await openOmniDb(), json, { fileName: file.name, onConflict: conflict });
+      const pageBus = bus ?? pageChangeBus();
+      const report = await importData(await openDb(), json, { fileName: file.name, onConflict: conflict, ...(pageBus === undefined ? {} : { bus: pageBus }) });
       const added = Object.values(report.written).reduce((sum, count) => sum + (count ?? 0), 0) - report.replaced.length;
       const skipped = report.skipped.map(row => `${row.store}/${row.key}: ${row.reason}`).join(', ') || 'none';
       setMessage(`Added ${added}; replaced ${report.replaced.length}; skipped ${skipped}.`);
+      // Show the import here now. The bus tells the other contexts; this one does not wait for its own notice.
+      await refresh();
+      onApplied?.();
     } catch (cause) {
       const issues = (cause as { issues?: readonly { path: string; message: string }[] }).issues;
       setMessage(issues ? `Refused: ${issues.map(issue => `${issue.path}: ${issue.message}`).join('; ')}` : `Import failed: ${cause instanceof Error ? cause.message : String(cause)}`);

@@ -20,7 +20,7 @@ import type { AutoBuildProposal, AutoBuildScore, LpSolve, ScorerTag } from '@omn
 import type { AutoBuildWireRequest } from '../shared/autobuilderProtocol';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import { readScorerOwnTeam, readScorerRulePreset, resolveRulePreset, ChangeRevMovedError, StaleWriteError, toSwimCloudId } from '../storage';
-import type { LineupRecord, PutManyOp, StorageRepo, TagRecord } from '../storage';
+import type { LineupRecord, PutManyOp, StorageRepo, TagRecord, UndoChange, UndoStack } from '../storage';
 import { readCoachTags, snapshotKey } from './autoBuilderRequest';
 import { changeLines, modeLabel, plain, proposalOf, signed } from './autoBuilderResult';
 import type { ChangeLine, TaggedResult } from './autoBuilderResult';
@@ -68,6 +68,8 @@ export interface AcceptDeps {
   readonly currentSnapshot: SimSnapshot | (() => SimSnapshot);
   readonly now: () => string;
   readonly newId: () => string;
+  /** When set, a successful Accept records one undo entry: the new lineup and every tag put or delete. */
+  readonly undoStack?: UndoStack;
 }
 
 const snapshotNow = (deps: AcceptDeps): SimSnapshot => (typeof deps.currentSnapshot === 'function' ? deps.currentSnapshot() : deps.currentSnapshot);
@@ -164,10 +166,10 @@ export interface TagWrite {
   readonly action: 'scorer' | 'non-scorer' | 'deleted';
 }
 
-/** The put op for one tag at the rev read now, or a create. */
-async function tagPut(repo: StorageRepo, row: Omit<TagRecord, 'rev' | 'updatedAt'>): Promise<PutManyOp> {
+/** The put op for one tag at the rev read now, or a create, with the row it replaces (`undefined` for a create). */
+async function tagPut(repo: StorageRepo, row: Omit<TagRecord, 'rev' | 'updatedAt'>): Promise<{ readonly op: PutManyOp; readonly before: TagRecord | undefined }> {
   const current = await repo.get('tags', [row.meetKey, row.teamId, row.swimmerId]);
-  return { op: 'put', store: 'tags', record: row, expectedRev: current.found ? current.value.rev : 'new' };
+  return { op: { op: 'put', store: 'tags', record: row, expectedRev: current.found ? current.value.rev : 'new' }, before: current.found ? current.value : undefined };
 }
 
 /**
@@ -175,13 +177,22 @@ async function tagPut(repo: StorageRepo, row: Omit<TagRecord, 'rev' | 'updatedAt
  * (`non-scorer` by default, or delete the tag). Each op carries the rev read now, so `putMany` refuses the whole batch if a tag changed
  * after this read. Tags the proposal does not touch are not in the list.
  */
-export async function planRosterTags(repo: StorageRepo, meetKey: string, proposal: AutoBuildProposal, choices: ReadonlyMap<string, RemoveChoice>): Promise<{ readonly ops: readonly PutManyOp[]; readonly writes: readonly TagWrite[] }> {
+export async function planRosterTags(
+  repo: StorageRepo,
+  meetKey: string,
+  proposal: AutoBuildProposal,
+  choices: ReadonlyMap<string, RemoveChoice>
+): Promise<{ readonly ops: readonly PutManyOp[]; readonly writes: readonly TagWrite[]; readonly before: readonly (TagRecord | undefined)[] }> {
   const ops: PutManyOp[] = [];
+  /** `before[i]` is the stored row `ops[i]` replaces or deletes; `undefined` when the op creates the row. */
+  const before: (TagRecord | undefined)[] = [];
   const writes: TagWrite[] = [];
   for (const add of proposal.rosterAdds) {
     const teamId = toSwimCloudId(String(add.teamId));
     const swimmerId = toSwimCloudId(String(add.swimmerId));
-    ops.push(await tagPut(repo, { meetKey, teamId, swimmerId, role: 'scorer' }));
+    const planned = await tagPut(repo, { meetKey, teamId, swimmerId, role: 'scorer' });
+    ops.push(planned.op);
+    before.push(planned.before);
     writes.push({ swimmerId, teamId, action: 'scorer' });
   }
   for (const remove of proposal.rosterRemoves) {
@@ -189,15 +200,44 @@ export async function planRosterTags(repo: StorageRepo, meetKey: string, proposa
     const swimmerId = toSwimCloudId(String(remove.swimmerId));
     const choice = choices.get(String(remove.swimmerId)) ?? DEFAULT_REMOVE_CHOICE;
     if (choice === 'non-scorer') {
-      ops.push(await tagPut(repo, { meetKey, teamId, swimmerId, role: 'non-scorer' }));
+      const planned = await tagPut(repo, { meetKey, teamId, swimmerId, role: 'non-scorer' });
+      ops.push(planned.op);
+      before.push(planned.before);
       writes.push({ swimmerId, teamId, action: 'non-scorer' });
     } else {
       const current = await repo.get('tags', [meetKey, teamId, swimmerId]);
-      if (current.found) ops.push({ op: 'delete', store: 'tags', key: [meetKey, teamId, swimmerId], expectedRev: current.value.rev });
+      if (current.found) {
+        ops.push({ op: 'delete', store: 'tags', key: [meetKey, teamId, swimmerId], expectedRev: current.value.rev });
+        before.push(current.value);
+      }
       writes.push({ swimmerId, teamId, action: 'deleted' });
     }
   }
-  return { ops, writes };
+  return { ops, writes, before };
+}
+
+/**
+ * The undo entry of one Accept: the lineup it created, and for each tag op the way back. A tag it created is deleted at the rev it got. A tag it
+ * updated goes back to the old row at the new rev. A tag it deleted is re-created expecting the row to be absent (`writtenRev: 'absent'`), so an
+ * undo never overwrites a tag that was re-made elsewhere since. `stored` is `putMany`'s result for `[lineup, ...tagOps]`.
+ */
+export function acceptUndoChanges(lineupId: string, tagOps: readonly PutManyOp[], before: readonly (TagRecord | undefined)[], stored: readonly ({ readonly rev: number } | undefined)[]): readonly UndoChange[] {
+  const lineup = stored[0];
+  if (lineup === undefined) throw new Error('Accept stored no lineup row.');
+  const changes: UndoChange[] = [{ before: { op: 'delete', store: 'lineups', key: lineupId }, writtenRev: lineup.rev }];
+  tagOps.forEach((op, i) => {
+    const was = before[i];
+    const now = stored[i + 1];
+    if (op.op === 'delete') {
+      if (was === undefined) throw new Error('Accept deleted a tag with no row to restore.');
+      changes.push({ before: { op: 'put', store: 'tags', record: was }, writtenRev: 'absent' });
+      return;
+    }
+    if (now === undefined) throw new Error('Accept stored no tag row for a put.');
+    const record = op.record as TagRecord;
+    changes.push(was === undefined ? { before: { op: 'delete', store: 'tags', key: [record.meetKey, record.teamId, record.swimmerId] }, writtenRev: now.rev } : { before: { op: 'put', store: 'tags', record: was }, writtenRev: now.rev });
+  });
+  return changes;
 }
 
 /** Write the tags of `planRosterTags` in one all-or-nothing batch. */
@@ -240,7 +280,7 @@ export async function acceptProposal(tagged: TaggedResult, choices: ReadonlyMap<
     },
   };
   // The tag revs are read here, so a tag that changes after this read makes putMany refuse the whole batch.
-  const { ops: tagOps, writes: tagsWritten } = await planRosterTags(deps.repo, inputs.meetKey, proposal, choices);
+  const { ops: tagOps, writes: tagsWritten, before: tagsBefore } = await planRosterTags(deps.repo, inputs.meetKey, proposal, choices);
 
   // The recheck, last: the re-score above took real time. Read the database's changeRev first, then the inputs, so any write that lands
   // after this point, in any store, moves the changeRev and putMany refuses the batch. The snapshot check is synchronous.
@@ -250,13 +290,15 @@ export async function acceptProposal(tagged: TaggedResult, choices: ReadonlyMap<
   const sinceRun = acceptBlock(tagged, snapshotNow(deps));
   if (sinceRun !== null) return { kind: 'blocked', reason: sinceRun };
 
+  let stored: Awaited<ReturnType<StorageRepo['putMany']>>;
   try {
-    // Follow-up: undo-accept-expect-absent. Accept can delete a tag, which has no post-delete row rev to validate during undo.
-    await deps.repo.putMany([{ op: 'put', store: 'lineups', record, expectedRev: 'new' }, ...tagOps], { expectedChangeRev: changeRev });
+    stored = await deps.repo.putMany([{ op: 'put', store: 'lineups', record, expectedRev: 'new' }, ...tagOps], { expectedChangeRev: changeRev });
   } catch (cause) {
     if (cause instanceof ChangeRevMovedError) return { kind: 'blocked', reason: 'Something changed while checking. Nothing was saved. Run Accept again.' };
     if (cause instanceof StaleWriteError) return { kind: 'blocked', reason: 'Your scorer tags changed while Accept was saving. Nothing was saved. Run the AutoBuilder again.' };
     throw new Error(`Nothing was saved: ${cause instanceof Error ? cause.message : String(cause)}`);
   }
+  // One undo entry for the whole batch: it is all-or-nothing, so the undo is too.
+  deps.undoStack?.recordUndo({ changes: acceptUndoChanges(lineupId, tagOps, tagsBefore, stored) });
   return { kind: 'accepted', lineupId, lineupName, verified, tagsWritten, changes: changeLines(proposal, tagged.request.lineup, inputs.names) };
 }

@@ -16,7 +16,8 @@
  *    record refuses the whole file and the error lists every bad JSON path. Nothing is written.
  * 4. Provenance is never upgraded: a `published` source must be in a bundled manifest
  *    (checked by the validator). Imported records get `origin:{kind:'imported',...}`,
- *    `rev:1` (a replace uses the stored `rev + 1`, see below) and `updatedAt: now`.
+ *    a rev of `max(the changeRev this import commits, stored rev + 1)` (the repo's no-reuse rule: a key never gets a rev it held before)
+ *    and `updatedAt: now`.
  * 5. `keep-both` gives a conflicting id a new id and remaps every reference in the same file.
  * 6. One readwrite transaction covers all stores: all or nothing.
  */
@@ -355,7 +356,7 @@ async function planWrites(
   tx: RawTx,
   byStore: Map<ExportableStore, Row[]>,
   maps: IdMaps,
-  ctx: { readonly onConflict: OnConflict; readonly origin: Row; readonly now: IsoTime }
+  ctx: { readonly onConflict: OnConflict; readonly origin: Row; readonly now: IsoTime; readonly writeRev: number }
 ): Promise<Plan> {
   const plan: Plan = { toWrite: [], replaced: [], skipped: [] };
   for (const store of EXPORT_STORE_ORDER) {
@@ -364,7 +365,7 @@ async function planWrites(
       const key = keyOf(store, r);
       const keyText = JSON.stringify(key);
       const stored = (await tx.objectStore(store).get(key)) as Row | undefined;
-      let rev = 1;
+      let rev = ctx.writeRev;
       if (stored !== undefined) {
         const reason = conflictSkip(store, stored, r, ctx.onConflict);
         if (reason !== null) {
@@ -372,7 +373,7 @@ async function planWrites(
           continue;
         }
         // A replace continues the stored rev, so a tab that read the old record still loses its next write.
-        rev = ((stored.rev as number | undefined) ?? 0) + 1;
+        rev = Math.max(rev, ((stored.rev as number | undefined) ?? 0) + 1);
         plan.replaced.push({ store, key: keyText });
       }
       if (store !== 'swimmerHistory' && store !== 'rosters') {
@@ -387,7 +388,7 @@ async function planWrites(
   return plan;
 }
 
-/** Step 3: write every planned record and bump `changeRev` once. `changeRev` is `undefined` when nothing was written. */
+/** Step 3: write every planned record and commit `changeRev` once (`max(stored + 1, highest rev written)`). `changeRev` is `undefined` when nothing was written. */
 async function writePlan(tx: RawTx, plan: Plan): Promise<{ written: ImportReport['written']; changeRev: number | undefined }> {
   const written: Partial<Record<ExportableStore, number>> = {};
   for (const { store, record } of plan.toWrite) {
@@ -397,7 +398,9 @@ async function writePlan(tx: RawTx, plan: Plan): Promise<{ written: ImportReport
   if (plan.toWrite.length === 0) return { written, changeRev: undefined };
   const meta = tx.objectStore('meta');
   const row = (await meta.get('changeRev')) as MetaChangeRevRow | undefined;
-  const changeRev = (row?.value ?? 0) + 1;
+  // changeRev stays at or above every rev written (the repo's no-reuse invariant). A cache row has no rev.
+  const highest = Math.max(0, ...plan.toWrite.map(({ record }) => (typeof record.rev === 'number' ? record.rev : 0)));
+  const changeRev = Math.max((row?.value ?? 0) + 1, highest);
   await meta.put({ key: 'changeRev', value: changeRev } satisfies MetaChangeRevRow);
   return { written, changeRev };
 }
@@ -414,7 +417,9 @@ export async function importData(db: IDBPDatabase<OmniDbSchema>, file: unknown, 
   try {
     const minted = opts.onConflict === 'keep-both' ? await mintIds(tx, byStore, newId) : undefined;
     const origin = { kind: 'imported', fileName: opts.fileName, importedAt: now, exportedAt };
-    const plan = await planWrites(tx, byStore, minted?.maps ?? emptyMaps(), { onConflict: opts.onConflict, origin, now });
+    // The changeRev this import commits (writePlan bumps by one). A written row's rev is at least this, so it never reuses an older rev.
+    const meta = (await tx.objectStore('meta').get('changeRev')) as MetaChangeRevRow | undefined;
+    const plan = await planWrites(tx, byStore, minted?.maps ?? emptyMaps(), { onConflict: opts.onConflict, origin, now, writeRev: (meta?.value ?? 0) + 1 });
     const { written, changeRev } = await writePlan(tx, plan);
     await tx.done;
 

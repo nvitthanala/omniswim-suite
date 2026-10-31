@@ -184,7 +184,8 @@ when you open it (new work; the meet data may have changed since).
 lineup". Accept is not undoable, because it can delete scorer tags and the
 storage layer cannot yet check that a deleted tag is still absent. Default:
 build that check later, then make Accept undoable. Other option: never undo
-Accept; you fix tags by hand.
+Accept; you fix tags by hand. **Status 2026-10-31:** the default is built
+(D6 amendment 7). Say "keep" or ask to remove it.
 
 ## I. Settings and checks (U-e and F, added 2026-10-31)
 

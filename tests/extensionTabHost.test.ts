@@ -14,7 +14,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { groupByMeet, MeetsView, PresetsSlot, SettingsView } from '../apps/extension/src/dashboard/tabHost';
 import { clearAccent, readRival, readSetting, readThemeSettings, saveAccent, saveRival, saveTheme } from '../apps/extension/src/dashboard/settingsStore';
-import { createMemoryChangeBus, createStorageRepo, openOmniDb, watchChanges } from '../apps/extension/src/storage';
+import { createMemoryChangeBus, createStorageRepo, exportData, openOmniDb, watchChanges } from '../apps/extension/src/storage';
 import type { SettingsSubscribe } from '../apps/extension/src/dashboard/tabHost';
 import { configCWorld, realSolveLp } from './helpers/autoBuilderFixtures';
 import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
@@ -244,6 +244,34 @@ describe('Settings follows another context', () => {
     await act(async () => root?.unmount());
     root = undefined;
     expect(listeners, 'the view stopped listening').toBe(0);
+    db.close();
+  });
+
+  it('Import announces on the bus: a second context hears the imported settings, and the view shows them at once', async () => {
+    const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'import-view' });
+    const bus = createMemoryChangeBus();
+    const mine = createStorageRepo(db, { now: steppingClock(), bus });
+    await mine.put('settings', { key: 'theme', value: 'light' }, 'new');
+    // A backup whose settings say dark.
+    const sourceDb = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'import-source' });
+    const source = createStorageRepo(sourceDb, { now: steppingClock() });
+    await source.put('settings', { key: 'theme', value: 'dark' }, 'new');
+    await source.put('settings', { key: 'accent', value: '#12ab34' }, 'new');
+    const backup = await exportData(source, { stores: ['settings'], includeSwimCloudData: false, includeSettings: true, extensionVersion: 'test' });
+    sourceDb.close();
+    // The second context: it watches the shared bus, as the docked panel and the theme do. It sees the stores a notice names.
+    const heard: string[][] = [];
+    await watchChanges(db, bus, (change) => { if (change !== undefined && change.stores !== 'unknown') heard.push([...change.stores]); });
+    await mount(React.createElement(SettingsView, { repo: mine, bus, openDb: async () => db }));
+    expect((q('theme-light') as HTMLInputElement).checked).toBe(true);
+    await change(q('backup-conflict'), 'replace');
+    const input = q('backup-import') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File([JSON.stringify(backup)], 'backup.json', { type: 'application/json' })], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+    await settle();
+    expect(heard, 'the second context was told which store changed').toContainEqual(['settings']);
+    expect(await readThemeSettings(mine)).toEqual({ preference: 'dark', accent: '#12ab34' });
+    expect((q('theme-dark') as HTMLInputElement).checked, 'this view shows the import without a reload').toBe(true);
     db.close();
   });
 

@@ -153,8 +153,9 @@ describe('R51 class year: what a read gives', () => {
     expect(await readClassYear(repo, q)).toMatchObject({ state: 'sourced', classYear: 'JR' });
 
     const saved = await repo.put('classYearOverrides', withoutRev(ov) as never, 'new');
-    expect(saved.rev).toBe(1);
-    expect(await readClassYear(repo, q)).toMatchObject({ state: 'user', classYear: 'SR', rev: 1 });
+    // A new row takes the changeRev its transaction commits as its rev (2 here: the putCache above was the first write), not 1.
+    expect(saved.rev).toBe(2);
+    expect(await readClassYear(repo, q)).toMatchObject({ state: 'user', classYear: 'SR', rev: 2 });
 
     // A refetch replaces the roster row. The override is in another store, so it survives.
     await repo.putCache('rosters', roster({ classYears: { '1130590': 'SO' }, fetchedAt: '2026-10-27T09:00:00.000Z' }) as unknown as RosterRecord);

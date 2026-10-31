@@ -6,8 +6,8 @@
  * through the repo, with a retry when another surface wrote the same row between the read and the write.
  */
 import type { RivalRef } from '@omniswim/engine';
-import { StaleWriteError } from '../storage';
-import type { SettingsMap, StorageRepo } from '../storage';
+import { createStorageRepo, StaleWriteError } from '../storage';
+import type { ChangeBus, SettingsMap, StorageRepo } from '../storage';
 import type { IDBPDatabase } from 'idb';
 import type { OmniDbSchema } from '../storage';
 import { isHexColor } from '../shared/theme';
@@ -73,12 +73,12 @@ export async function saveCutCloseThreshold(repo: StorageRepo, value: number): P
   await updateSetting(repo, 'cutCloseThresholdPct', () => value);
 }
 
-export async function clearFetchedSwimCloudData(db: IDBPDatabase<OmniDbSchema>): Promise<number> {
-  const tx = db.transaction(['swimmerHistory', 'rosters'], 'readwrite');
-  const [history, rosters] = await Promise.all([tx.objectStore('swimmerHistory').count(), tx.objectStore('rosters').count()]);
-  await Promise.all([tx.objectStore('swimmerHistory').clear(), tx.objectStore('rosters').clear()]);
-  await tx.done;
-  return history + rosters;
+/**
+ * Delete every fetched SwimCloud row (`swimmerHistory` and `rosters`) and return how many. It goes through the repo, so the delete bumps
+ * `meta.changeRev` and, with a `bus`, announces both stores to the other contexts. User stores are never touched.
+ */
+export async function clearFetchedSwimCloudData(db: IDBPDatabase<OmniDbSchema>, options: { readonly bus?: ChangeBus } = {}): Promise<number> {
+  return createStorageRepo(db, options.bus === undefined ? {} : { bus: options.bus }).clearCache(['swimmerHistory', 'rosters']);
 }
 
 export type StorageEstimateText = { readonly available: false; readonly text: string } | { readonly available: true; readonly text: string };

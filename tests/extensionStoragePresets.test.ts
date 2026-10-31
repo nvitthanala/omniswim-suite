@@ -58,8 +58,9 @@ describe('built-in presets are code, not data (D3 5.8)', () => {
     await repo.put('rulePresets', { ...base, id: 'u-a', name: 'Alpha' }, 'new');
     const choices = await listRulePresetChoices(repo);
     expect(choices.map(c => c.label)).toEqual(['NSISC', 'Generic NCAA championship', 'Alpha', 'Zeta']);
-    expect(choices[2]).toEqual({ source: 'user', ref: { kind: 'user', id: 'u-a' }, label: 'Alpha', rev: 1 });
-    expect(await resolveRulePreset(repo, { kind: 'user', id: 'u-a' })).toMatchObject({ found: true, rev: 1 });
+    expect(choices[2]).toEqual({ source: 'user', ref: { kind: 'user', id: 'u-a' }, label: 'Alpha', rev: 2 });
+    // u-b was written first (changeRev 1), so u-a took changeRev 2 as its rev.
+    expect(await resolveRulePreset(repo, { kind: 'user', id: 'u-a' })).toMatchObject({ found: true, rev: 2 });
     db.close();
   });
 

@@ -288,8 +288,9 @@ describe('extension storage export and import (D3 5.6)', () => {
     expect(replaced.skipped).toEqual([{ store: 'lineups', key: '"l-2"', reason: 'snapshot-immutable' }]);
     expect(replaced.replaced).toHaveLength(12);
     const meet = (await repo.get('meets', 'm-2')) as { found: true; value: MeetRecord };
-    // Seeded by put, the stored rev was 1; the replace continues it. It does not restart at 1.
-    expect(meet.value.rev).toBe(2);
+    // Seeded by put, the stored rev was 1. The replace takes the changeRev its import commits: above the stored rev, and never a rev the key held.
+    expect(meet.value.rev).toBeGreaterThan(1);
+    expect(meet.value.rev).toBe(await readChangeRev(db));
     expect(meet.value.origin).toMatchObject({ kind: 'imported', fileName: 'r.json' });
     expect(meet.value.updatedAt).toBe('2026-10-28T03:00:00.000Z');
     const snap = (await repo.get('lineups', 'l-2')) as { found: true; value: LineupRecord };
@@ -446,7 +447,9 @@ describe('extension storage export and import (D3 5.6)', () => {
     // A plain lineup stays editable, and cannot be turned into a snapshot by an edit.
     const lineup = await repo.put('lineups', withoutRev(fixtureRecord<Record<string, unknown>>('lineups', 0)) as never, 'new');
     const edited = await repo.put('lineups', { ...withoutRev(lineup as never as Record<string, unknown>), name: 'Edited' } as never, lineup.rev);
-    expect(edited.rev).toBe(2);
+    // The edit takes the changeRev it commits (3: snapshot create 1, lineup create 2, edit 3).
+    expect(edited.rev).toBe(3);
+    expect(edited.rev).toBe(await readChangeRev(db));
     await expect(
       repo.put('lineups', { ...withoutRev(lineup as never as Record<string, unknown>), kind: 'snapshot', results: { x: 1 } } as never, edited.rev)
     ).rejects.toBeInstanceOf(InvalidRecordError);

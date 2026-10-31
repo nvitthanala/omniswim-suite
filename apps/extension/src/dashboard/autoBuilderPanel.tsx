@@ -18,7 +18,7 @@ import * as React from 'react';
 import type { LpSolve } from '@omniswim/engine';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import type { AutoBuildStatusMessage } from '../shared/panelProtocol';
-import type { StorageRepo } from '../storage';
+import type { StorageRepo, UndoStack } from '../storage';
 import { AUTOBUILD_CANCELLED, AutoBuildRunError, createAutoBuildClient } from './autobuilderClient';
 import type { AutoBuildClient } from './autobuilderClient';
 import { acceptBlock, acceptProposal, defaultRemoveChoices } from './autoBuilderAccept';
@@ -60,6 +60,8 @@ export interface AutoBuildResultViewProps {
   readonly choices: ReadonlyMap<string, RemoveChoice>;
   readonly onChoice?: (swimmerId: string, choice: RemoveChoice) => void;
   readonly onAccept?: () => void;
+  /** Accept records an undo entry here, so the result says where to undo it. */
+  readonly undoable?: boolean;
 }
 
 const sec = (ms: number): string => `${plain(Math.round(ms / 100) / 10)} s`;
@@ -73,7 +75,7 @@ function SignedItem({ sign, children }: { sign: string; children: React.ReactNod
   );
 }
 
-function ProposalSection({ tagged, blockReason, accept, choices, onChoice, onAccept }: AutoBuildResultViewProps) {
+function ProposalSection({ tagged, blockReason, accept, choices, onChoice, onAccept, undoable }: AutoBuildResultViewProps) {
   const proposal = proposalOf(tagged.result);
   if (proposal === null) return null;
   const { names } = tagged.inputs;
@@ -155,19 +157,21 @@ function ProposalSection({ tagged, blockReason, accept, choices, onChoice, onAcc
         </button>
         {accept.phase === 'blocked' && <p role="alert" className="osx-ab-stale" data-testid="ab-block">Accept is blocked. {accept.reason}</p>}
         {accept.phase === 'error' && <p role="alert" className="osx-ab-stale" data-testid="ab-accept-error">{accept.message}</p>}
-        {accept.phase === 'accepted' && <AcceptedSection outcome={accept.outcome} />}
+        {accept.phase === 'accepted' && <AcceptedSection outcome={accept.outcome} undoable={undoable === true} />}
       </section>
     </>
   );
 }
 
-function AcceptedSection({ outcome }: { outcome: Extract<AcceptOutcome, { kind: 'accepted' }> }) {
+/** `undoable`: Accept recorded an undo entry, so the Save tab's Undo can revert it. */
+function AcceptedSection({ outcome, undoable }: { outcome: Extract<AcceptOutcome, { kind: 'accepted' }>; undoable: boolean }) {
   return (
     <div role="status" data-testid="ab-accepted">
       <p><strong>Saved.</strong> The lineup is stored as "{outcome.lineupName}". Re-scored with fresh opponent rosters: {plain(outcome.verified.current)} to {plain(outcome.verified.proposal)} ({signed(outcome.verified.proposal - outcome.verified.current)}).</p>
       {outcome.tagsWritten.length > 0 && (
         <p className="osx-ab-note">Scorer tags written: {outcome.tagsWritten.map((t) => `${t.swimmerId} ${t.action}`).join(', ')}.</p>
       )}
+      {undoable && <p className="osx-ab-note" data-testid="ab-undo-hint">Undo it from the Save tab.</p>}
       <h5>Make these changes in SwimCloud</h5>
       {outcome.changes.length === 0 ? <p className="osx-ab-note">No entry changes to make.</p> : (
         <ol className="osx-ab-list" data-testid="ab-todo">{outcome.changes.map((l) => <SignedItem key={l.text} sign={l.sign}>{l.text}</SignedItem>)}</ol>
@@ -228,6 +232,8 @@ type Phase =
 export interface AutoBuilderPanelProps {
   readonly snapshot: SimSnapshot;
   readonly repoForMeet: () => Promise<StorageRepo>;
+  /** When set, Accept records one undo entry (the Save tab's Undo reverts it). */
+  readonly undoStack?: () => Promise<UndoStack>;
   /** The solver of `optimizer.worker`, for opponent rosters. */
   readonly solveLp: LpSolve;
   /** Told when a run starts, ticks, ends or is cancelled. The host forwards it to the page panel. */
@@ -261,7 +267,7 @@ function controlsReady(controls: AutoBuildControls, teams: readonly { readonly i
   return controls.mode !== 'margin' || teams.some((t) => t.id === controls.rivalTeamId);
 }
 
-export function AutoBuilderPanel({ snapshot, repoForMeet, solveLp, onStatus, client, now = () => performance.now() }: AutoBuilderPanelProps) {
+export function AutoBuilderPanel({ snapshot, repoForMeet, undoStack, solveLp, onStatus, client, now = () => performance.now() }: AutoBuilderPanelProps) {
   const [controls, setControls] = React.useState<AutoBuildControls>(defaultControls);
   const [state, setState] = React.useState<Phase>({ phase: 'idle' });
   const [accept, setAccept] = React.useState<AcceptView>({ phase: 'idle' });
@@ -327,7 +333,7 @@ export function AutoBuilderPanel({ snapshot, repoForMeet, solveLp, onStatus, cli
     setAccept({ phase: 'checking' });
     try {
       const repo = await repoForMeet();
-      const outcome = await acceptProposal(tagged, choices, { repo, solveLp, score: (req, lineup, tags, scaleD) => (clientRef.current as AutoBuildClient).score(req, lineup, tags, scaleD), currentSnapshot: () => snapshotRef.current, now: () => new Date().toISOString(), newId: () => crypto.randomUUID() });
+      const outcome = await acceptProposal(tagged, choices, { repo, solveLp, score: (req, lineup, tags, scaleD) => (clientRef.current as AutoBuildClient).score(req, lineup, tags, scaleD), currentSnapshot: () => snapshotRef.current, now: () => new Date().toISOString(), newId: () => crypto.randomUUID(), ...(undoStack ? { undoStack: await undoStack() } : {}) });
       setAccept(outcome.kind === 'blocked' ? { phase: 'blocked', reason: outcome.reason } : { phase: 'accepted', outcome });
     } catch (cause) {
       setAccept({ phase: 'error', message: cause instanceof Error ? cause.message : String(cause) });
@@ -417,6 +423,7 @@ export function AutoBuilderPanel({ snapshot, repoForMeet, solveLp, onStatus, cli
           choices={choices}
           onChoice={(id, choice) => setChoices((m) => new Map(m).set(id, choice))}
           onAccept={() => void doAccept(state.tagged)}
+          undoable={undoStack !== undefined}
         />
       )}
       {state.phase === 'done' && state.tagged.snapshotKey !== currentKey && <p className="osx-ab-note" data-testid="ab-stale">This result is from an earlier simulator state.</p>}

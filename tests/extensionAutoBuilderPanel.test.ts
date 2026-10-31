@@ -31,7 +31,7 @@ import { mountPagePanel } from '../apps/extension/src/overlay/pagePanel';
 import { isAutoBuildStatus } from '../apps/extension/src/shared/panelProtocol';
 import { configCWorld, nodeScore, realSolveLp, runWorld } from './helpers/autoBuilderFixtures';
 import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
-import { toSwimCloudId } from '../apps/extension/src/storage';
+import { createUndoStack, toSwimCloudId } from '../apps/extension/src/storage';
 
 /** The visible text of rendered markup, with the entities React writes decoded. */
 const textOf = (html: string): string =>
@@ -450,6 +450,100 @@ describe('Accept: the roster remove choice (user question A10)', () => {
       w.close();
     }
   });
+});
+
+describe('Accept and Undo (slice S1)', () => {
+  const remove = (id: string) => ({ teamId: '58' as never, gender: 'Men' as const, swimmerId: id as never });
+  const tagRows = async (w: ConfigCWorld) => (await w.repo.list('tags', { index: 'byMeet', value: w.meetKey })).map((r) => `${r.swimmerId}:${r.role}`).sort();
+
+  /** Accept the real proposal, with its roster adds, one remove tagged non-scorer and one remove whose tag is deleted. Returns what the repo held before. */
+  async function acceptWithUndo(w: ConfigCWorld) {
+    const tagged = await runWorld(w);
+    if (tagged.result.kind !== 'improved') throw new Error('expected improved');
+    const [, toNon, toDelete] = w.pinned as [string, string, string];
+    const swap: AutoBuildProposal = { ...tagged.result.proposal, rosterRemoves: [remove(toNon), remove(toDelete)] };
+    const withRemoves: TaggedResult = { ...tagged, result: { ...tagged.result, proposal: swap } };
+    const tagsBefore = await tagRows(w);
+    const stack = createUndoStack(w.repo);
+    const out = await acceptProposal(withRemoves, new Map<string, RemoveChoice>([[toDelete, 'delete']]), {
+      repo: w.repo, solveLp: realSolveLp, score: nodeScore, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', undoStack: stack,
+    });
+    if (out.kind !== 'accepted') throw new Error(`blocked: ${out.reason}`);
+    return { stack, tagsBefore, toNon, toDelete, adds: swap.rosterAdds.length, added: swap.rosterAdds[0] };
+  }
+
+  it('records one undo entry; undo restores the tags (the deleted one too) and removes the lineup', async () => {
+    const w = await configCWorld();
+    try {
+      const { stack, tagsBefore, toDelete, adds } = await acceptWithUndo(w);
+      expect(stack.size).toBe(1);
+      expect(adds, 'the proposal also creates tags').toBeGreaterThan(0);
+      const after = await tagRows(w);
+      expect(after).not.toEqual(tagsBefore);
+      expect(after.some((r) => r.startsWith(`${toDelete}:`)), 'the delete choice removed the tag').toBe(false);
+      expect(await w.repo.list('lineups')).toHaveLength(1);
+      expect(await stack.undo()).toEqual({ status: 'undone' });
+      expect(await tagRows(w)).toEqual(tagsBefore);
+      expect(await w.repo.list('lineups')).toHaveLength(0);
+    } finally {
+      w.close();
+    }
+  }, 240_000);
+
+  it('says "changed elsewhere" and writes nothing when a deleted tag is re-created in another context after Accept', async () => {
+    const w = await configCWorld();
+    try {
+      const { stack, toDelete } = await acceptWithUndo(w);
+      await w.repo.put('tags', { meetKey: w.meetKey, teamId: toSwimCloudId('58'), swimmerId: toSwimCloudId(toDelete), role: 'exhibition' }, 'new');
+      const tagsNow = await tagRows(w);
+      const rev = await w.repo.changeRev();
+      expect(await stack.undo()).toEqual({ status: 'changed elsewhere' });
+      expect(await tagRows(w)).toEqual(tagsNow);
+      expect(await w.repo.list('lineups'), 'the accepted lineup stays').toHaveLength(1);
+      expect(await w.repo.changeRev()).toBe(rev);
+    } finally {
+      w.close();
+    }
+  }, 240_000);
+
+  it('says "changed elsewhere" when another context deleted and re-created a tag that Accept created, and deletes nothing', async () => {
+    const w = await configCWorld();
+    try {
+      const { stack, added } = await acceptWithUndo(w);
+      if (added === undefined) throw new Error('the proposal added no swimmer');
+      const key = [w.meetKey, toSwimCloudId(String(added.teamId)), toSwimCloudId(String(added.swimmerId))] as [string, ReturnType<typeof toSwimCloudId>, ReturnType<typeof toSwimCloudId>];
+      const created = await w.repo.get('tags', key);
+      if (!created.found) throw new Error('Accept did not create the tag');
+      await w.repo.delete('tags', key, created.value.rev);
+      const remade = await w.repo.put('tags', { meetKey: key[0], teamId: key[1], swimmerId: key[2], role: 'non-scorer' }, 'new');
+      expect(remade.rev, 'a re-created tag never reuses a rev').not.toBe(created.value.rev);
+      const tagsNow = await tagRows(w);
+      const rev = await w.repo.changeRev();
+      expect(await stack.undo()).toEqual({ status: 'changed elsewhere' });
+      expect(await tagRows(w)).toEqual(tagsNow);
+      expect(await w.repo.list('lineups'), 'the accepted lineup stays').toHaveLength(1);
+      expect(await w.repo.changeRev()).toBe(rev);
+    } finally {
+      w.close();
+    }
+  }, 240_000);
+
+  it('records no undo entry when Accept is blocked', async () => {
+    const w = await configCWorld();
+    try {
+      const tagged = await runWorld(w);
+      const own = toSwimCloudId(w.ownTeamId);
+      const swimmer = toSwimCloudId(w.pinned[0] as string);
+      const row = (await w.repo.get('tags', [w.meetKey, own, swimmer])) as { found: true; value: { rev: number } };
+      await w.repo.put('tags', { meetKey: w.meetKey, teamId: own, swimmerId: swimmer, role: 'non-scorer' }, row.value.rev);
+      const stack = createUndoStack(w.repo);
+      const out = await acceptProposal(tagged, new Map(), { repo: w.repo, solveLp: realSolveLp, score: nodeScore, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', undoStack: stack });
+      expect(out.kind).toBe('blocked');
+      expect(stack.size).toBe(0);
+    } finally {
+      w.close();
+    }
+  }, 240_000);
 });
 
 describe('the page panel status line (D5 amendment 7 item 3)', () => {

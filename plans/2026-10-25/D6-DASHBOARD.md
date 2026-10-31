@@ -283,3 +283,22 @@ snapshot writes back into SwimCloud, and Recharts versus a custom chart.
    variant 1 only, with its own 360 s timeout.
 5. **Known, not fixed:** the page panel's cut-tag table is tall and narrow
    at 340 px. It needs a layout change.
+
+## Amendment 7 (lead rulings, 2026-10-31, slice S1)
+
+This replaces amendment 4 item 3.
+
+1. **AutoBuilder Accept is undoable.** One undo entry covers its lineup put
+   and every tag put or delete. Undo re-creates a deleted tag with
+   `expectedRev: 'new'`, so a tag re-created elsewhere makes the whole undo
+   report "changed elsewhere" and write nothing. The Build tab says "Undo
+   it from the Save tab." after an undoable Accept.
+2. **A rev is never reused for a key.** A transaction commits
+   `meta.changeRev = max(previous + 1, every rev it wrote, the stored rev
+   of every row it deleted)`, and a new row's rev is `max(changeRev,
+   stored + 1)`. So `changeRev` stays at or above every rev ever used,
+   including revs an older build wrote. Before this, a re-created row
+   restarted at rev 1, and a stale write holding rev 1 could overwrite it.
+3. **Import and clear cache announce on the change bus**, so the docked
+   panel and the theme see the change without a reload. Clear cache runs
+   through `StorageRepo.clearCache`, which refuses user stores.
