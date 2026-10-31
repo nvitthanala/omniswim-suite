@@ -15,6 +15,12 @@ import type { AutoBuildObjective, RivalRef } from './types';
 
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+/** D5 4.7: the least whole metric at scale `D` that reaches `target`. The MIP rows, the gate and `autoBuildObjective` all read the target through this. */
+export const scaledTarget = (target: number, D: number): number => Math.ceil(target * D - 1e-9);
+
+/** Whether a metric reaches the target in the whole numbers of scale `D`: the one test of the MIP, the gate and `autoBuildObjective`. */
+export const reachesTarget = (value: number, target: number, D: number): boolean => Math.round(value * D) >= scaledTarget(target, D);
+
 export interface Mode {
   /** What a lineup is worth: own points, own less one team's points, or own less the best other team's points. */
   readonly metric: 'own' | 'margin' | 'closest';

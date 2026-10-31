@@ -11,23 +11,24 @@
  */
 import { scoreMeet } from '../model/results';
 import type { Results } from '../model/results';
+import type { Lineup, ScorerTag } from '../model/lineup';
 import type { Gender } from '../model/primitives';
 import { explain } from './explain';
-import { gate, ownPointsOf, repairable } from './gate';
-import { ownPenalty, scorerIds } from './load';
-import { metricOf } from './mode';
-import { scaleFor, solveAutoBuild } from './solve';
+import { evaluationOfScored, gate, repairable, scoreLineup } from './gate';
+import { scorerIds } from './load';
+import { makeScale } from './lp';
+import { reachesTarget } from './mode';
+import { scaleFor, solveAutoBuild, tieGroupSizes } from './solve';
 import type { Squad } from './squads';
 import type { SolveOutcome, SolveRecord } from './solve';
 import type { Evaluator } from './evaluate';
 import { eventId } from './evaluate';
-import { pinLineup } from './robust';
 import { buildProblem, classify, Space } from './space';
 import type { EventSpace, Problem } from './space';
 import type { Support } from './support';
 import { checkLimits, checkLoadSettings, checkObjective, checkOwnTags, checkRoster, checkRules, checkSchedule, checkTeams, loadRuleOf } from './support';
 import { autoBuildFail } from './types';
-import type { AutoBuildEvaluation, AutoBuildProof, AutoBuildProposal, AutoBuildRequest, AutoBuildResult, AutoBuildRestriction, MipSolve } from './types';
+import type { AutoBuildEvaluation, AutoBuildProof, AutoBuildProposal, AutoBuildRequest, AutoBuildResult, AutoBuildRestriction, AutoBuildScore, MipSolve } from './types';
 
 export { AUTOBUILD_DEFAULT_LIMITS, AUTOBUILD_DEFAULT_ROBUST, AutoBuildError } from './types';
 export type {
@@ -41,6 +42,7 @@ export type {
   AutoBuildRequest,
   AutoBuildRestriction,
   AutoBuildResult,
+  AutoBuildScore,
   EntryChange,
   MipSolution,
   MipSolve,
@@ -65,16 +67,8 @@ function strictFits(problem: Problem): boolean {
 
 function evaluationOf(results: Results, problem: Problem): AutoBuildEvaluation {
   const { req } = problem;
-  const ownPoints = ownPointsOf(results, req.ownTeamId);
   // D5 5.4: the current lineup of a robust request is scored again with the robust swims pinned on the entries of the pinned swimmers.
-  const robustResults =
-    problem.robust === null ? null : scoreMeet(req.model, pinLineup(req.lineup, req.ownTeamId, problem.robust.pins, (id) => problem.roles.get(id) === 'scorer'), req.tags, req.rules, req.sourcing);
-  // D5 8.2: the own-only penalty over the own swimmers on the scoring roster, from `sessionLoad`'s `perSwimmer` rows.
-  const penaltyPoints = ownPenalty(problem.support.load, problem.currentLoad, scorerIds(problem.req.tags, problem.req.ownTeamId));
-  // D5 4.7: the metric of the mode (own points, the margin, the closest margin), less the penalty. A goal seek's metric has none.
-  const { value, rival } = metricOf(problem.mode, robustResults ?? results, req.ownTeamId);
-  const robustOwnPoints = robustResults === null ? null : ownPointsOf(robustResults, req.ownTeamId);
-  return { objective: problem.mode.target === null ? value - penaltyPoints : value, ownPoints, rival, robustOwnPoints, penaltyPoints, results, load: problem.currentLoad };
+  return evaluationOfScored(problem, scoreLineup(problem, req.lineup, req.tags, (id) => problem.roles.get(id) === 'scorer', { results, load: problem.currentLoad }));
 }
 
 function restrictionsOf(problem: Problem, space: Space): AutoBuildRestriction[] {
@@ -234,10 +228,9 @@ function checkLoad(load: NonNullable<AutoBuildRequest['load']>, events: readonly
   checkSchedule(load, events.filter((es) => (es.relay === null ? es.scorable.length > 0 || es.frozenIn.length > 0 : es.relay.squads.length > 0)).map((es) => es.event));
 }
 
-export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise<AutoBuildResult> {
-  // The wall-time budget runs from here (D5 amendment 1, 6.3). Without a clock, only solver-reported seconds count.
-  const started = req.clock?.();
-  // D5 2.1, in order. 1: the preflight. Its ScoreMeetError reaches the caller unchanged.
+/** D5 2.1, in order, up to the problem: the refusals that need no candidate. Shared by `autoBuild` and `autoBuildObjective`. */
+function prepare(req: AutoBuildRequest): { readonly problem: Problem; readonly support: Support; readonly currentResults: Results } {
+  // 1: the preflight. Its ScoreMeetError reaches the caller unchanged.
   const currentResults = scoreMeet(req.model, req.lineup, req.tags, req.rules, req.sourcing);
   checkTeams(req.model, req.ownTeamId);
   if (classify(req).decision.size === 0) autoBuildFail('nothing_to_build', 'no own swimmer can be decided: every one is untagged off the roster, on an own relay, or tagged off the scoring roster');
@@ -254,7 +247,39 @@ export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise
     autoBuildFail('mode_not_built', 'goal seek with the "prefer" load mode is not built: D5 4.7 does not say whether the target counts the penalty', 'goal-seek-prefer');
   }
 
-  const problem = buildProblem(req, support, currentResults);
+  return { problem: buildProblem(req, support, currentResults), support, currentResults };
+}
+
+/**
+ * Scores a lineup (with the tags it is scored under) in the terms of the request's objective: the number `autoBuild` ranks. It is `proposal.evaluation`
+ * for a proposal's own lineup and tags, and `current` for the request's. The refusals are `autoBuild`'s up to the problem, and `robust_no_spread`.
+ * One refusal is not repeated: an unscheduled event with a candidate (D5 2.1 item 6), which `autoBuild` checks from the columns of every candidate. So a
+ * direct call can score a request that `autoBuild` would refuse. Accepting a proposal is safe: it came from a successful `autoBuild` run on this request.
+ *
+ * `meetsTarget` is `null` unless the objective is a goal seek. Then it is the gate's own test (`reachesTarget`: whole numbers at a scale `D`). Pass
+ * `proposal.scaleD` as `scaleD` to get the gate's answer; the scale is then the lcm of `scaleD` and the tie groups below, so a tie that an opponent
+ * re-suggest adds is still whole. Without it the scale is the finest the request and this lineup need (the lcm of the decimal and
+ * penalty scales and of the tie groups of the current and the scored results). The gate's scale can be finer, because it also counts the tie groups of every
+ * candidate column, which only a run knows. So without `scaleD` a target within 1e-9 / D of the metric can read differently from the gate.
+ */
+export function autoBuildObjective(req: Omit<AutoBuildRequest, 'clock'>, lineup: Lineup, tags: readonly ScorerTag[], scaleD?: number): AutoBuildScore {
+  const { problem } = prepare(req);
+  if (problem.robust !== null && problem.robust.pins.size === 0) {
+    autoBuildFail('robust_no_spread', 'robust mode found no (swimmer, event) pair with enough dated SCY swims inside the record range, so no pair has a spread', 'robust');
+  }
+  const roster = scorerIds(tags, req.ownTeamId);
+  const scored = scoreLineup(problem, lineup, tags, (id) => roster.has(id));
+  const target = problem.mode.target;
+  if (target === null) return { ...evaluationOfScored(problem, scored), meetsTarget: null };
+  // `makeScale` takes the lcm of every size it is given, so `scaleD` joins the tie groups of the scored lineup: a re-suggest can give it a tie the run never saw.
+  const D = makeScale(problem.support, new Set([...(scaleD === undefined ? [] : [scaleD]), ...tieGroupSizes(problem.currentResults), ...tieGroupSizes(scored.results)])).D;
+  return { ...evaluationOfScored(problem, scored), meetsTarget: reachesTarget(scored.value, target, D) };
+}
+
+export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise<AutoBuildResult> {
+  // The wall-time budget runs from here (D5 amendment 1, 6.3). Without a clock, only solver-reported seconds count.
+  const started = req.clock?.();
+  const { problem, currentResults } = prepare(req);
   const load = req.load;
   const space = new Space(problem, req.limits.candidatesPerEvent, req.clock, (events, evaluator) => {
     if (load !== null && load.preference.mode !== 'off') checkLoad(load, events, evaluator);
@@ -271,7 +296,7 @@ export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise
   const target = problem.mode.target;
   if (target !== null && repairable(problem).length === 0) {
     const D = scaleFor(space).D;
-    if (Math.round(current.objective * D) >= Math.ceil(target * D - 1e-9)) {
+    if (reachesTarget(current.objective, target, D)) {
       const proof: AutoBuildProof = { status: 'proven_optimal', bestFound: 0, upperBound: 0, gap: 0, ...proofBase(problem, space, records, null, !strictFits(problem)) };
       return { kind: 'unchanged', reason: 'current_meets_target', current, proof };
     }

@@ -1018,3 +1018,33 @@ Test `cappedLegsDoNotCrowdQ`: the top 12 squads of an event all hold a swimmer w
    because dropping it is a second change that buys nothing.
 4. **Real meets.** The shipped NSISC v5 preset has no numeric removal cap,
    so the prune does not run there, and config C results do not change.
+
+## Amendment 10 (lead rulings, 2026-10-31): scoring a lineup in the mode's terms
+
+1. **New root export** `autoBuildObjective(req: Omit<AutoBuildRequest,
+   'clock'>, lineup, tags, scaleD?): AutoBuildScore`, where `AutoBuildScore`
+   is `AutoBuildEvaluation` plus `meetsTarget: boolean | null`. It scores a
+   lineup the way the gate scores its final candidate: robust pins on the
+   own scorer tags, the own-only penalty under `prefer`, and the margin or
+   closest rival metric. For a proposal's own lineup and tags it equals
+   `proposal.evaluation` exactly. The gate and this export share one scorer
+   (`scoreLineup`, `evaluationOfScored` in `gate.ts`).
+2. **Why.** Accept (U1-b) re-scores the proposal and the current lineup after
+   it re-suggests the opponents. Own points are the wrong test outside
+   max-own: a robust proposal can tie on own points and still win on the
+   robust value.
+3. **Scale.** The gate fills a new optional `AutoBuildProposal.scaleD`.
+   With `scaleD`, the export's scale is the lcm of `scaleD` and the tie
+   groups of the current and scored results, so a tie that a re-suggest adds
+   stays whole. Without it the scale can be coarser than the gate's.
+4. **One target test.** `scaledTarget` and `reachesTarget` (`mode.ts`) are the
+   only goal-seek target test: the MIP row, `checkTarget`, the gate,
+   `current_meets_target` and this export all use them. The expressions are
+   unchanged.
+5. **Refusals** are `autoBuild`'s up to the problem, plus `robust_no_spread`.
+   One is not repeated: an unscheduled event with a candidate (2.1 item 6),
+   which needs every column. Accept is safe because its proposal came from a
+   successful run.
+6. **Accept rule (for the wiring).** Outside goal seek, the re-scored
+   proposal's objective must be strictly above the re-scored current's. In
+   goal seek, `meetsTarget` must be true after the re-suggest.

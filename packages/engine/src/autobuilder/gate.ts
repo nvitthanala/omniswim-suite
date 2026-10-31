@@ -16,7 +16,7 @@ import type { Selection, Scale } from './lp';
 import { ownPenalty, scorerIds, violationsOf } from './load';
 import type { SessionLoadResult } from './load';
 import { freshRelays, squadKeyOfEntry } from './squads';
-import { metricOf } from './mode';
+import { metricOf, reachesTarget } from './mode';
 import { pinLineup } from './robust';
 import { rosterSpots } from './roster';
 import { pairKey } from './space';
@@ -187,21 +187,58 @@ interface Candidate {
   readonly violations: readonly Violation[];
 }
 
-function candidateOf(problem: Problem, built: Built): Candidate {
+/** A lineup scored in the terms of the request's objective (D5 4.7, 5.4, 8.2). */
+export interface Scored {
+  readonly results: Results;
+  readonly load: SessionLoadResult | null;
+  readonly penaltyPoints: number;
+  readonly robustResults: Results | null;
+  readonly value: number;
+  readonly rival: ReturnType<typeof metricOf>['rival'];
+}
+
+/**
+ * The one place that scores a lineup for the objective: the gate, the current lineup (`evaluationOf`) and `autoBuildObjective` all call it.
+ * `owned` says which own swimmers the robust pins apply to (the swimmers on the scoring roster that the solver decides). `known` passes a score or a
+ * load the caller already has for the same lineup and tags.
+ */
+export function scoreLineup(
+  problem: Problem,
+  lineup: AutoBuildProposal['lineup'],
+  tagsForScoring: readonly ScorerTag[],
+  owned: (id: SwimmerId) => boolean,
+  known: { readonly results?: Results; readonly load?: SessionLoadResult | null } = {}
+): Scored {
   const { req } = problem;
-  const results = scoreMeet(req.model, built.lineup, built.tagsForScoring, req.rules, req.sourcing);
-  // D5 8.2: the load of the built lineup, and a penalty over the own swimmers on the roster only (never `sessionLoad`'s own total).
+  const results = known.results ?? scoreMeet(req.model, lineup, tagsForScoring, req.rules, req.sourcing);
+  // D5 8.2: the load of the lineup, and a penalty over the own swimmers on the roster only (never `sessionLoad`'s own total).
   const rule = problem.support.load;
-  const load: SessionLoadResult | null = rule === null ? null : sessionLoad(req.model, built.lineup, results, rule.schedule, rule.preference, req.rules);
-  const penaltyPoints = ownPenalty(rule, load, scorerIds(built.tagsForScoring, req.ownTeamId));
+  const load: SessionLoadResult | null = known.load !== undefined ? known.load : rule === null ? null : sessionLoad(req.model, lineup, results, rule.schedule, rule.preference, req.rules);
+  const penaltyPoints = ownPenalty(rule, load, scorerIds(tagsForScoring, req.ownTeamId));
   // D5 5.4 and 8.2: robust mode ranks the lineup with the robust swims pinned on the entries of the swimmers the solver owns. The pinned copy is
-  // scored by `scoreMeet` for the objective only. Everything else (`results`, the load, the violations) is the lineup as built.
-  const robustResults =
-    problem.robust === null
-      ? null
-      : scoreMeet(req.model, pinLineup(built.lineup, req.ownTeamId, problem.robust.pins, (id) => onRoster(problem, built, id)), built.tagsForScoring, req.rules, req.sourcing);
+  // scored by `scoreMeet` for the objective only. Everything else (`results`, the load, the violations) is the lineup as given.
+  const robustResults = problem.robust === null ? null : scoreMeet(req.model, pinLineup(lineup, req.ownTeamId, problem.robust.pins, owned), tagsForScoring, req.rules, req.sourcing);
   const { value, rival } = metricOf(problem.mode, robustResults ?? results, req.ownTeamId);
-  return { built, results, load, penaltyPoints, robustResults, value, rival, violations: violationsOf(results, load, rule === null ? null : rule.schedule) };
+  return { results, load, penaltyPoints, robustResults, value, rival };
+}
+
+/** The evaluation of a scored lineup: the objective is the metric less the own-only penalty, but in goal seek the metric alone (D5 4.7). */
+export function evaluationOfScored(problem: Problem, s: Scored): AutoBuildEvaluation {
+  return {
+    objective: problem.mode.target === null ? s.value - s.penaltyPoints : s.value,
+    ownPoints: ownPointsOf(s.results, problem.req.ownTeamId),
+    rival: s.rival,
+    robustOwnPoints: s.robustResults === null ? null : ownPointsOf(s.robustResults, problem.req.ownTeamId),
+    penaltyPoints: s.penaltyPoints,
+    results: s.results,
+    load: s.load,
+  };
+}
+
+function candidateOf(problem: Problem, built: Built): Candidate {
+  const scored = scoreLineup(problem, built.lineup, built.tagsForScoring, (id) => onRoster(problem, built, id));
+  const rule = problem.support.load;
+  return { built, ...scored, violations: violationsOf(scored.results, scored.load, rule === null ? null : rule.schedule) };
 }
 
 /** The objective of a candidate in the gate's terms: the metric of the mode (robust seeds in robust mode) less the own-only penalty. */
@@ -316,7 +353,6 @@ export function gate(
   method: AutoBuildProposal['method'] = 'mip',
   valueScaled: number = mipPoints
 ): AutoBuildProposal {
-  const { req } = problem;
   const raw = candidateOf(problem, buildLineup(problem, space, selection));
   const target = problem.mode.target;
   if (target === null) {
@@ -325,7 +361,7 @@ export function gate(
     // Goal seek (D5 4.7): the metric equals the MIP's, it reaches the target, and the changes counted from the lineup are the ones
     // the MIP minimized (4.9). The metric carries no penalty.
     checkPoints(raw.value, scale, valueScaled, 'the metric');
-    if (Math.round(raw.value * scale.D) < Math.ceil(target * scale.D - 1e-9)) autoBuildFail('model_mismatch', `the built lineup's metric ${raw.value} is below the target ${target}`);
+    if (!reachesTarget(raw.value, target, scale.D)) autoBuildFail('model_mismatch', `the built lineup's metric ${raw.value} is below the target ${target}`);
     const rawChanges = raw.built.rosterAdds.length + raw.built.rosterRemoves.length + raw.built.entryChanges.length;
     if (rawChanges !== -mipPoints) autoBuildFail('model_mismatch', `the built lineup has ${rawChanges} changes; the solver counted ${-mipPoints}`);
   }
@@ -335,15 +371,7 @@ export function gate(
   const { built } = final;
   const changeCount = built.rosterAdds.length + built.rosterRemoves.length + built.entryChanges.length;
   const newWarnings = checkViolations(problem, built, final.violations);
-  const evaluation: AutoBuildEvaluation = {
-    objective: target === null ? final.value - final.penaltyPoints : final.value,
-    ownPoints: ownPointsOf(final.results, req.ownTeamId),
-    rival: final.rival,
-    robustOwnPoints: final.robustResults === null ? null : ownPointsOf(final.robustResults, req.ownTeamId),
-    penaltyPoints: final.penaltyPoints,
-    results: final.results,
-    load: final.load,
-  };
+  const evaluation = evaluationOfScored(problem, final);
   return {
     lineup: built.lineup,
     rosterAdds: built.rosterAdds,
@@ -355,5 +383,6 @@ export function gate(
     explanations: [],
     newWarnings,
     method,
+    scaleD: scale.D,
   };
 }

@@ -117,6 +117,9 @@ export interface AutoBuildEvaluation {
   readonly results: Results;
   readonly load: ReturnType<typeof sessionLoad> | null;
 }
+/** `autoBuildObjective`: a lineup's evaluation in the request's objective, and for a goal seek whether it reaches the target (`null` in every other mode). */
+export type AutoBuildScore = AutoBuildEvaluation & { readonly meetsTarget: boolean | null };
+
 export type EntryChange =
   | { readonly kind: 'added'; readonly entryKey: string }
   | { readonly kind: 'removed'; readonly entryKey: string; readonly why: 'replaced' | 'leg_not_in_search' };
@@ -188,6 +191,11 @@ export interface AutoBuildProposal {
   /** Section 8.3 warnings absent from the current results */
   readonly newWarnings: readonly Violation[];
   readonly method: 'mip' | 'mip-incumbent' | 'local-search';
+  /**
+   * The scale `D` the gate checked this proposal at (D5 5.2): every metric of the run is a whole number over `D`. Pass it to `autoBuildObjective` so its
+   * `meetsTarget` is the gate's own test. Absent on a proposal built by hand.
+   */
+  readonly scaleD?: number;
 }
 
 export type AutoBuildRestriction =

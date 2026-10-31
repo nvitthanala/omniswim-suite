@@ -12,6 +12,8 @@
 import { buildLp, makeScale } from './lp';
 import type { LpBuild, Scale, Selection } from './lp';
 import { choiceOfChosen, choiceOfCurrent, localSearch, rowsHold } from './localSearch';
+import { scaledTarget } from './mode';
+import type { Results } from '../model/results';
 import type { Space } from './space';
 import { autoBuildFail } from './types';
 import type { AutoBuildLimits, MipSolution, MipSolve } from './types';
@@ -67,13 +69,19 @@ export type SolveOutcome =
 const sorted = (ns: Iterable<number>): number[] => [...new Set(ns)].sort((a, b) => a - b);
 
 /** `D` for the evaluations done so far, plus the tie groups of the current results (D5 5.2). */
-export function scaleFor(space: Space): Scale {
+/** The sizes (2 or more) of the groups of rows that share a place, over every event of the results (D5 5.2). */
+export function tieGroupSizes(results: Results): number[] {
   const sizes: number[] = [];
-  for (const e of space.problem.currentResults.events) {
+  for (const e of results.events) {
     const byPlace = new Map<number, number>();
     for (const r of e.rows) if (r.place !== null) byPlace.set(r.place, (byPlace.get(r.place) ?? 0) + 1);
     sizes.push(...[...byPlace.values()].filter((n) => n >= 2));
   }
+  return sizes;
+}
+
+export function scaleFor(space: Space): Scale {
+  const sizes: number[] = tieGroupSizes(space.problem.currentResults);
   for (const es of space.events) {
     for (const c of es.columns) sizes.push(...c.eval.tieSizes);
     for (const p of es.pairs.values()) if (p.singleton !== null) sizes.push(...p.singleton.tieSizes);
@@ -231,7 +239,7 @@ class Sequence {
   private checkTarget(build: LpBuild, columns: Readonly<Record<string, number>>, scale: Scale, what: string): void {
     const target = this.space.problem.mode.target;
     if (target === null) return;
-    const need = Math.ceil(target * scale.D - 1e-9);
+    const need = scaledTarget(target, scale.D);
     const value = build.valueOf(columns);
     if (value < need) autoBuildFail('model_mismatch', `${what}: the metric ${value} is below the target ${need} at scale ${scale.D}`);
   }

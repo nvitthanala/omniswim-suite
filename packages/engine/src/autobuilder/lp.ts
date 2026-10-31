@@ -16,7 +16,7 @@ import type { ColumnEval } from './evaluate';
 import type { Column, EventSpace, Problem, Space } from './space';
 import { pairKey } from './space';
 import { certainSession, scorerIds } from './load';
-import { lambdaOf, pointsOfTeam } from './mode';
+import { lambdaOf, pointsOfTeam, scaledTarget } from './mode';
 import type { Standing } from './mode';
 import type { Support } from './support';
 
@@ -664,7 +664,7 @@ class Builder {
     const c = change as NonNullable<typeof change>;
     if (goal && this.opts.tieBreak === undefined) {
       // GS (D5 4.7): minimize changes, subject to the metric reaching the target. The relaxed outside terms only widen the metric.
-      const need = Math.ceil((mode.target as number) * scale.D - 1e-9);
+      const need = scaledTarget(mode.target as number, scale.D);
       this.lanes.forEach((lane, i) => this.row([...lane.terms, ...lane.relaxed], '>=', need - (fixedBy[i] as number)));
       this.objective.push(...c.terms);
       this.constant = c.constant;

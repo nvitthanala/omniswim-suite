@@ -110,12 +110,13 @@ export type {
   AutoBuildRequest,
   AutoBuildRestriction,
   AutoBuildResult,
+  AutoBuildScore,
   EntryChange,
   MipSolution,
   MipSolve,
   RivalRef,
 } from './autobuilder';
-export { AUTOBUILD_DEFAULT_LIMITS, AUTOBUILD_DEFAULT_ROBUST, AutoBuildError, autoBuild } from './autobuilder';
+export { AUTOBUILD_DEFAULT_LIMITS, AUTOBUILD_DEFAULT_ROBUST, AutoBuildError, autoBuild, autoBuildObjective } from './autobuilder';
 
 // 3.10 Table D types. Retired from use (R58): no function reads them.
 export type { TableDPreset, TableDRow } from './sourcing/tableD';

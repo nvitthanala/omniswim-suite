@@ -12,7 +12,7 @@
  * written out here from the lineups, so a drift in the engine's D5 4.9 count shows as a difference.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { AutoBuildError, autoBuild, builtinRulePreset, entryKey, requireComplete, scoreMeet, sessionLoad } from '@omniswim/engine';
+import { AutoBuildError, autoBuild, autoBuildObjective, builtinRulePreset, entryKey, requireComplete, scoreMeet, sessionLoad } from '@omniswim/engine';
 import type {
   AutoBuildLimits,
   AutoBuildRequest,
@@ -830,6 +830,26 @@ function diveFill(): Fx {
   };
 }
 
+/**
+ * A solver that stops early (D5 10): the restricted solve returns an incumbent with the swappable scorers `pinned` off the roster (`z<i> = 0`, by the
+ * index of the sorted decision swimmers f0, s0, s2), and every solve returns the true optimum plus `slack` (in scaled points) as its bound.
+ */
+function stopsEarly(pinned: readonly number[], slack: number): MipSolve {
+  const real = nodeMipSolve();
+  let calls = 0;
+  return async (lp, options) => {
+    calls += 1;
+    const free = await real(lp, options);
+    const text = lp.replace('\n one = 1', `\n one = 1${pinned.map((i) => `\n z${i} = 0`).join('')}`);
+    if (text === lp) throw new Error('the LP has no one = 1 bound');
+    const run = await real(text, options);
+    if (free.status !== 'Optimal' || run.status !== 'Optimal') return free;
+    // The third solve is the tie-break: its Optimal result ends the run with the incumbent's lineup, with no local search after it.
+    if (calls === 3) return run;
+    return { status: 'Time limit reached', objective: 0, columns: {}, incumbent: { objective: run.objective, columns: run.columns }, dualBound: free.objective + slack };
+  };
+}
+
 const SEEDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 describe('slice A9 roster swaps', () => {
@@ -1467,25 +1487,6 @@ describe('slice A9 restore, delta review', () => {
     expect(wrong.code).toBe('model_mismatch');
   }, 60_000);
 
-  /**
-   * A solver that stops early (D5 10): the restricted solve returns an incumbent with the swappable scorers `pinned` off the roster (`z<i> = 0`, by the
-   * index of the sorted decision swimmers f0, s0, s2), and every solve returns the true optimum plus `slack` (in scaled points) as its bound.
-   */
-  function stopsEarly(pinned: readonly number[], slack: number): MipSolve {
-    const real = nodeMipSolve();
-    let calls = 0;
-    return async (lp, options) => {
-      calls += 1;
-      const free = await real(lp, options);
-      const text = lp.replace('\n one = 1', `\n one = 1${pinned.map((i) => `\n z${i} = 0`).join('')}`);
-      if (text === lp) throw new Error('the LP has no one = 1 bound');
-      const run = await real(text, options);
-      if (free.status !== 'Optimal' || run.status !== 'Optimal') return free;
-      // The third solve is the tie-break: its Optimal result ends the run with the incumbent's lineup, with no local search after it.
-      if (calls === 3) return run;
-      return { status: 'Time limit reached', objective: 0, columns: {}, incumbent: { objective: run.objective, columns: run.columns }, dualBound: free.objective + slack };
-    };
-  }
 
   it('28 pruneKeepsDivingFill: with a cap of 1 on the board and a binding team size, a non-scoring dive entry that turns a rostered swimmer into a diver is kept, so the lineup that needs it is found and the label is true', async () => {
     const fx = diveFill();
@@ -1505,4 +1506,150 @@ describe('slice A9 restore, delta review', () => {
     expect(p?.lineup.entries.filter((e) => e.kind === 'individual' && e.teamId === 'A' && e.eventKey === DIVE).map((e) => e.kind === 'individual' && e.swimmerId).sort()).toEqual(['d', 'm']);
     expect(p?.changeCount).toBe(3);
   }, 60_000);
+});
+
+describe('autoBuildObjective (U1b follow-up): the number autoBuild ranks, for any lineup', () => {
+  /** Checks the current lineup and, when the result has one, the proposal, against `autoBuildObjective`. Returns the proposal or null. */
+  const agrees = (req: AutoBuildRequest, result: AutoBuildResult, label: string) => {
+    const { meetsTarget, ...current } = autoBuildObjective(req, req.lineup, req.tags);
+    expect(current, `${label} current`).toEqual(result.current);
+    const goal = req.objective.kind === 'goal-seek';
+    if (!goal) expect(meetsTarget, `${label} meetsTarget`).toBeNull();
+    const p = result.kind === 'improved' ? result.proposal : result.kind === 'current_infeasible' ? result.alternative : null;
+    if (p === null) return null;
+    // With the scale of the gate the goal-seek answer is the gate's own: a proposal the gate passed reaches the target.
+    const scored = autoBuildObjective(req, p.lineup, p.tagsForScoring, p.scaleD);
+    expect(p.scaleD, `${label} scaleD`).toBeGreaterThanOrEqual(1);
+    expect(scored.meetsTarget, `${label} proposal meetsTarget`).toBe(goal ? true : null);
+    const { meetsTarget: _m, ...evaluation } = scored;
+    expect(evaluation, `${label} proposal`).toEqual(p.evaluation);
+    return p;
+  };
+
+  it('29 equalsTheEvaluation: for a proposal and for the current lineup it equals the evaluation of the result in every mode, with swaps, a prefer load and robust pins', async () => {
+    const load = worldLoad(prefer(1, 2));
+    // Per mode and roster setting, the seeds that gave a proposal: each setting must have at least one, so no mode is vacuous.
+    const proposals = new Map<string, number>();
+    const note = (key: string, p: unknown): void => void proposals.set(key, (proposals.get(key) ?? 0) + (p === null ? 0 : 1));
+    const keys: string[] = [];
+    for (const seed of [0, 1, 2, 3, 4, 5]) {
+      const fx = world(seed);
+      const current = ownOf(fx, fx.lineup, fx.tags);
+      // The margin of the current lineup over the closest team, as autoBuild ranks it: the goal is a little above it.
+      const margin = autoBuildObjective(request(fx, { objective: { kind: 'margin', rival: { kind: 'closest' } } }), fx.lineup, fx.tags).objective;
+      const objectives: [string, AutoBuildRequest['objective']][] = [
+        ['max-own', { kind: 'max-own' }],
+        ['margin closest', { kind: 'margin', rival: { kind: 'closest' } }],
+        ['margin team B', { kind: 'margin', rival: { kind: 'team', teamId: 'B' } }],
+        ['goal total', { kind: 'goal-seek', target: { kind: 'total', points: current + 3 } }],
+        ['goal margin', { kind: 'goal-seek', target: { kind: 'margin', rival: { kind: 'closest' }, points: margin + 3 } }],
+      ];
+      for (const [name, objective] of objectives) {
+        for (const roster of ['fixed', 'propose-swaps'] as const) {
+          const req = request(fx, { objective, roster });
+          const key = `${name} ${roster}`;
+          if (!keys.includes(key)) keys.push(key);
+          note(key, agrees(req, await autoBuild(req, nodeMipSolve()), `seed ${seed} ${key}`));
+        }
+      }
+      // A prefer load: the own-only penalty is part of the objective (goal seek with prefer is refused by autoBuild).
+      const loaded = swaps(fx, { load });
+      if (!keys.includes('prefer')) keys.push('prefer');
+      note('prefer', agrees(loaded, await autoBuild(loaded, nodeMipSolve()), `seed ${seed} prefer`));
+    }
+    // Robust pins: the proposal and the current lineup are scored with the robust seeds.
+    const robust = robustPair();
+    for (const roster of ['fixed', 'propose-swaps'] as const) {
+      const req = request(robust, { objective: { kind: 'robust', recentSwims: 5, minSwims: 3 }, roster });
+      const result = await autoBuild(req, nodeMipSolve());
+      const p = agrees(req, result, `robust ${roster}`);
+      expect(autoBuildObjective(req, req.lineup, req.tags).robustOwnPoints, `robust ${roster}`).not.toBeNull();
+      // Written out: with the roster fixed nothing beats the current lineup, and a swap does (H replaces F).
+      expect(result.kind, `robust ${roster}`).toBe(roster === 'fixed' ? 'unchanged' : 'improved');
+      if (roster === 'propose-swaps') expect(p?.evaluation.robustOwnPoints, `robust ${roster}`).not.toBeNull();
+    }
+    for (const key of keys) expect(proposals.get(key) ?? 0, `${key} gave a proposal on some seed`).toBeGreaterThan(0);
+  }, 600_000);
+
+  it('29b restoredScorerRobust: a proposal with a scorer the gate put back, in robust mode, is scored as its own evaluation', async () => {
+    // The entryless fixture with dated swims, so every own pair has a spread and a robust pin. The solver stops early with s0 and f0 off the roster: the
+    // gate puts s0 back (his FREE entry scores) and the proposal's evaluation is the robust points of that lineup.
+    const r = rivalR();
+    const specs: Spec[] = [
+      { id: 's0', team: 'A', times: {}, dated: { [FREE]: [4700, 4720, 4680, 4710, 4690] } },
+      { id: 's2', team: 'A', times: {}, dated: { [BACK]: [4690, 4700, 4680, 4710, 4695] } },
+      { id: 'f0', team: 'A', times: {}, dated: { [BACK]: [5300, 5310, 5290, 5320, 5300] } },
+      ...r.specs,
+    ];
+    const fx: Fx = { model: buildModel(specs, [FREE, BACK]), lineup: lineup(ind('A', 's0', FREE), ...r.entries), tags: [...tags('A', ['s0', 's2']), ...r.tags], rules: rulesOf({ size: 2, maxTotal: 2 }) };
+    const req = swaps(fx, { objective: { kind: 'robust', recentSwims: 5, minSwims: 3 } });
+    gateSeen.calls.length = 0;
+    const result = await autoBuild(req, stopsEarly([0, 1], 0));
+    const [, , raw] = gateSeen.calls[gateSeen.calls.length - 1] as GateArgs;
+    expect([...raw.removed]).toEqual(['s0']);
+    expect(result.kind).toBe('improved');
+    const p = agrees(req, result, 'restored robust');
+    expect(p?.rosterRemoves).toEqual([]);
+    expect(p?.tagsForScoring.some((x) => x.teamId === 'A' && x.swimmerId === 's0')).toBe(true);
+    expect(p?.evaluation.robustOwnPoints).not.toBeNull();
+  }, 120_000);
+
+  it('29c targetAtTheGateScale: meetsTarget is the gate\'s scaled-integer test, so a target just above a representable metric is not met', async () => {
+    let seen = 0;
+    for (const seed of [0, 1, 2, 3, 4, 5]) {
+      const fx = world(seed);
+      const current = ownOf(fx, fx.lineup, fx.tags);
+      const base = request(fx, { objective: { kind: 'goal-seek', target: { kind: 'total', points: current + 3 } } });
+      const result = await autoBuild(base, nodeMipSolve());
+      const p = proposalOf(result);
+      if (p === null || (p.scaleD as number) < 2) continue;
+      const D = p.scaleD as number;
+      const v = p.evaluation.objective;
+      const at = (points: number, scale?: number) => autoBuildObjective(request(fx, { objective: { kind: 'goal-seek', target: { kind: 'total', points } } }), p.lineup, p.tagsForScoring, scale).meetsTarget;
+      expect(at(v, D), `seed ${seed} at the metric`).toBe(true);
+      // Noise below the gate's tolerance (1e-9 in whole numbers of 1 / D) is met, anything above it is not. A float compare with 1e-9 in points would call both met.
+      expect(at(v + 0.5e-9 / D, D), `seed ${seed} within the tolerance`).toBe(true);
+      expect(at(v + 2e-9 / D, D), `seed ${seed} just above`).toBe(false);
+      expect(at(v + 1 / D, D), `seed ${seed} one step above`).toBe(false);
+      expect(at(v - 1 / D, D), `seed ${seed} one step below`).toBe(true);
+      seen++;
+    }
+    expect(seen, 'a goal-seek proposal at a scale above 1').toBeGreaterThan(0);
+  }, 300_000);
+
+  it('30 anyLineup: a lineup the solver never built is scored by the same rules, and a refusal has the code autoBuild gives', async () => {
+    const fx = world(2);
+    const req = request(fx);
+    // A lineup with the first own entry removed, scored under the coach's tags: max-own is whole-meet scoreMeet.
+    const own = fx.lineup.entries.findIndex((e) => e.kind === 'individual' && e.teamId === 'A');
+    const cut = lineup(...fx.lineup.entries.filter((_, i) => i !== own));
+    const score = autoBuildObjective(req, cut, fx.tags);
+    expect(score.objective).toBe(ownOf(fx, cut, fx.tags));
+    expect(score.ownPoints).toBe(score.objective);
+    expect(score.robustOwnPoints).toBeNull();
+    expect(score.penaltyPoints).toBe(0);
+    // The tags decide the roster: with a scorer tag off, his entries do not score.
+    const fewer = fx.tags.filter((x) => x.swimmerId !== 'p0');
+    expect(autoBuildObjective(req, fx.lineup, fewer).objective).toBe(ownOf(fx, fx.lineup, fewer));
+    // Under goal seek the penalty is not part of the objective but meetsTarget reads the metric.
+    const goal = request(fx, { objective: { kind: 'goal-seek', target: { kind: 'total', points: score.objective } } });
+    expect(autoBuildObjective(goal, cut, fx.tags).meetsTarget).toBe(true);
+    expect(autoBuildObjective(goal, cut, fx.tags).objective).toBe(score.objective);
+    const above = request(fx, { objective: { kind: 'goal-seek', target: { kind: 'total', points: score.objective + 0.25 } } });
+    expect(autoBuildObjective(above, cut, fx.tags).meetsTarget).toBe(false);
+    // The refusals are autoBuild's.
+    const refusals: [string, AutoBuildRequest][] = [
+      ['limits', request(fx, { limits: { ...LIMITS, candidatesPerEvent: 0 } })],
+      ['roster flag', request(fx, { roster: 'swap' as never })],
+      ['goal seek with prefer', request(fx, { objective: { kind: 'goal-seek', target: { kind: 'total', points: 1 } }, load: worldLoad(prefer(1, 2)) })],
+      ['no spread', request(pair(), { objective: { kind: 'robust', recentSwims: 5, minSwims: 3 } })],
+      ['unknown team', request(fx, { ownTeamId: 'nobody' })],
+    ];
+    for (const [label, bad] of refusals) {
+      const fromBuild = await autoError(() => autoBuild(bad, nodeMipSolve()));
+      const fromScore = await autoError(async () => autoBuildObjective(bad, bad.lineup, bad.tags));
+      expect(fromScore.code, label).toBe(fromBuild.code);
+      expect(fromScore.subject, label).toBe(fromBuild.subject);
+    }
+  }, 120_000);
 });

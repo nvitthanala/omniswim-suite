@@ -9,7 +9,7 @@
  * rule shows as a difference.
  */
 import { describe, expect, it } from 'vitest';
-import { AutoBuildError, autoBuild, builtinRulePreset, entryKey, requireComplete, scoreMeet } from '@omniswim/engine';
+import { AutoBuildError, autoBuild, autoBuildObjective, builtinRulePreset, entryKey, requireComplete, scoreMeet } from '@omniswim/engine';
 import type {
   RelaySplit,
   AutoBuildLimits,
@@ -513,6 +513,24 @@ describe('autoBuild (D5, slice A7: robust)', () => {
     // The bound does not model the per-event cap, so it stays a gap here: it still covers the optimum (16).
     expect(robust.proof.bestFound).toBe(16);
     expect(robust.proof.upperBound as number).toBeGreaterThanOrEqual(16);
+  });
+
+  it('5b autoBuildObjectiveIsRobust: re-scoring a robust proposal and the current lineup gives the robust objective, not the normal own points', async () => {
+    // V is entered (20 normal points, 15 robust). The proposal adds C and keeps V (normal 20, robust 16). Compared by normal own points the proposal is
+    // not above the current lineup (20 against 20), so a check by `scoreMeet` alone would block it. By the robust objective it is above (16 against 15).
+    const req = request(volatile('V'));
+    const result = await autoBuild(req, nodeMipSolve());
+    expect(result.kind).toBe('improved');
+    if (result.kind !== 'improved') return;
+    const now = autoBuildObjective(req, req.lineup, req.tags);
+    const after = autoBuildObjective(req, result.proposal.lineup, result.proposal.tagsForScoring);
+    expect(now).toMatchObject({ objective: 15, robustOwnPoints: 15, ownPoints: 20, meetsTarget: null });
+    expect(after).toMatchObject({ objective: 16, robustOwnPoints: 16, ownPoints: 20, meetsTarget: null });
+    expect(after.ownPoints).toBe(now.ownPoints);
+    expect(after.objective).toBeGreaterThan(now.objective);
+    // The proposal's own evaluation is the same number.
+    expect(after.objective).toBe(result.proposal.evaluation.objective);
+    expect(now.objective).toBe(result.current.objective);
   });
 
   it('5 guardComparesRobustObjectives: the guard measures robust points, so a lineup with fewer normal points can be the improvement', async () => {
