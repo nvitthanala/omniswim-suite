@@ -21,6 +21,12 @@ export interface PanelStats {
   snapshots: number;
 }
 
+/** A disconnected Chrome port may throw before its onDisconnect callback reaches the page. */
+export function postPanelMessageSafely(port: { postMessage(message: unknown): void } | null, message: unknown, onDisconnected: () => void = () => undefined): void {
+  if (!port) return;
+  try { port.postMessage(message); } catch { onDisconnected(); }
+}
+
 /** The slice of `chrome.runtime` this file uses. */
 export interface PanelListenerRuntime {
   readonly onConnect: {
@@ -57,7 +63,7 @@ export function listenForPanelPort(runtime: PanelListenerRuntime, nonce: string,
       if (!isPanelPing(message)) return;
       stats.pings += 1;
       const pong: PanelPong = { kind: 'pong', n: message.n, nonce };
-      port.postMessage(pong);
+      postPanelMessageSafely(port, pong, () => onPortClosed(port));
     });
     port.onMessage.addListener((message) => { if (isScorerTagAction(message)) onTagAction(message); });
     port.onMessage.addListener((message) => { if (isSessionPresetEdit(message)) onSessionPresetEdit(message.preset); });

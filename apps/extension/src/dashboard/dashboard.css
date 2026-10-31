@@ -116,6 +116,10 @@ body {
 .osx-score-line--own { stroke: var(--osx-accent); stroke-width: 3; }
 .osx-score-line--rival { stroke: var(--osx-fg); stroke-width: 3; stroke-dasharray: 6 4; }
 .osx-score-line--other { stroke: var(--osx-fg-muted); stroke-width: 1.5; }
+.osx-score-dot { stroke-width: 2; }
+.osx-score-dot--own { fill: var(--osx-accent); }
+.osx-score-dot--rival { fill: var(--osx-fg); }
+.osx-score-dot--other { fill: var(--osx-fg-muted); }
 .osx-score-end-label--own { fill: var(--osx-accent); }
 .osx-score-end-label--rival { fill: var(--osx-fg); }
 .osx-score-end-label--other { fill: var(--osx-fg-muted); }
@@ -170,6 +174,13 @@ body {
 .osx-shell .osx-record-button[aria-pressed="true"] { border-width: 2px; border-color: var(--osx-fg); font-weight: 600; }
 .osx-record-kind, .osx-record-meta { font-size: 12px; color: var(--osx-fg-muted); }
 .osx-record { margin-top: 16px; border-top: 1px solid var(--osx-border); padding-top: 12px; }
+.osx-diff { margin-top: 16px; border-top: 1px solid var(--osx-border); padding-top: 12px; }
+.osx-diff section { margin-top: 12px; }
+.osx-diff table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; }
+.osx-diff caption { text-align: start; font-weight: 600; padding: 4px 0; }
+.osx-diff th, .osx-diff td { border-bottom: 1px solid var(--osx-border); padding: 5px 8px; text-align: start; }
+.osx-diff thead th { color: var(--osx-fg); }
+.osx-diff td { color: var(--osx-fg-muted); }
 .osx-radio { display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 13px; }
 .osx-rival-row { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; font-size: 12px; }
 .osx-settings input[type="color"] { width: 44px; height: 28px; padding: 0; border: 1px solid var(--osx-border); background: var(--osx-surface); }

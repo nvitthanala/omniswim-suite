@@ -251,6 +251,7 @@ export async function acceptProposal(tagged: TaggedResult, choices: ReadonlyMap<
   if (sinceRun !== null) return { kind: 'blocked', reason: sinceRun };
 
   try {
+    // Follow-up: undo-accept-expect-absent. Accept can delete a tag, which has no post-delete row rev to validate during undo.
     await deps.repo.putMany([{ op: 'put', store: 'lineups', record, expectedRev: 'new' }, ...tagOps], { expectedChangeRev: changeRev });
   } catch (cause) {
     if (cause instanceof ChangeRevMovedError) return { kind: 'blocked', reason: 'Something changed while checking. Nothing was saved. Run Accept again.' };

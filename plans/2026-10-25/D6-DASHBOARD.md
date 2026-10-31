@@ -231,3 +231,24 @@ snapshot writes back into SwimCloud, and Recharts versus a custom chart.
 6. **Moved to U-c:** lineup save, the diff view and Undo.
 7. **New slice U-e:** the Settings cut threshold, storage estimate, backup
    export and import, and the Presets view (section 1 items U-a left out).
+
+## Amendment 4 (lead rulings, 2026-10-31, slice U-c)
+
+1. **A saved lineup opens no report, chart or diff.** Only a snapshot holds
+   results (`validate.ts`, D3). A lineup can be edited, and results come
+   from SwimCloud for one moment. Meets lists the lineup and says: "A saved
+   lineup has no results. Save a snapshot to see its report and compare
+   it." The diff picker offers snapshots only. This narrows section 1.
+   User question F4 asks whether to re-score lineups instead.
+2. **A saved lineup keeps its tags and seed facts**, which the validator
+   allows on any record. It drops only `results`.
+3. **Undo covers snapshot save and lineup save only.** AutoBuilder Accept
+   can delete a tag. A deleted row has no rev, and `putMany` cannot expect
+   an absent row, so an undo could overwrite a tag made elsewhere. Accept
+   stays out of Undo until `putMany` gains that check (follow-up
+   `undo-accept-expect-absent`, user question G2).
+4. **Diff order follows the save time**, not the order the coach picked
+   (`orderForDiff`).
+5. **A meet-key mismatch reads in plain words** and names the code:
+   "These two records come from different meets, so they cannot be
+   compared (meet_key_mismatch)."

@@ -169,6 +169,7 @@ export function ScoreChart({
               {runs.map((run, runIndex) => (
                 <polyline key={runIndex} className={`osx-score-line osx-score-line--${kind}`} points={run.join(' ')} />
               ))}
+              {runs.flatMap((run, runIndex) => run.length === 1 ? [<circle key={`point-${runIndex}`} className={`osx-score-dot osx-score-dot--${kind}`} cx={run[0]?.split(',')[0]} cy={run[0]?.split(',')[1]} r="3" />] : [])}
               {endLabelY !== undefined && (
                 <text
                   className={`osx-score-end-label osx-score-end-label--${kind}`}

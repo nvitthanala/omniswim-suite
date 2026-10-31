@@ -10,8 +10,8 @@
  * - Settings: the theme, the accent and the rival of each meet.
  */
 import * as React from 'react';
-import { parseResults } from '@omniswim/engine';
-import type { Lineup, Results, RivalRef, RoleLabel, TeamId } from '@omniswim/engine';
+import { diffResults, parseResults, ReportDiffError } from '@omniswim/engine';
+import type { Lineup, Results, ResultsDiff, RivalRef, RoleLabel, TeamId } from '@omniswim/engine';
 import { readScorerOwnTeam } from '../storage';
 import type { LineupRecord, StorageRepo } from '../storage';
 import { EntryCsvButton } from './EntryCsvButton';
@@ -72,7 +72,7 @@ type ReportState =
 
 /** Parse the stored results at use. A record that cannot be read becomes a state, never an exception. */
 async function loadReport(repo: StorageRepo, record: LineupRecord): Promise<ReportState> {
-  if (record.kind !== 'snapshot' || record.results === undefined) return { kind: 'no_results' };
+  if (record.results === undefined) return { kind: 'no_results' };
   let results: Results;
   try {
     results = parseResults(record.results);
@@ -83,6 +83,47 @@ async function loadReport(repo: StorageRepo, record: LineupRecord): Promise<Repo
   if (own === undefined || !results.teams.some((t) => String(t.teamId) === String(own))) return { kind: 'need_team' };
   const rival = resolveRival(results, String(own) as TeamId, await readRival(repo, record.meetKey));
   return { kind: 'ready', results, own: String(own) as TeamId, rival: rival.teamId };
+}
+
+/** Earlier and later follow the save time, not the order of the clicks. */
+export function orderForDiff(records: readonly LineupRecord[]): LineupRecord[] {
+  return [...records].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+const absent = <span aria-label="Absent">—</span>;
+export function DiffView({ earlier, later }: { earlier: LineupRecord; later: LineupRecord }): React.ReactElement {
+  const [state, setState] = React.useState<{ kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; rows: ResultsDiff[] }>({ kind: 'loading' });
+  React.useEffect(() => {
+    let live = true;
+    try {
+      if (earlier.meetKey !== later.meetKey) throw new ReportDiffError();
+      if (earlier.results === undefined || later.results === undefined) throw new Error('Both records need saved results to compare.');
+      const thenResults = parseResults(earlier.results);
+      const nowResults = parseResults(later.results);
+      const teams = new Set<TeamId>([...thenResults.teams.map((team) => team.teamId), ...nowResults.teams.map((team) => team.teamId)]);
+      const thenLineup = earlier.payload as Lineup;
+      const nowLineup = later.payload as Lineup;
+      const rows = [...teams].map((team) => diffResults({ results: thenResults, lineup: thenLineup }, { results: nowResults, lineup: nowLineup }, team));
+      if (live) setState({ kind: 'ready', rows });
+    } catch (cause) {
+      const mismatch = cause instanceof ReportDiffError && cause.code === 'meet_key_mismatch';
+      if (live) setState({ kind: 'error', message: mismatch ? 'These two records come from different meets, so they cannot be compared (meet_key_mismatch).' : cause instanceof Error ? cause.message : String(cause) });
+    }
+    return () => { live = false; };
+  }, [earlier, later]);
+  if (state.kind === 'loading') return <p>Loading comparison…</p>;
+  if (state.kind === 'error') return <p role="alert" data-testid="diff-error">{state.message}</p>;
+  const stripped = earlier.payload.display === undefined || later.payload.display === undefined;
+  const side = (value: number | null, present: boolean): React.ReactNode => present && value !== null ? value : absent;
+  return <section className="osx-diff" data-testid="diff-view"><h2>{earlier.name} compared with {later.name}</h2>
+    {stripped && <p data-testid="diff-stripped-note">Time changes cannot be shown for a record stripped of SwimCloud data.</p>}
+    {state.rows.map((row) => <section key={String(row.teamId)}><h3>{row.team}</h3>
+      <table><caption>Team totals</caption><thead><tr><th>Earlier</th><th>Later</th><th>Change</th></tr></thead><tbody><tr>
+        <td>{side(row.totals.then, row.totals.inThen)}</td><td>{side(row.totals.now, row.totals.inNow)}</td><td>{row.totals.delta ?? absent}</td>
+      </tr></tbody></table>
+      <table><caption>Events</caption><thead><tr><th>Event</th><th>Earlier points</th><th>Later points</th><th>Change</th></tr></thead><tbody>{row.events.length ? row.events.map((event) => <tr key={event.eventKey}><th>{event.eventKey}</th><td>{side(event.pointsThen, event.inThen)}</td><td>{side(event.pointsNow, event.inNow)}</td><td>{event.delta ?? absent}</td></tr>) : <tr><td colSpan={4}>No event changes.</td></tr>}</tbody></table>
+      <table><caption>Swimmers and relays</caption><thead><tr><th>Swimmer or relay</th><th>Earlier points</th><th>Later points</th><th>Change</th></tr></thead><tbody>{row.swimmers.length ? row.swimmers.map((swimmer, index) => <tr key={`${swimmer.name}:${index}`}><th>{swimmer.name}{swimmer.isRelay ? ' (relay)' : ''}</th><td>{side(swimmer.pointsThen, swimmer.inThen)}</td><td>{side(swimmer.pointsNow, swimmer.inNow)}</td><td>{swimmer.deltaPoints ?? absent}</td></tr>) : <tr><td colSpan={4}>No swimmer or relay changes.</td></tr>}</tbody></table>
+    </section>)}</section>;
 }
 
 const fileNameOf = (record: LineupRecord): string => `${record.name.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'entries'}-entries.csv`;
@@ -100,7 +141,7 @@ function RecordView({ record, repo }: { record: LineupRecord; repo: StorageRepo 
       <h2>{record.name}</h2>
       <p className="osx-record-meta">{record.kind === 'snapshot' ? 'Snapshot' : 'Saved lineup'} · saved {record.createdAt.slice(0, 16).replace('T', ' ')}</p>
       {state.kind === 'loading' && <p>Loading…</p>}
-      {state.kind === 'no_results' && <p className="osx-status osx-status--warn" data-testid="record-no-results">This {record.kind === 'snapshot' ? 'snapshot' : 'saved lineup'} holds entries but no results, so there is no report for it. Save a snapshot from the docked panel to get one.</p>}
+      {state.kind === 'no_results' && <p className="osx-status osx-status--warn" data-testid="record-no-results">{record.kind === 'lineup' ? 'A saved lineup has no results. Save a snapshot to see its report and compare it.' : 'This snapshot has no saved results, so there is no report for it.'}</p>}
       {state.kind === 'unreadable' && <p className="osx-status osx-status--bad" role="alert" data-testid="record-error">The saved results could not be read: {state.message}</p>}
       {state.kind === 'need_team' && <p className="osx-status osx-status--warn" data-testid="record-need-team">Choose your team for this meet in the page panel of the simulator, then open this snapshot again.</p>}
       {state.kind === 'ready' && <>
@@ -115,6 +156,8 @@ export function MeetsView({ repo }: { repo: StorageRepo }): React.ReactElement {
   const [records, setRecords] = React.useState<readonly LineupRecord[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<string | null>(null);
+  const [compare, setCompare] = React.useState<string[]>([]);
+  const [compareMeetKey, setCompareMeetKey] = React.useState<string | null>(null);
   const load = React.useCallback(() => {
     repo.list('lineups').then((list) => { setRecords(list); setError(null); }, (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
   }, [repo]);
@@ -139,6 +182,10 @@ export function MeetsView({ repo }: { repo: StorageRepo }): React.ReactElement {
                     <button type="button" className="osx-record-button" data-testid="record-open" aria-pressed={r.lineupId === selected} onClick={() => setSelected(r.lineupId)}>
                       {r.name}
                     </button>
+                    {r.kind === 'snapshot' && <label><input type="checkbox" data-testid="diff-pick" checked={compare.includes(r.lineupId)} onChange={(event) => {
+                      if (event.target.checked) { setCompareMeetKey(group.meetKey); setCompare((current) => [...(compareMeetKey === group.meetKey ? current : []).filter((id) => id !== r.lineupId).slice(-1), r.lineupId]); }
+                      else setCompare((current) => current.filter((id) => id !== r.lineupId));
+                    }} /> Compare</label>}
                     <span className="osx-record-kind"> {r.kind === 'snapshot' ? 'snapshot' : 'lineup'}</span>
                   </li>
                 ))}
@@ -147,6 +194,10 @@ export function MeetsView({ repo }: { repo: StorageRepo }): React.ReactElement {
           ))}
         </div>
         {record !== undefined && <RecordView record={record} repo={repo} />}
+        {compare.length === 2 && (() => {
+          const [first, second] = orderForDiff(compare.map((id) => records?.find((r) => r.lineupId === id)).filter((r): r is LineupRecord => r !== undefined));
+          return first && second && first.meetKey === second.meetKey && first.meetKey === compareMeetKey ? <DiffView earlier={first} later={second} /> : null;
+        })()}
       </div>
     </section>
   );
@@ -190,19 +241,26 @@ export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo
   const [theme, setTheme] = React.useState<ThemeSettings | null>(null);
   const [meets, setMeets] = React.useState<readonly MeetRival[]>([]);
   const [message, setMessage] = React.useState('');
+  const mounted = React.useRef(false);
   const refresh = React.useCallback(async () => {
     const records = await repo.list('lineups');
+    if (!mounted.current) return;
     const groups = groupByMeet(records);
-    setMeets(await Promise.all(groups.map(async (group) => {
+    const nextMeets = await Promise.all(groups.map(async (group) => {
       const names = teamNamesOf(group.records[0] as LineupRecord);
       const teams = Object.entries(names).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
       return { group, teams, rival: await readRival(repo, group.meetKey) };
-    })));
-    setTheme(await readThemeSettings(repo));
+    }));
+    const nextTheme = await readThemeSettings(repo);
+    if (mounted.current) { setMeets(nextMeets); setTheme(nextTheme); }
   }, [repo]);
-  React.useEffect(() => { refresh().catch((cause: unknown) => setMessage(`Settings could not be read: ${cause instanceof Error ? cause.message : String(cause)}`)); }, [refresh]);
+  React.useEffect(() => {
+    mounted.current = true;
+    refresh().catch((cause: unknown) => { if (mounted.current) setMessage(`Settings could not be read: ${cause instanceof Error ? cause.message : String(cause)}`); });
+    return () => { mounted.current = false; };
+  }, [refresh]);
   React.useEffect(() => subscribe?.(() => {
-    refresh().catch((cause: unknown) => setMessage(`Settings could not be read: ${cause instanceof Error ? cause.message : String(cause)}`));
+    refresh().catch((cause: unknown) => { if (mounted.current) setMessage(`Settings could not be read: ${cause instanceof Error ? cause.message : String(cause)}`); });
   }), [refresh, subscribe]);
   const run = async (change: () => Promise<void>, done: string): Promise<void> => {
     try {

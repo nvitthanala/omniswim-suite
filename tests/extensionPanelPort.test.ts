@@ -11,7 +11,7 @@ import { Window as HappyWindow } from 'happy-dom';
 import { makeNonce, mountDockedPanel } from '../apps/extension/src/overlay/dockedPanel';
 import type { PanelPort, PanelRuntime } from '../apps/extension/src/overlay/dockedPanel';
 import { mountShadowHost } from '../apps/extension/src/overlay/overlay';
-import { listenForPanelPort, readNonce } from '../apps/extension/src/dashboard/panelPort';
+import { listenForPanelPort, postPanelMessageSafely, readNonce } from '../apps/extension/src/dashboard/panelPort';
 import { isPanelPortName, isPanelSnapshot, NONCE_PATTERN, panelPortName } from '../apps/extension/src/shared/panelProtocol';
 import { OPTIMIZER_UNAVAILABLE } from '../apps/extension/src/shared/optimizerProtocol';
 import { buildSnapshot } from './helpers/simulatorFixtures';
@@ -214,6 +214,11 @@ describe('listenForPanelPort (iframe side)', () => {
 });
 
 describe('a closed port', () => {
+  it('does not throw if a port rejects a post before its disconnect callback runs', () => {
+    const closed = vi.fn();
+    expect(() => postPanelMessageSafely({ postMessage: () => { throw new Error('disconnected'); } }, { kind: 'ping' }, closed)).not.toThrow();
+    expect(closed).toHaveBeenCalledOnce();
+  });
   it('is reported to the iframe, so it can stop posting to it', () => {
     const fake = fakeRuntime();
     fake.state.listening = true;

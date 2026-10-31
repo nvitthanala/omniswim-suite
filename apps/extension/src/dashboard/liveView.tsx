@@ -12,11 +12,12 @@ import type { ParityReport } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import { readScorerOwnTeam, readSessionPreset } from '../storage';
 import type { StorageRepo } from '../storage';
+import type { UndoStack } from '../storage';
 import { meetKeyForSnapshot } from './meetKey';
 import { resolveRival } from './rival';
 import { readRival } from './settingsStore';
 import { ScoreChart } from './ScoreChart';
-import { defaultSnapshotName, saveSnapshot } from './snapshotSave';
+import { defaultSnapshotName, saveLineup, saveSnapshot } from './snapshotSave';
 import type { SaveSnapshotOutcome } from './snapshotSave';
 
 export type View =
@@ -112,37 +113,48 @@ export interface SaveTabProps {
   readonly tabUrl: string;
   readonly now?: () => string;
   readonly newId?: () => string;
+  readonly undo?: () => Promise<{ status: 'undone' | 'empty' | 'changed elsewhere' }>;
+  readonly undoStack?: () => Promise<UndoStack>;
 }
 
-type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'error'; message: string } | SaveSnapshotOutcome;
+type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'error'; message: string } | (SaveSnapshotOutcome & { savedAs?: 'snapshot' | 'lineup' });
 
-export function SaveTab({ view, repoForMeet, solveLp, tabUrl, now = () => new Date().toISOString(), newId = () => crypto.randomUUID() }: SaveTabProps): React.ReactElement {
+export function SaveTab({ view, repoForMeet, solveLp, tabUrl, undo, undoStack, now = () => new Date().toISOString(), newId = () => crypto.randomUUID() }: SaveTabProps): React.ReactElement {
   const [name, setName] = React.useState('');
   const [state, setState] = React.useState<SaveState>({ kind: 'idle' });
-  const save = async (): Promise<void> => {
+  const [undoMessage, setUndoMessage] = React.useState('');
+  const save = async (kind: 'snapshot' | 'lineup'): Promise<void> => {
     setState({ kind: 'saving' });
     try {
-      setState(await saveSnapshot(view.snapshot, name, { repo: await repoForMeet(), solveLp, now, newId }));
+      const outcome = await (kind === 'snapshot' ? saveSnapshot : saveLineup)(view.snapshot, name, { repo: await repoForMeet(), solveLp, now, newId, ...(undoStack ? { undoStack: await undoStack() } : {}) });
+      setState(outcome.kind === 'saved' ? { ...outcome, savedAs: kind } : outcome);
     } catch (cause) {
       setState({ kind: 'error', message: cause instanceof Error ? cause.message : String(cause) });
     }
   };
   return (
     <section className="osx-save" data-testid="save">
-      <h2>Save a snapshot</h2>
+      <h2>Save this result</h2>
       <p>A snapshot keeps these results, your scorer tags and the seed times, so you can report on them later. It never changes after you save it.</p>
       <label>Name <input type="text" data-testid="snapshot-name" placeholder={defaultSnapshotName(now())} value={name} onChange={(e) => setName(e.target.value)} /></label>
       <p>
-        <button type="button" data-testid="snapshot-save" disabled={state.kind === 'saving'} onClick={() => void save()}>Save snapshot</button>
+        <button type="button" data-testid="snapshot-save" disabled={state.kind === 'saving'} onClick={() => void save('snapshot')}>Save snapshot</button>
+        {' '}
+        <button type="button" data-testid="lineup-save" disabled={state.kind === 'saving'} onClick={() => void save('lineup')}>Save lineup</button>
+        {' '}
+        <button type="button" data-testid="undo" disabled={!undo} onClick={() => {
+          if (undo) void undo().then((outcome) => setUndoMessage(outcome.status === 'undone' ? 'Undone.' : outcome.status === 'empty' ? 'Nothing to undo.' : 'This record changed in another tab. Nothing was undone.'));
+        }}>Undo</button>
         {' '}
         <a href={tabUrl} target="_blank" rel="noopener noreferrer" data-testid="open-in-tab">Open in tab</a>
       </p>
       <div role="status" aria-live="polite" data-testid="snapshot-status" data-phase={state.kind}>
         {state.kind === 'saving' && 'Saving…'}
-        {state.kind === 'saved' && `Saved "${state.name}" with ${state.coachTags} coach tags and ${state.suggestedTags} suggested opponent tags. Open it in the tab to report on it.`}
+        {state.kind === 'saved' && `Saved ${state.savedAs ?? 'snapshot'} "${state.name}". Open it in the tab${state.savedAs === 'lineup' ? ' to see its saved entries' : ' to report on it'}.`}
         {state.kind === 'refused' && <>Not saved:<ul>{state.reasons.map((r) => <li key={r}>{r}</li>)}</ul></>}
         {state.kind === 'error' && `Not saved: ${state.message}`}
       </div>
+      <p role="status" aria-live="polite" data-testid="undo-status">{undoMessage}</p>
     </section>
   );
 }

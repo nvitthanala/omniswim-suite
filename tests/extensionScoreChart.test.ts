@@ -49,6 +49,11 @@ describe('ScoreChart', () => {
     expect(Math.abs(ownY - rivalY)).toBeGreaterThanOrEqual(12);
   });
   it('shows the empty message without SVG', () => { const html = render({ ...progression, points: [] }); expect(html).toContain('No scored events'); expect(html).not.toContain('<svg'); });
+  it('marks a one-point run so it is visible', () => {
+    const only = render({ ...progression, points: [progression.points[0]!] });
+    expect(only).toContain('<circle');
+    expect(only).toContain('class="osx-score-dot osx-score-dot--own"');
+  });
 
   describe('lines are strokes, not filled shapes', () => {
     const css = readFileSync('apps/extension/src/dashboard/dashboard.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');

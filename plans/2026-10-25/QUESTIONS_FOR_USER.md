@@ -1,6 +1,6 @@
 # Open questions for the user
 
-Updated 2026-10-29. Each question names the default the build uses now.
+Updated 2026-10-31. Each question names the default the build uses now.
 Answer by number. Write "keep" to accept the default. Answers go to the
 README decision table as new R rows.
 
@@ -171,3 +171,17 @@ scorer tags and stores the proposed lineup in the extension, then lists each
 entry change ("add X to the 200 free") for you to make in SwimCloud. Other
 option: build entry writing into the simulator (new D4 work, with read-back
 checks like the settings write).
+
+## H. Snapshots and undo (U-c, added 2026-10-31)
+
+**F4. Reports for a saved lineup.** A saved lineup stores entries, tags and
+seed facts, but no results, so it opens no report, chart or comparison.
+Only a snapshot does. Default: keep it that way, and save a snapshot to
+report on a lineup. Other option: re-score a saved lineup against its meet
+when you open it (new work; the meet data may have changed since).
+
+**G2. Undo for AutoBuilder Accept.** Undo covers "Save snapshot" and "Save
+lineup". Accept is not undoable, because it can delete scorer tags and the
+storage layer cannot yet check that a deleted tag is still absent. Default:
+build that check later, then make Accept undoable. Other option: never undo
+Accept; you fix tags by hand.

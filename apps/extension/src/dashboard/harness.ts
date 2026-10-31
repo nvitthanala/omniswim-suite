@@ -38,6 +38,8 @@ export interface OsxHarness {
   seedAutoBuild(snapshot: SimSnapshot, ownTeamId: string, scorerIds: readonly string[]): Promise<string>;
   /** The number of lineup records in the store. */
   lineupCount(): Promise<number>;
+  lineupIds(): Promise<readonly string[]>;
+  deleteLineupExternally(lineupId: string): Promise<void>;
   /** The script URL of every Worker this page has started, in order. Lets the harness show which worker ran a job. */
   workerStarts(): readonly string[];
   /** `null` when this page is not a docked iframe with a valid nonce. */
@@ -87,6 +89,14 @@ export function installHarness(host: string, panel: PanelStats | null): OsxHarne
     },
     async lineupCount() {
       return (await (await repo()).list('lineups')).length;
+    },
+    async lineupIds() {
+      return (await (await repo()).list('lineups')).map((record) => record.lineupId);
+    },
+    async deleteLineupExternally(lineupId) {
+      const r = await repo();
+      const current = await r.get('lineups', lineupId);
+      if (current.found) await r.delete('lineups', lineupId, current.value.rev);
     },
     workerStarts: () => [...workerStarts],
     panel: () => panel,

@@ -10,15 +10,16 @@
 import { createRoot } from 'react-dom/client';
 import * as React from 'react';
 import { installHarness } from './harness';
-import { listenForPanelPort, readNonce } from './panelPort';
+import { listenForPanelPort, postPanelMessageSafely, readNonce } from './panelPort';
 import { bindTheme, createAccentSync } from '../shared/theme';
 import { AdapterError, rescoreSimulator, SIMULATOR_SOURCING } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import type { ScorerTag } from '@omniswim/engine';
 import type { RulePreset, LoadPreference, SessionPreset } from '@omniswim/engine';
 import { sessionLoad, relayRepeatsForSchedule, requireComplete, scoreMeet } from '@omniswim/engine';
-import { createChromeChangeBus, createStorageRepo, openOmniDb, readScorerOwnTeam, saveScorerOwnTeam, readScorerRulePreset, saveScorerRulePreset, listRulePresetChoices, resolveRulePreset, watchChanges, toSwimCloudId, readSessionPreset, readSessionLoadPreference, saveEditedSessionPreset } from '../storage';
+import { createChromeChangeBus, createStorageRepo, createUndoStack, openOmniDb, readScorerOwnTeam, saveScorerOwnTeam, readScorerRulePreset, saveScorerRulePreset, listRulePresetChoices, resolveRulePreset, watchChanges, toSwimCloudId, readSessionPreset, readSessionLoadPreference, saveEditedSessionPreset } from '../storage';
 import type { StorageRepo } from '../storage';
+import type { UndoStack } from '../storage';
 import type { AutoBuildStatusMessage, PanelSize, ScorerTagActionMessage, ScorerTagStateMessage, ThemeStateMessage } from '../shared/panelProtocol';
 import { panelCutTags, scoreScorerTags } from './scorerTagScoring';
 import { createOptimizerClient } from './optimizerClient';
@@ -73,7 +74,7 @@ function DockedApp({ view }: { view: View }): React.ReactElement {
     { id: 'chart', label: 'Chart', render: ({ expanded, active }) => (scored ? <ChartTab view={scored} repoForMeet={repoForTags} expanded={expanded} active={active} /> : <WaitingNote view={view} />) },
     { id: 'build', label: 'Build', render: () => (scored ? <AutoBuilderPanel snapshot={scored.snapshot} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} onStatus={postAutoBuildStatus} /> : <WaitingNote view={view} />) },
     { id: 'plan', label: 'Plan', render: () => (scored ? <SessionPlannerEditor snapshot={scored.snapshot} repoForMeet={repoForTags} /> : <WaitingNote view={view} />) },
-    { id: 'save', label: 'Save', render: () => (scored ? <SaveTab view={scored} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} tabUrl={tabUrl} /> : <WaitingNote view={view} />) },
+    { id: 'save', label: 'Save', render: () => (scored ? <SaveTab view={scored} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} tabUrl={tabUrl} undo={async () => (await undoStackForDashboard()).undo()} undoStack={undoStackForDashboard} /> : <WaitingNote view={view} />) },
   ];
   return <DockedShell tabs={tabs} hostLabel="host: docked" onSize={postPanelSize} />;
 }
@@ -115,6 +116,11 @@ if (!container) throw new Error('dashboard.html has no #root element');
 const host = readHost(location.search);
 let pendingSnapshot: SimSnapshot | null = null;
 let latestPanelPort: { postMessage(message: unknown): void } | null = null;
+/** Chrome can throw when a port disconnects before onDisconnect is delivered. */
+function postPanelMessage(message: unknown): void {
+  const port = latestPanelPort;
+  postPanelMessageSafely(port, message, () => { if (latestPanelPort === port) latestPanelPort = null; });
+}
 let sessionScheduleError: string | undefined;
 let tagRepo: Promise<StorageRepo> | undefined;
 /** The tab host's Settings view listens here for a settings change another context made. */
@@ -126,12 +132,12 @@ const subscribeToSettings: SettingsSubscribe = (listener) => {
 const optimizer = createOptimizerClient();
 const solveForAutoBuilder = (lp: string, options: Readonly<Record<string, string | number | boolean>>): ReturnType<typeof optimizer.solveLp> => optimizer.solveLp(lp, options);
 /** The page panel shows one status line about a build (D5 amendment 7 item 3). */
-const postAutoBuildStatus = (message: AutoBuildStatusMessage): void => latestPanelPort?.postMessage(message);
+const postAutoBuildStatus = (message: AutoBuildStatusMessage): void => postPanelMessage(message);
 /** The docked panel's size, as the coach last asked. Resent when the port connects, because the shell asks before the overlay has connected. */
 let panelSize: PanelSize = 'compact';
 function postPanelSize(size: PanelSize): void {
   panelSize = size;
-  latestPanelPort?.postMessage({ kind: 'panel-size', size });
+  postPanelMessage({ kind: 'panel-size', size });
 }
 /** Read the stored theme and accent, apply them here, and tell the page panel and the docked frame's chrome (D6 section 5). */
 async function applyStoredTheme(): Promise<void> {
@@ -139,7 +145,7 @@ async function applyStoredTheme(): Promise<void> {
     const stored = await readThemeSettings(await repoForTags());
     themeController.setPreference(stored.preference);
     accentSync.set(stored.accent);
-    latestPanelPort?.postMessage({ kind: 'theme-state', preference: stored.preference, ...(stored.accent === undefined ? {} : { accent: stored.accent }) } satisfies ThemeStateMessage);
+    postPanelMessage({ kind: 'theme-state', preference: stored.preference, ...(stored.accent === undefined ? {} : { accent: stored.accent }) } satisfies ThemeStateMessage);
   } catch {
     // A failed read keeps the current theme. It is no reason to flash another one.
   }
@@ -175,6 +181,8 @@ const repoForTags = (): Promise<StorageRepo> => (tagRepo ??= openOmniDb().then(d
   }, { targets: [document, window] });
   return repo;
 }));
+let undoStackPromise: Promise<UndoStack> | undefined;
+const undoStackForDashboard = (): Promise<UndoStack> => (undoStackPromise ??= repoForTags().then(createUndoStack));
 async function publishTagState(error?: string): Promise<void> {
   if (!pendingSnapshot || !latestPanelPort) return;
   const snapshot = pendingSnapshot;
@@ -198,14 +206,14 @@ async function publishTagState(error?: string): Promise<void> {
       (lp, options) => optimizer.solveLp(lp, options));
     if (pendingSnapshot !== snapshot || !latestPanelPort) return;
     const scored = scoreScorerTags(snapshot, meetKey, selectedOwnTeam !== undefined, [...tags, ...suggestedTags(suggestions)] as ScorerTag[], rulePreset.found ? rulePreset.value : undefined);
-      latestPanelPort.postMessage({ kind: 'scorer-tag-state', meetKey,
+      postPanelMessage({ kind: 'scorer-tag-state', meetKey,
       teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })),
       swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })),
       tags, ownTeamId: selectedOwnTeam, rulePresetRef, rulePreset: rulePreset.found ? rulePreset.value : undefined, rulePresetChoices: choices.map(c => ({ ref: c.ref, label: c.label })),
       scoringTeamSize: scored.scoringTeamSize, warnings: scored.warnings,
         suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey), planner, sessionSchedule, ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
   } catch (cause) {
-    latestPanelPort?.postMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
+    postPanelMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
   }
 }
 async function handleTagAction(action: ScorerTagActionMessage): Promise<void> {
@@ -253,7 +261,7 @@ const nonce = host === 'docked' ? readNonce(location.hash) : null;
 const panel = nonce ? listenForPanelPort(chrome.runtime, nonce, (snapshot) => {
   pendingSnapshot = snapshot;
   window.dispatchEvent(new CustomEvent('osx-snapshot', { detail: snapshot }));
-  latestPanelPort?.postMessage({ kind: 'scorer-tags-loading' });
+  postPanelMessage({ kind: 'scorer-tags-loading' });
   void publishTagState();
 }, action => { void handleTagAction(action); }, port => { latestPanelPort = port; void publishTagState(); void applyStoredTheme(); if (panelSize !== 'compact') postPanelSize(panelSize); }, raw => { void handleSessionPresetEdit(raw); },
 // A closed port takes no more messages. Only the port in use is dropped: a newer connect may already have replaced it.

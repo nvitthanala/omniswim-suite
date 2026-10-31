@@ -16,6 +16,7 @@ import { rescoreSimulator } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import { readScorerOwnTeam, readScorerRulePreset, readSessionPreset, resolveRulePreset } from '../storage';
 import type { LineupRecord, StorageRepo } from '../storage';
+import type { UndoStack } from '../storage';
 import { readCoachTags } from './autoBuilderRequest';
 import { meetKeyForSnapshot } from './meetKey';
 import { suggestedTags, suggestOpponentRosters } from './suggestedRosters';
@@ -26,6 +27,7 @@ export interface SaveSnapshotDeps {
   readonly solveLp: LpSolve;
   readonly now: () => string;
   readonly newId: () => string;
+  readonly undoStack?: UndoStack;
 }
 
 export type SaveSnapshotOutcome =
@@ -85,6 +87,19 @@ export async function buildSnapshotRecord(snapshot: SimSnapshot, name: string, d
 export async function saveSnapshot(snapshot: SimSnapshot, name: string, deps: SaveSnapshotDeps): Promise<SaveSnapshotOutcome> {
   const built = await buildSnapshotRecord(snapshot, name, deps);
   if (built.kind === 'refused') return built;
-  await deps.repo.put('lineups', built.record, 'new');
+  const stored = await deps.repo.put('lineups', built.record, 'new');
+  deps.undoStack?.recordUndo({ changes: [{ before: { op: 'delete', store: 'lineups', key: stored.lineupId }, writtenRev: stored.rev }] });
   return { kind: 'saved', lineupId: built.record.lineupId, name: built.record.name, coachTags: built.coachTags, suggestedTags: built.suggestedTags };
+}
+
+/** Save the live lineup as an editable lineup record, with its tags and seed facts. Only a snapshot may hold results (`validate.ts`, D3), so they are left out. */
+export async function saveLineup(snapshot: SimSnapshot, name: string, deps: SaveSnapshotDeps): Promise<SaveSnapshotOutcome> {
+  const built = await buildSnapshotRecord(snapshot, name.trim() ? name : `Lineup ${deps.now().slice(0, 16).replace('T', ' ')}`, deps);
+  if (built.kind === 'refused') return built;
+  // Results are snapshot-only: a lineup can be edited, and results come from SwimCloud for one moment.
+  const { results: _results, ...base } = built.record;
+  const record = { ...base, kind: 'lineup' as const };
+  const stored = await deps.repo.put('lineups', record, 'new');
+  deps.undoStack?.recordUndo({ changes: [{ before: { op: 'delete', store: 'lineups', key: stored.lineupId }, writtenRev: stored.rev }] });
+  return { kind: 'saved', lineupId: record.lineupId, name: record.name, coachTags: built.coachTags, suggestedTags: built.suggestedTags };
 }
