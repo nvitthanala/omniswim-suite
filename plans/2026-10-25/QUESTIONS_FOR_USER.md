@@ -185,3 +185,23 @@ lineup". Accept is not undoable, because it can delete scorer tags and the
 storage layer cannot yet check that a deleted tag is still absent. Default:
 build that check later, then make Accept undoable. Other option: never undo
 Accept; you fix tags by hand.
+
+## I. Settings and checks (U-e and F, added 2026-10-31)
+
+**I1. Clear cache.** "Clear fetched SwimCloud data" deletes all fetched
+swim histories and rosters. Your lineups, tags, presets and settings are
+never touched. The storage plan said "by age" but named no age. Default:
+delete all. Other option: give an age (for example older than 30 days).
+
+**I2. What a backup holds.** Default: your lineups, snapshots, tags,
+presets and settings, with IDs only. SwimCloud times, results and names are
+left out unless you tick the box. Other option: leave settings out too.
+
+**I3. "Close to a cut" tags are now live** on the SwimCloud page at 1.0 %,
+each with its time gap ("Close to B: 0.45 s off 1:52.34"). Before this they
+never appeared. Change the threshold in Settings. Keep 1.0 %?
+
+**I4. Excel check (needs you).** Download an entry CSV from Meets and open
+it in Excel. Does a seed time such as "1:52.34" read back exactly as
+written, and does "José" show correctly? Excel runs only on your machine,
+so I cannot check this myself.

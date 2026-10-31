@@ -25,7 +25,7 @@
  * Each assertion is recorded on its own, so one failure does not hide the others. A variant-2
  * failure is a finding (D3 section 3, CSP decision table), not something to retry or weaken.
  */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, expect, test } from '@playwright/test';
@@ -38,6 +38,7 @@ const root = join(import.meta.dirname, '..', '..');
 const DIST = join(root, 'apps', 'extension', 'dist-harness');
 const FIXTURE_DIR = join(import.meta.dirname, 'fixtures', 'simulator');
 const ORIGIN = 'https://www.swimcloud.com';
+const UE_SHOT_DIR = join(tmpdir(), 'omniswim-u-e-screenshots');
 /** The page the content scripts match. */
 const SIM_PATH = '/meetsimulator/';
 /** The same fixture where no content script matches: the baseline for assertion 5. */
@@ -74,6 +75,7 @@ interface Harness {
   seedAutoBuild(snapshot: unknown, ownTeamId: string, scorerIds: readonly string[]): Promise<string>;
   lineupCount(): Promise<number>;
   lineupIds(): Promise<readonly string[]>;
+  storeCounts(): Promise<Readonly<Record<string, number>>>;
   deleteLineupExternally(lineupId: string): Promise<void>;
   workerStarts(): readonly string[];
 }
@@ -169,6 +171,7 @@ test.describe('S3 workers and the docked iframe', () => {
         context = await chromium.launchPersistentContext(userDataDir, {
           channel: 'chromium',
           headless: true,
+          acceptDownloads: true,
           args: [
             `--disable-extensions-except=${DIST}`,
             `--load-extension=${DIST}`,
@@ -606,6 +609,71 @@ test.describe('S3 workers and the docked iframe', () => {
           return `all five docked tabs rendered in both themes (lazy until opened), the stored theme reached the docked chrome, the page panel host and a second tab; a custom accent applied in both themes; expanded sizes ${seen.join(', ')} clear of the Options button; ${saveNote}; Meets opened the snapshot Save stored, with its report, in both themes`;
         });
 
+        await record(13, 'U-e Settings and Presets, backup round trip, cache safety, theme screenshots', async () => {
+          mkdirSync(UE_SHOT_DIR, { recursive: true });
+          const tabPage = await context!.newPage();
+          try {
+            await tabPage.goto(`${extensionBase}/dashboard.html?host=tab`);
+            await expect(tabPage.locator('[data-testid="host-shell"]')).toBeVisible({ timeout: 15_000 });
+            const harness = () => tabPage.evaluate(() => (globalThis as unknown as WithHarness).osxHarness.storeCounts());
+            const screenshots: string[] = [];
+            for (const theme of ['light', 'dark'] as const) {
+              await tabPage.locator('[data-testid="tab-settings"]').click();
+              await tabPage.locator(`[data-testid="theme-${theme}"]`).click();
+              await expect(tabPage.locator('html')).toHaveAttribute('data-osx-theme', theme, { timeout: 10_000 });
+              await tabPage.locator('[data-testid="accent-input"]').fill('#335577');
+              await tabPage.locator('[data-testid="cut-threshold"]').fill('1.5');
+              await tabPage.locator('[data-testid="cut-threshold"]').blur();
+              await expect.poll(() => tabPage.evaluate(() => (globalThis as unknown as WithHarness).osxHarness.getSetting('cutCloseThresholdPct'))).toMatchObject({ found: true, value: { value: 1.5 } });
+              const settingsShot = join(UE_SHOT_DIR, `settings-${theme}.png`);
+              await tabPage.screenshot({ path: settingsShot, fullPage: true }); screenshots.push(settingsShot);
+              await tabPage.locator('[data-testid="tab-presets"]').click();
+              await expect(tabPage.locator('[data-testid="presets-slot"] li').first()).toBeVisible();
+              const presetsShot = join(UE_SHOT_DIR, `presets-${theme}.png`);
+              await tabPage.screenshot({ path: presetsShot, fullPage: true }); screenshots.push(presetsShot);
+            }
+            await tabPage.locator('[data-testid="tab-settings"]').click();
+            const before = await harness();
+            await expect(tabPage.locator('[data-testid="backup-include-swimcloud"]')).not.toBeChecked();
+            await expect(tabPage.locator('[data-testid="backup-conflict"]')).toHaveValue('skip');
+            const downloadWait = tabPage.waitForEvent('download');
+            await tabPage.locator('[data-testid="backup-export"]').click();
+            const download = await downloadWait;
+            const backupPath = await download.path();
+            if (!backupPath) throw new Error('Backup download has no readable file path');
+            const backup = JSON.parse(readFileSync(backupPath, 'utf8')) as { stores: Record<string, unknown[]> };
+            if (!Array.isArray(backup.stores.settings)) throw new Error('Default backup omitted settings');
+            if ('swimmerHistory' in backup.stores || 'rosters' in backup.stores) throw new Error('Default backup included SwimCloud cache stores');
+            const recordCount = Object.values(backup.stores).reduce((sum, rows) => sum + rows.length, 0);
+            if (recordCount < 1) throw new Error('Default backup exported no user records');
+            await tabPage.locator('[data-testid="backup-include-swimcloud"]').check();
+            const fullDownloadWait = tabPage.waitForEvent('download');
+            await tabPage.locator('[data-testid="backup-export"]').click();
+            const fullDownload = await fullDownloadWait;
+            const fullPath = await fullDownload.path();
+            if (!fullPath) throw new Error('SwimCloud backup download has no readable file path');
+            const fullBackup = JSON.parse(readFileSync(fullPath, 'utf8')) as { includesSwimCloudData: boolean; stores: Record<string, unknown[]> };
+            if (!fullBackup.includesSwimCloudData || !Array.isArray(fullBackup.stores.swimmerHistory) || !Array.isArray(fullBackup.stores.rosters)) {
+              throw new Error('Checked SwimCloud option did not export both fetched-data stores');
+            }
+            await tabPage.locator('[data-testid="backup-include-swimcloud"]').uncheck();
+            await tabPage.locator('[data-testid="backup-import"]').setInputFiles(backupPath);
+            await expect(tabPage.locator('[data-testid="settings-status"]')).toContainText(`Added 0; replaced 0; skipped`, { timeout: 15_000 });
+            const statusText = await tabPage.locator('[data-testid="settings-status"]').innerText();
+            const skipped = (statusText.match(/exists/g) ?? []).length;
+            if (skipped !== recordCount) throw new Error(`Expected ${recordCount} existing records to skip, reported ${skipped}: ${statusText}`);
+            await tabPage.locator('[data-testid="clear-cache"]').click();
+            await expect(tabPage.getByText(/Clear all fetched SwimCloud data\?/)).toBeVisible();
+            await tabPage.getByRole('button', { name: 'Confirm clear' }).click();
+            await expect(tabPage.locator('[data-testid="settings-status"]')).toContainText('Deleted', { timeout: 15_000 });
+            const after = await harness();
+            for (const store of ['settings', 'rulePresets', 'sessionPresets', 'meets', 'tags', 'lineups', 'classYearOverrides']) {
+              if (before[store] !== after[store]) throw new Error(`Clear cache changed user store ${store}: ${before[store]} -> ${after[store]}`);
+            }
+            return `theme, accent and threshold changed; ${recordCount} exported records were skipped as existing; cache clear preserved all user-store counts; screenshots: ${screenshots.join(', ')}`;
+          } finally { await tabPage.close(); }
+        });
+
         // Console problems the injection added: those on the simulator page that the baseline page lacks.
         const extra = consoleProblems.filter((m) => !baselineProblems.includes(m));
         console.log(
@@ -623,7 +691,7 @@ test.describe('S3 workers and the docked iframe', () => {
 
       const failed = [...results].filter(([, r]) => !r.ok).map(([n, r]) => `${n}: ${r.detail}`);
       expect(failed, 'failed assertions').toStrictEqual([]);
-      expect(results.size).toBe(12);
+      expect(results.size).toBe(13);
     });
   }
 });

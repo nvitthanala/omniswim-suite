@@ -13,13 +13,15 @@ import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { groupByMeet, MeetsView, PresetsSlot, SettingsView } from '../apps/extension/src/dashboard/tabHost';
-import { clearAccent, readRival, readThemeSettings, saveAccent, saveRival, saveTheme } from '../apps/extension/src/dashboard/settingsStore';
+import { clearAccent, readRival, readSetting, readThemeSettings, saveAccent, saveRival, saveTheme } from '../apps/extension/src/dashboard/settingsStore';
 import { createMemoryChangeBus, createStorageRepo, openOmniDb, watchChanges } from '../apps/extension/src/storage';
 import type { SettingsSubscribe } from '../apps/extension/src/dashboard/tabHost';
 import { configCWorld, realSolveLp } from './helpers/autoBuilderFixtures';
 import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
 import { freshFactory, steppingClock } from './helpers/extensionDb';
 import { saveSnapshot } from '../apps/extension/src/dashboard/snapshotSave';
+import type { RulePresetRecord } from '../apps/extension/src/storage/schema';
+import { fixtureRecord, withoutRev } from './helpers/extensionRecords';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -114,13 +116,52 @@ describe('Meets', () => {
 });
 
 describe('Presets', () => {
-  it('is a placeholder that points to where the choices are made today', async () => {
-    await mount(React.createElement(PresetsSlot));
-    expect(q('presets-slot')?.textContent).toMatch(/not built yet/);
+  it('lists read-only built-in rule and session presets with their source', async () => {
+    const copy = withoutRev(fixtureRecord<RulePresetRecord>('rulePresets'));
+    await world.repo.put('rulePresets', { ...copy, id: 'coach-copy', name: 'Coach copy', derivedFrom: { builtinId: 'nsisc', builtinVersion: 1 } }, 'new');
+    await mount(React.createElement(PresetsSlot, { repo: world.repo }));
+    expect(q('presets-slot')?.textContent).toMatch(/Rule: NSISC.*Built in v\d+/);
+    expect(q('presets-slot')?.textContent).toMatch(/Session:.*Built in v\d+/);
+    expect(q('presets-slot')?.textContent).toMatch(/Coach copy.*User copy.*Based on NSISC v1; v\d+ available/);
+    expect(q('presets-slot')?.textContent).toMatch(/read only/i);
+  });
+
+  it('shows a visible error when presets cannot be read', async () => {
+    const repo = { list: async () => { throw new Error('database unavailable'); } } as never;
+    await mount(React.createElement(PresetsSlot, { repo }));
+    expect(q('presets-error')?.textContent).toBe('Presets could not be read: database unavailable');
+    expect(host?.querySelector('[data-testid="presets-slot"] ul')).toBeNull();
   });
 });
 
 describe('Settings', () => {
+  it('shows the default only while the threshold has not been saved, and saves on blur', async () => {
+    const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'threshold' });
+    const repo = createStorageRepo(db, { now: steppingClock() });
+    await mount(React.createElement(SettingsView, { repo }));
+    expect((q('cut-threshold') as HTMLInputElement).value).toBe('1.0');
+    expect(q('threshold-default')?.textContent).toBe('(default)');
+    await change(q('cut-threshold'), '1.5');
+    expect(await readSetting(repo, 'cutCloseThresholdPct')).toBeUndefined();
+    await act(async () => { q('cut-threshold')?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    for (let i = 0; i < 5; i += 1) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    expect(await readSetting(repo, 'cutCloseThresholdPct')).toBe(1.5);
+    expect(q('threshold-default')).toBeNull();
+    db.close();
+  });
+
+  it('never writes a threshold of 0 when the coach clears the box', async () => {
+    const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'threshold-empty' });
+    const repo = createStorageRepo(db, { now: steppingClock() });
+    await mount(React.createElement(SettingsView, { repo }));
+    await change(q('cut-threshold'), '');
+    await act(async () => { q('cut-threshold')?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    for (let i = 0; i < 5; i += 1) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    expect(await readSetting(repo, 'cutCloseThresholdPct')).toBeUndefined();
+    expect(host?.textContent).toContain('Cut threshold not saved: enter a number.');
+    db.close();
+  });
+
   it('writes the theme and the accent and tells the app each time', async () => {
     let applied = 0;
     await mount(React.createElement(SettingsView, { repo: world.repo, onApplied: () => { applied += 1; } }));
@@ -206,4 +247,3 @@ describe('Settings follows another context', () => {
     db.close();
   });
 });
-

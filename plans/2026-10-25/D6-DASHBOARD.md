@@ -252,3 +252,20 @@ snapshot writes back into SwimCloud, and Recharts versus a custom chart.
 5. **A meet-key mismatch reads in plain words** and names the code:
    "These two records come from different meets, so they cannot be
    compared (meet_key_mismatch)."
+
+## Amendment 5 (lead rulings, 2026-10-31, slice U-e)
+
+1. **Clear cache deletes all fetched SwimCloud data** (`swimmerHistory` and
+   `rosters`), not records past an age. D3 5.7 says "by age" but names no
+   age, and none is invented. User stores are never touched.
+2. **A backup includes settings by default.** Settings hold the coach's
+   team, rules, schedule and rival for each meet. SwimCloud data stays out
+   by default, as D3 says; a checkbox includes it, and the page says a
+   default backup carries IDs only.
+3. **The cut threshold is live.** The page panel's cut tags read
+   `cutCloseThresholdPct` (default 1.0, R11). Before U-e they used 0, so no
+   swim was ever tagged "close".
+4. **Presets is read-only.** It lists built-in and user presets, each user
+   copy's base, and "v<n> available" when the built-in is newer.
+5. **The conflict choice comes before the file input**, because choosing a
+   file starts the import.

@@ -28,20 +28,21 @@ function describeTag(tag: CutTag | undefined): string {
   if (tag.kind === 'estimated-achieved') return `${tag.tier} achieved`;
   if (tag.kind === 'none') return 'No cut achieved';
   if (tag.kind === 'unknown') return `Unknown: ${tag.detail}`;
-  if (tag.kind === 'close') return `Close to ${tag.nearest.tier}`;
+  // R11: a close tag always shows the time gap. The gap is whole hundredths, so two decimals are exact.
+  if (tag.kind === 'close') return `Close to ${tag.nearest.tier}: ${(tag.nearest.gapHundredths / 100).toFixed(2)} s off ${tag.nearest.standard.text}`;
   if (tag.kind === 'converted') return 'Converted time; no cut achieved';
   return tag.kind === 'not-applicable' ? 'Not applicable: diving' : 'Unknown';
 }
 
 /** Build display-only real and converted tag rows from the engine's meet model. */
-export function panelCutTags(snapshot: SimSnapshot, meetKey: string): readonly PanelCutTagRow[] {
+export function panelCutTags(snapshot: SimSnapshot, meetKey: string, closeThresholdPct: number): readonly PanelCutTagRow[] {
   const adapted = adaptSimulatorSnapshot(snapshot, { meetKey, snapshotId: 'live-snapshot' });
   if (adapted.kind !== 'ready') return [];
-  return panelCutTagsForModel(adapted.adapted.model, adapted.adapted.divisionSeasonNote);
+  return panelCutTagsForModel(adapted.adapted.model, adapted.adapted.divisionSeasonNote, closeThresholdPct);
 }
 
-export function panelCutTagsForModel(model: import('@omniswim/engine').MeetModel, divisionSeasonNote?: string): readonly PanelCutTagRow[] {
-  const threshold = closeThresholdFromPercent(0);
+export function panelCutTagsForModel(model: import('@omniswim/engine').MeetModel, divisionSeasonNote: string | undefined, closeThresholdPct: number): readonly PanelCutTagRow[] {
+  const threshold = closeThresholdFromPercent(closeThresholdPct);
   const byKey = new Map<string, { swims: MeetSwim[]; swimmerId: string; teamId: string; eventKey: string }>();
   for (const swim of model.swims) {
     const swimmer = model.swimmers.find((s) => s.swimmerId === swim.swimmerId);

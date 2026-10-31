@@ -12,12 +12,12 @@
 import * as React from 'react';
 import { diffResults, parseResults, ReportDiffError } from '@omniswim/engine';
 import type { Lineup, Results, ResultsDiff, RivalRef, RoleLabel, TeamId } from '@omniswim/engine';
-import { readScorerOwnTeam } from '../storage';
-import type { LineupRecord, StorageRepo } from '../storage';
+import { readScorerOwnTeam, listRulePresetChoices, listSessionPresetChoices, newerBuiltinVersion, exportData, importData, openOmniDb } from '../storage';
+import type { ExportOptions, LineupRecord, StorageRepo, OnConflict } from '../storage';
 import { EntryCsvButton } from './EntryCsvButton';
 import { MeetReport } from './MeetReport';
 import { resolveRival } from './rival';
-import { clearAccent, readRival, readThemeSettings, saveAccent, saveRival, saveTheme } from './settingsStore';
+import { clearAccent, clearFetchedSwimCloudData, readRival, readThemeSettings, readSetting, readStorageEstimate, saveAccent, saveRival, saveTheme, saveCutCloseThreshold } from './settingsStore';
 import type { ThemeSettings } from './settingsStore';
 import type { ThemePreference } from '../shared/theme';
 
@@ -205,13 +205,63 @@ export function MeetsView({ repo }: { repo: StorageRepo }): React.ReactElement {
 
 // ---- Presets -----------------------------------------------------------------------------------
 
-export function PresetsSlot(): React.ReactElement {
+export function PresetsSlot({ repo }: { repo: StorageRepo }): React.ReactElement {
+  const [rows, setRows] = React.useState<readonly { kind: string; source: string; note: string }[]>([]);
+  const [error, setError] = React.useState('');
+  React.useEffect(() => {
+    let live = true;
+    const readPresets = async (): Promise<void> => {
+      try {
+        const [rules, sessions, userRules, userSessions] = await Promise.all([
+          listRulePresetChoices(repo),
+          listSessionPresetChoices(repo),
+          repo.list('rulePresets'),
+          repo.list('sessionPresets'),
+        ]);
+        const describe = (choice: { source: string; label: string; ref: { kind: string; id: string; version?: number } }, kind: 'rule' | 'session') => {
+          const copy = choice.source === 'user' ? (kind === 'rule' ? userRules : userSessions).find(x => x.id === choice.ref.id) : undefined;
+          const derivedFrom = copy?.derivedFrom;
+          const baseName = derivedFrom ? (kind === 'rule' ? rules : sessions).find(c => c.source === 'builtin' && c.ref.kind === 'builtin' && c.ref.id === derivedFrom.builtinId)?.label ?? derivedFrom.builtinId : '';
+          const based = presetDerivedFromText(kind, derivedFrom, baseName);
+          const source = choice.source === 'builtin' ? `Built in v${choice.ref.version}`
+            : copy?.origin.kind === 'imported' ? `Imported from ${copy.origin.fileName}` : 'User copy';
+          return { kind: `${kind === 'rule' ? 'Rule' : 'Session'}: ${choice.label}`, source, note: based };
+        };
+        if (live) {
+          setRows([...rules.map(x => describe(x, 'rule')), ...sessions.map(x => describe(x, 'session'))]);
+          setError('');
+        }
+      } catch (cause) {
+        if (live) {
+          setRows([]);
+          setError(`Presets could not be read: ${cause instanceof Error ? cause.message : String(cause)}`);
+        }
+      }
+    };
+    void readPresets();
+    return () => { live = false; };
+  }, [repo]);
   return (
     <section data-testid="presets-slot">
       <h2>Presets</h2>
-      <p>Editing presets here is not built yet. Choose your scoring rules in the page panel of the simulator, and your session schedule in the Plan tab of the docked panel.</p>
+      <p>Presets are read only here. Choose scoring rules in the simulator panel and session schedules in Plan.</p>
+      {error ? <p role="alert" data-testid="presets-error">{error}</p> : (
+        <ul>
+          {rows.map((row, i) => (
+            <li key={`${row.kind}-${i}`}>
+              {row.kind} — {row.source}{row.note && `; ${row.note}`}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
+}
+
+export function presetDerivedFromText(kind: 'rule' | 'session', derivedFrom: { readonly builtinId: string; readonly builtinVersion: number } | undefined, builtinName: string): string {
+  if (!derivedFrom) return '';
+  const available = newerBuiltinVersion(kind, derivedFrom);
+  return `Based on ${builtinName} v${derivedFrom.builtinVersion}${available ? `; v${available} available` : ''}`;
 }
 
 // ---- Settings ----------------------------------------------------------------------------------
@@ -224,6 +274,18 @@ const THEME_CHOICES: readonly { readonly value: ThemePreference; readonly label:
 
 /** The accent shown in the picker before the coach picks one. It is the light theme's own accent, so the picker opens on what the page shows. */
 const PICKER_START = '#1565c0';
+
+export function backupExportOptions(includeSwimCloudData: boolean): ExportOptions {
+  return {
+    stores: [
+      'rulePresets', 'sessionPresets', 'meets', 'tags', 'lineups', 'classYearOverrides',
+      ...(includeSwimCloudData ? ['swimmerHistory', 'rosters'] as const : []),
+      'settings',
+    ],
+    includeSwimCloudData,
+    includeSettings: true,
+  };
+}
 
 interface MeetRival {
   readonly group: MeetGroup;
@@ -241,6 +303,13 @@ export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo
   const [theme, setTheme] = React.useState<ThemeSettings | null>(null);
   const [meets, setMeets] = React.useState<readonly MeetRival[]>([]);
   const [message, setMessage] = React.useState('');
+  // The text in the box. It is saved on blur or Enter, never per keystroke: an empty box would read as 0.
+  const [thresholdText, setThresholdText] = React.useState('1.0');
+  const [thresholdSaved, setThresholdSaved] = React.useState(false);
+  const [estimate, setEstimate] = React.useState<string>('');
+  const [confirmCache, setConfirmCache] = React.useState(false);
+  const [conflict, setConflict] = React.useState<OnConflict>('skip');
+  const [includeSwimCloudData, setIncludeSwimCloudData] = React.useState(false);
   const mounted = React.useRef(false);
   const refresh = React.useCallback(async () => {
     const records = await repo.list('lineups');
@@ -252,8 +321,15 @@ export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo
       return { group, teams, rival: await readRival(repo, group.meetKey) };
     }));
     const nextTheme = await readThemeSettings(repo);
-    if (mounted.current) { setMeets(nextMeets); setTheme(nextTheme); }
+    const nextThreshold = await readSetting(repo, 'cutCloseThresholdPct');
+    if (mounted.current) {
+      setMeets(nextMeets);
+      setTheme(nextTheme);
+      setThresholdText(nextThreshold === undefined ? '1.0' : String(nextThreshold));
+      setThresholdSaved(nextThreshold !== undefined);
+    }
   }, [repo]);
+  React.useEffect(() => { let live = true; void readStorageEstimate(navigator.storage).then(result => { if (live) setEstimate(result.text); }); return () => { live = false; }; }, []);
   React.useEffect(() => {
     mounted.current = true;
     refresh().catch((cause: unknown) => { if (mounted.current) setMessage(`Settings could not be read: ${cause instanceof Error ? cause.message : String(cause)}`); });
@@ -271,6 +347,66 @@ export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo
     } catch (cause) {
       setMessage(`Not saved: ${cause instanceof Error ? cause.message : String(cause)}`);
     }
+  };
+  const handleThresholdChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    setThresholdText(event.currentTarget.value);
+  };
+  const saveThreshold = (): void => {
+    const text = thresholdText.trim();
+    const value = Number(text);
+    if (text === '' || !Number.isFinite(value)) {
+      setMessage('Cut threshold not saved: enter a number.');
+      return;
+    }
+    void run(() => saveCutCloseThreshold(repo, value), `Cut threshold: ${value}%.`);
+  };
+  const handleThresholdKey = (event: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === 'Enter') saveThreshold();
+  };
+  const handleClearCache = async (): Promise<void> => {
+    setConfirmCache(false);
+    try {
+      const count = await clearFetchedSwimCloudData(await openOmniDb());
+      setMessage(`Deleted ${count} fetched SwimCloud records.`);
+    } catch (cause) {
+      setMessage(`Cache clear failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+  };
+  const handleExportBackup = async (): Promise<void> => {
+    try {
+      const data = await exportData(repo, backupExportOptions(includeSwimCloudData));
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `omniswim-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setMessage('Backup exported.');
+    } catch (cause) {
+      setMessage(`Export failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+  };
+  const handleImportBackup = async (file: File): Promise<void> => {
+    try {
+      const json: unknown = JSON.parse(await file.text());
+      const report = await importData(await openOmniDb(), json, { fileName: file.name, onConflict: conflict });
+      const added = Object.values(report.written).reduce((sum, count) => sum + (count ?? 0), 0) - report.replaced.length;
+      const skipped = report.skipped.map(row => `${row.store}/${row.key}: ${row.reason}`).join(', ') || 'none';
+      setMessage(`Added ${added}; replaced ${report.replaced.length}; skipped ${skipped}.`);
+    } catch (cause) {
+      const issues = (cause as { issues?: readonly { path: string; message: string }[] }).issues;
+      setMessage(issues ? `Refused: ${issues.map(issue => `${issue.path}: ${issue.message}`).join('; ')}` : `Import failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+  };
+  const handleImportFileChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = event.currentTarget.files?.[0];
+    if (file) void handleImportBackup(file);
+  };
+  const handleConflictChange = (event: React.ChangeEvent<HTMLSelectElement>): void => {
+    setConflict(event.currentTarget.value as OnConflict);
+  };
+  const handleIncludeSwimCloudChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    setIncludeSwimCloudData(event.currentTarget.checked);
   };
   return (
     <section className="osx-settings" data-testid="settings">
@@ -293,6 +429,81 @@ export function SettingsView({ repo, onApplied, subscribe }: { repo: StorageRepo
         {' '}
         <button type="button" data-testid="accent-reset" disabled={theme?.accent === undefined} onClick={() => void run(() => clearAccent(repo), "Accent: the theme's own.")}>Use the theme's accent</button>
         <p className="osx-record-meta">{theme?.accent === undefined ? "The theme's own accent is in use." : `Your accent: ${theme.accent}`}</p>
+      </fieldset>
+      <fieldset>
+        <legend>Close to a cut</legend>
+        <label>
+          Threshold (%)
+          <input
+            data-testid="cut-threshold"
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            value={thresholdText}
+            onChange={handleThresholdChange}
+            onBlur={saveThreshold}
+            onKeyDown={handleThresholdKey}
+          />
+        </label>
+        {!thresholdSaved && <p data-testid="threshold-default">(default)</p>}
+      </fieldset>
+      <fieldset>
+        <legend>Storage</legend>
+        <p data-testid="storage-estimate">{estimate}</p>
+        {!confirmCache ? (
+          <button type="button" data-testid="clear-cache" onClick={() => setConfirmCache(true)}>
+            Clear fetched SwimCloud data
+          </button>
+        ) : (
+          <div>
+            <p>Clear all fetched SwimCloud data? This never touches your lineups, tags, presets, or settings.</p>
+            <button type="button" onClick={() => void handleClearCache()}>Confirm clear</button>
+            <button type="button" onClick={() => setConfirmCache(false)}>Cancel</button>
+          </div>
+        )}
+      </fieldset>
+      <fieldset>
+        <legend>Backup</legend>
+        <p>A default backup carries IDs only. Snapshot results and names are left out; check the box to include them.</p>
+        <p>
+          <label>
+            <input
+              type="checkbox"
+              data-testid="backup-include-swimcloud"
+              checked={includeSwimCloudData}
+              onChange={handleIncludeSwimCloudChange}
+            />
+            {' '}Include SwimCloud data (times, results and names)
+          </label>
+        </p>
+        <p>
+          <button type="button" data-testid="backup-export" onClick={() => void handleExportBackup()}>
+            Export backup
+          </button>
+        </p>
+        {/* The conflict choice comes first: choosing a file starts the import. */}
+        <p>
+          <label>
+            When a record already exists{' '}
+            <select data-testid="backup-conflict" value={conflict} onChange={handleConflictChange}>
+              <option value="skip">Skip</option>
+              <option value="replace">Replace</option>
+              <option value="keep-both">Keep both</option>
+            </select>
+          </label>
+        </p>
+        <p>
+          <label>
+            Import backup{' '}
+            <input
+              data-testid="backup-import"
+              type="file"
+              accept="application/json,.json"
+              onChange={handleImportFileChange}
+            />
+          </label>
+        </p>
       </fieldset>
       <fieldset>
         <legend>Rival for each meet</legend>

@@ -35,7 +35,7 @@ import type { View } from './liveView';
 import { MeetsView, PresetsSlot, SettingsView } from './tabHost';
 import type { SettingsSubscribe } from './tabHost';
 import { meetKeyForSnapshot } from './meetKey';
-import { readThemeSettings } from './settingsStore';
+import { readSetting, readThemeSettings } from './settingsStore';
 
 export type DashboardHost = 'tab' | 'docked';
 
@@ -60,7 +60,7 @@ function TabHostApp(): React.ReactElement {
   const repo = useRepo();
   const tabs: readonly ShellTab[] = [
     { id: 'meets', label: 'Meets', render: () => (repo ? <MeetsView repo={repo} /> : <p>Opening the saved data…</p>) },
-    { id: 'presets', label: 'Presets', render: () => <PresetsSlot /> },
+    { id: 'presets', label: 'Presets', render: () => (repo ? <PresetsSlot repo={repo} /> : <p>Opening the saved data…</p>) },
     { id: 'settings', label: 'Settings', render: () => (repo ? <SettingsView repo={repo} onApplied={() => void applyStoredTheme()} subscribe={subscribeToSettings} /> : <p>Opening the saved data…</p>) },
   ];
   return <HostShell tabs={tabs} hostLabel="host: tab" />;
@@ -211,7 +211,7 @@ async function publishTagState(error?: string): Promise<void> {
       swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })),
       tags, ownTeamId: selectedOwnTeam, rulePresetRef, rulePreset: rulePreset.found ? rulePreset.value : undefined, rulePresetChoices: choices.map(c => ({ ref: c.ref, label: c.label })),
       scoringTeamSize: scored.scoringTeamSize, warnings: scored.warnings,
-        suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey), planner, sessionSchedule, ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
+        suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey, (await readSetting(repo, 'cutCloseThresholdPct')) ?? 1), planner, sessionSchedule, ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
   } catch (cause) {
     postPanelMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
   }

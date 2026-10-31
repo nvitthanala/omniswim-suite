@@ -56,7 +56,7 @@ describe('extension cut tags', () => {
 
   it('does not invent an estimate for SCY-only simulator swims', () => {
     const { snapshot } = buildSnapshot('A');
-    const rows = panelCutTags(snapshot, 'cut-test');
+    const rows = panelCutTags(snapshot, 'cut-test', 1);
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((row) => row.estimated === 'No converted LCM swim')).toBe(true);
   });
@@ -78,7 +78,7 @@ describe('extension cut tags', () => {
     const converted = scyStatementFor(lcmSwim, null, division, swimmer.gender, { includeConvertedSwims: true, lcmToScy: lcmPreset });
     const model = { ...outcome.adapted.model, teams: outcome.adapted.model.teams.map((t) => t.teamId === team.teamId ? { ...t, division } : t),
       swims: [...outcome.adapted.model.swims.filter((swim) => swim.swimId !== source.swimId), realSwim, { ...lcmSwim, scy: converted }] } as MeetModel;
-    const row = panelCutTagsForModel(model).find((item) => item.swimmerId === source.swimmerId && item.eventKey === source.eventKey);
+    const row = panelCutTagsForModel(model, undefined, 1).find((item) => item.swimmerId === source.swimmerId && item.eventKey === source.eventKey);
     expect(row?.real).toBe('No cut achieved');
     expect(row?.estimatedIsEstimate).toBe(true);
     expect(row?.estimated).toContain('achieved');
@@ -102,7 +102,7 @@ describe('extension cut tags', () => {
     const statement = scyStatementFor(lcmSwim, null, division, swimmer.gender, { includeConvertedSwims: true, lcmToScy: lcmPreset });
     const model = { ...outcome.adapted.model, teams: outcome.adapted.model.teams.map((t) => t.teamId === team.teamId ? { ...t, division } : t),
       swims: [...outcome.adapted.model.swims.filter((swim) => swim.swimId !== source.swimId), { ...lcmSwim, scy: statement }] } as MeetModel;
-    const row = panelCutTagsForModel(model).find((item) => item.swimmerId === source.swimmerId && item.eventKey === lcmSwim.eventKey);
+    const row = panelCutTagsForModel(model, undefined, 1).find((item) => item.swimmerId === source.swimmerId && item.eventKey === lcmSwim.eventKey);
     expect(statement).toMatchObject({ kind: 'not-convertible', reason: 'no_conversion_available' });
     expect(row?.estimated).toContain('Unknown:');
     expect(row?.estimated).toContain('no_conversion_available');

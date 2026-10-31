@@ -8,8 +8,11 @@
 import type { RivalRef } from '@omniswim/engine';
 import { StaleWriteError } from '../storage';
 import type { SettingsMap, StorageRepo } from '../storage';
+import type { IDBPDatabase } from 'idb';
+import type { OmniDbSchema } from '../storage';
 import { isHexColor } from '../shared/theme';
 import type { ThemePreference } from '../shared/theme';
+import { closeThresholdFromPercent } from '@omniswim/engine';
 
 export async function readSetting<K extends keyof SettingsMap>(repo: StorageRepo, key: K): Promise<SettingsMap[K] | undefined> {
   const row = await repo.get('settings', key);
@@ -63,6 +66,40 @@ export const saveTheme = (repo: StorageRepo, preference: ThemePreference): Promi
 export async function saveAccent(repo: StorageRepo, hex: string): Promise<void> {
   if (!isHexColor(hex)) throw new RangeError(`The accent must be #rrggbb, not "${hex}".`);
   await updateSetting(repo, 'accent', () => hex);
+}
+
+export async function saveCutCloseThreshold(repo: StorageRepo, value: number): Promise<void> {
+  closeThresholdFromPercent(value);
+  await updateSetting(repo, 'cutCloseThresholdPct', () => value);
+}
+
+export async function clearFetchedSwimCloudData(db: IDBPDatabase<OmniDbSchema>): Promise<number> {
+  const tx = db.transaction(['swimmerHistory', 'rosters'], 'readwrite');
+  const [history, rosters] = await Promise.all([tx.objectStore('swimmerHistory').count(), tx.objectStore('rosters').count()]);
+  await Promise.all([tx.objectStore('swimmerHistory').clear(), tx.objectStore('rosters').clear()]);
+  await tx.done;
+  return history + rosters;
+}
+
+export type StorageEstimateText = { readonly available: false; readonly text: string } | { readonly available: true; readonly text: string };
+export function formatStorageBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return 'unavailable';
+  const kb = 1024;
+  const mb = kb * 1024;
+  const gb = mb * 1024;
+  if (bytes >= gb) return `${(bytes / gb).toFixed(1)} GB`;
+  if (bytes >= mb) return `${(bytes / mb).toFixed(1)} MB`;
+  return `${(bytes / kb).toFixed(1)} KB`;
+}
+
+export async function readStorageEstimate(storage: Pick<StorageManager, 'estimate'> | undefined): Promise<StorageEstimateText> {
+  if (!storage?.estimate) return { available: false, text: 'Storage estimate is not available in this browser.' };
+  try {
+    const { usage, quota } = await storage.estimate();
+    return { available: true, text: `Using ${usage === undefined ? 'unavailable' : formatStorageBytes(usage)} of ${quota === undefined ? 'unavailable' : formatStorageBytes(quota)}.` };
+  } catch {
+    return { available: false, text: 'Storage estimate is unavailable.' };
+  }
 }
 
 export const clearAccent = (repo: StorageRepo): Promise<void> => clearSetting(repo, 'accent');

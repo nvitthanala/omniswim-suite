@@ -39,6 +39,8 @@ export interface OsxHarness {
   /** The number of lineup records in the store. */
   lineupCount(): Promise<number>;
   lineupIds(): Promise<readonly string[]>;
+  /** Counts every user store, including the two fetched-data caches. */
+  storeCounts(): Promise<Readonly<Record<string, number>>>;
   deleteLineupExternally(lineupId: string): Promise<void>;
   /** The script URL of every Worker this page has started, in order. Lets the harness show which worker ran a job. */
   workerStarts(): readonly string[];
@@ -92,6 +94,12 @@ export function installHarness(host: string, panel: PanelStats | null): OsxHarne
     },
     async lineupIds() {
       return (await (await repo()).list('lineups')).map((record) => record.lineupId);
+    },
+    async storeCounts() {
+      const r = await repo();
+      const stores = ['settings', 'rulePresets', 'sessionPresets', 'meets', 'tags', 'lineups', 'classYearOverrides', 'swimmerHistory', 'rosters'] as const;
+      const values = await r.listMany(stores);
+      return Object.fromEntries(stores.map(name => [name, values[name].length]));
     },
     async deleteLineupExternally(lineupId) {
       const r = await repo();
