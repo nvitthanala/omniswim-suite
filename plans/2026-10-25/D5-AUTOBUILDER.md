@@ -943,7 +943,9 @@ Test `cappedLegsDoNotCrowdQ`: the top 12 squads of an event all hold a swimmer w
    2. a request holding `clock` is refused;
    3. an `AutoBuildError` arrives as `auto-build-error` with the same code
       and subject;
-   4. progress arrives in order and `solvesDone` equals `proof.solves.length`;
+   4. progress arrives in order and `solvesDone` equals the number of
+      `MipSolve` calls. (Ruling, U1-a: when local search runs, `proof.solves`
+      holds one more record, which is not a `MipSolve` call.)
    5. `cancel()` rejects the run, an `optimizer.worker` `solveLp` in flight
       still resolves, and the next run works;
    6. the worker is in `build.config.mjs`, `extensionBuildFreshness.test.ts`

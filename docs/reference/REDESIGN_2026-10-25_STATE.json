@@ -582,12 +582,12 @@
     {
       "id": "P6",
       "name": "AutoBuilder (F4)",
-      "status": "A1 6a49d8b1; A2 relays DONE (this commit) with D5 amendment 2. Config C: 1435 pts, UB 1786, ~8.6 s, 3 own relays. Gates: vitest 2984, golden OK, mutation 413, lint 0. Codex J10 no defect; J11 found cap-row guard bug, fixed with test sharedSwimmerCaps. Next: A3 session load (D5 12.3), then A4 performance (the 351-point gap and 8.6 s)."
+      "status": "engine slices A1-A8 committed (6a49d8b1, 2ff5a452, 247ae116, 608c1532, 1dc75807, 27095173, 88611b66, d28f97a6). A9 roster swaps: J21 fixes done (anchor id, idle-removal restore); Codex delta review (docs/reference/A9_CODEX_DELTA_REVIEW.md) found HIGH restore can break respect session load and MEDIUM improving restore discarded; executor ad2051c440db6ce85 fixing (ruling: accept a restore when all hard rules hold and the objective does not drop; keep model_mismatch on the raw assignment). U1-a (worker wiring, a32c73e6b18c0d4a1) built, all gates green, Codex review accept-with-fixes (docs/reference/U1A_CODEX_REVIEW.md: add bundle exclusivity test, worker adding it). Both uncommitted. U1-b next. Config C: 1435 pts, bound 1714-1786, 5.6 s at 10 teams."
     },
     {
       "id": "P7",
       "name": "Dashboard, theming, charts, carry-overs",
-      "status": "pending"
+      "status": "designed: plans/2026-10-25/D6-DASHBOARD.md (d7c8924d). Slices C1, C2, U-a..U-d, F. Questions F1-F3 logged. C1 next after A9 commits (both edit packages/engine)."
     },
     {
       "id": "P8",
@@ -628,7 +628,8 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
-    "RESUME: A8 committed. Next A9 roster swaps (D5 12.9; brief must name a9BriefNotes) via SendMessage to executor ad2051c440db6ce85, then U1 per D5 amendment 7 (worker or Codex). User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md.",
+    "RESUME (2026-10-30): 1) git status. 2) A9: if no report, SendMessage executor ad2051c440db6ce85 (fixing Codex delta HIGH+MEDIUM). 3) U1-a: if no report, SendMessage worker a32c73e6b18c0d4a1 (bundle exclusivity test). 4) Gates, advisor audit, commit A9 (+ D5 amendment 8: A9 rulings, solvesDone counts MipSolve calls only) and U1-a separately. 5) A6 goal-seek proven-label fix. 6) P7 C1 to executor. 7) U1-b.",
+    "RESUME: A9 in flight (executor ad2051c440db6ce85). 1) git status. 2) If no report, SendMessage the executor. 3) Codex review, gates, advisor audit, commit. Then U1 per D5 amendment 7 (worker or Codex). User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md.",
     "RESUME after the limit: 1) git status; diff packages/engine/src/autobuilder, tests/engineAutoBuild.test.ts, tests/helpers/nodeMipSolve.ts, plans/2026-10-25/D5-AUTOBUILDER.md (amendment 1 appended, uncommitted). 2) If the executor report is missing, resume it with SendMessage (A1 agent) rather than re-briefing. 3) npm run build:extension, then full gates; check defaultLimitsConfigC returns improved within 11 s, 3 runs. 4) Commit A1 + amendment as one commit (Codex J8 review: no defect, on the pre-amendment diff; re-review the amendment diff with Codex J terminal term_a6fd5787 first). 5) Next: D5 slice A2 (relays). Open user questions: D5 14.1-14.5, R70 x3, P4 fetch approval, cap-boundary tie rule.",
     "RESUME (if interrupted 2026-10-29 afternoon): read N2 and J4 reports (orca orchestration inbox); review sessionLoad.ts against D2 3.11; rebuild + full gates; commit planner core, then planner UI.",
     "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
@@ -1077,6 +1078,14 @@
       "interruptions": [
         "2026-10-31: executor hit the 5h limit (429, resets 9am CT) during the teammates/objective check; resumed by SendMessage after the reset"
       ]
+    },
+    "D5.A9": {
+      "status": "FIXING 2026-10-31: Codex J21 — HIGH anchor id collision (evaluate.ts fixed id), MEDIUM no-gain removal of a scorer with a valueless entry. Executor re-briefed. Checks 2,4,5,6 clean. Lead gates were green before the fixes.",
+      "next": "Codex review (dispatch2.sh, against spec text) -> lead gates -> advisor audit -> commit; then U1 per amendment 7"
+    },
+    "U1": {
+      "status": "U1-a IN PROGRESS 2026-10-31: worker agent building autobuilder.worker + autobuilderProtocol + createAutoBuildClient per D5 amendment 7 (acceptance 1-7). U1-b (visible UI + harness test 8) after U1-a.",
+      "next": "cross-provider review (Codex if quota allows, else finisher/Cursor) -> gates -> commit"
     }
   },
   "followUps": [
@@ -1093,11 +1102,6 @@
     "D5 15.3: D2 3.11 still shows rules? optional; sessionLoad requires rules. Dead rules? branches at sessionLoad.ts:75-77, :93.",
     "rosterSuggest.ts:163 accepts 5-decimal point tables (scale 10^5) while its message says more than 4 (D5 amendment 1 (e)). Not reproduced.",
     {
-      "id": "A3-refusal-order",
-      "first": "A4",
-      "note": "D5 2.1 mismatch: pending_setting and unscheduled_event refusals run after the search space is built, so a space-build refusal can surface first, and the wasted build cost about 0.5 s on config C."
-    },
-    {
       "id": "A3-split-overcap-pruning",
       "note": "Over-cap pruning is off for split events when load is active."
     },
@@ -1112,14 +1116,6 @@
     {
       "id": "A4-bound-unchecked",
       "note": "The relaxed-MIP upper bound is built from fast column values; only the first 2 columns per event are self-checked against scoreMeet. A fast-scorer undervaluation could lower the bound and give a false proven label. The incumbent is still re-scored by scoreMeet in gate.ts. The parity test is the only guard for the bound."
-    },
-    {
-      "id": "A4-synthetic-bench-infeasible",
-      "note": "The synthetic bench lineup breaks v5 per-swimmer entry limits, so it measures the repair path. Make the generator respect the limits."
-    },
-    {
-      "id": "A4-d5-6.4-rationale",
-      "note": "D5 6.4 justifies K_max 10 by evaluation cost, which A4 removed. K_max 10 still holds because the solver cannot use more columns in 10 s. Amend the rationale (architect)."
     },
     {
       "id": "A3-A15-A20-survivors",
@@ -1158,16 +1154,33 @@
       "note": "H05: a free swimmer's frozen entry in a timed-final-split event gets both held labels; diagnostic only."
     },
     {
-      "id": "A8-bench-explainMs",
-      "note": "scripts/bench/autoBuildTiming.ts does not print proof.timings.explainMs."
-    },
-    {
       "id": "A8-explain-in-gate-reserve",
       "note": "explain runs after the gate inside the 1 s gate reserve with no bound; 0.4 s on config C, but it grows with unusual entries x skipped events. Bound it for large meets."
     },
     {
       "id": "U1-clone-determinism",
       "note": "Architect saw a different autoBuild result from a structuredClone of the config C request (221 KB, 5.2 ms copy). Likely timing fields; unproven. U1 acceptance 1 must settle it."
+    },
+    {
+      "id": "A6-goalseek-proven-overstated",
+      "priority": "fix next (false proven label)",
+      "note": "Pre-existing, reproduced with the swap flag off (tests/engineAutoBuildSwaps.test.ts 3b): with a numeric removed-from-consideration per-event cap, the column prune drops a column holding two own scorers; the goal-seek tie-break then reports one more change than the brute force while proof.status stays proven_optimal. Fix the prune or downgrade the status, then tighten tests 3/3b from >= to equality."
+    },
+    {
+      "id": "U1a-harness-worker",
+      "note": "scripts/run-extension-harness.mjs:44 omits autobuilder.worker.js; fix in U1-b"
+    },
+    {
+      "id": "U1a-fixture-rowCounter",
+      "note": "tests/helpers/simulatorFixtures.ts module-level rowCounter gives different relay leg ids per build; tests must build config C once"
+    },
+    {
+      "id": "A9-gate-duplication",
+      "note": "gate.ts inline objective scoring duplicates objectiveOfBuilt; merge later"
+    },
+    {
+      "id": "P7-architect-findings",
+      "note": "dashboard ignores settings.theme (main.tsx:100); accent validator accepts any string (validate.ts:322); two meet keys (main.tsx:48 vs 109); snapshots record no tags; legacy CSV escaper misses \r. All in D6."
     }
   ],
   "p3CoreA": {

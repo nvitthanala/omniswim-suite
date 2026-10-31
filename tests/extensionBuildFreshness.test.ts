@@ -25,8 +25,9 @@ describe('extension build (D3 2.5)', () => {
     built = await buildAll();
   }, 60_000);
 
-  it('T-B1: the entries are exactly the five in D3 2.2', () => {
+  it('T-B1: the entries are the five in D3 2.2 and the AutoBuilder worker (D5 amendment 7)', () => {
     expect(entries.map((e) => e.name).sort()).toStrictEqual([
+      'autobuilder.worker',
       'dashboard',
       'optimizer.worker',
       'service-worker',

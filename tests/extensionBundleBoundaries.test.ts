@@ -67,12 +67,28 @@ describe('extension bundle boundaries (D3 2.5)', () => {
   });
 
   it('T-B7: no eval( and no new Function( in the script bundles (MV3 CSP blocks both)', () => {
-    for (const name of ['service-worker', 'optimizer.worker', 'sim-bridge', 'sim-overlay']) {
+    for (const name of ['service-worker', 'optimizer.worker', 'autobuilder.worker', 'sim-bridge', 'sim-overlay']) {
       const text = jsOf(name);
       expect(text.length, `${name}.js is empty`).toBeGreaterThan(100);
       expect(text, `${name}.js contains eval(`).not.toMatch(/\beval\s*\(/);
       expect(text, `${name}.js contains new Function(`).not.toMatch(/new\s+Function\s*\(/);
     }
+  });
+
+  it('T-B7b: engine autobuilder modules are bundled into autobuilder.worker and into no other output (D5 amendment 7)', () => {
+    // `metafile.inputs` lists every module esbuild read, tree-shaken or not. Only `outputs[].inputs[].bytesInOutput` says what ships.
+    const AUTOBUILDER_INPUT = /^packages\/engine\/src\/autobuilder\//;
+    const shipped = (b: BuiltEntry): string[] =>
+      Object.values(b.metafile.outputs).flatMap((o) =>
+        Object.entries(o.inputs)
+          .filter(([, v]) => v.bytesInOutput > 0)
+          .map(([input]) => inputFromRepoRoot(input))
+          .filter((input) => AUTOBUILDER_INPUT.test(input)),
+      );
+    // Not vacuous: the worker must ship them, or the scan below proves nothing.
+    expect(shipped(byName('autobuilder.worker')).length).toBeGreaterThan(5);
+    const holders = built.filter((b) => shipped(b).length > 0).map((b) => b.entry.name);
+    expect(holders, 'only autobuilder.worker may bundle packages/engine/src/autobuilder/').toStrictEqual(['autobuilder.worker']);
   });
 
   it('T-B8: no output has a top-level import or export', () => {
@@ -84,7 +100,7 @@ describe('extension bundle boundaries (D3 2.5)', () => {
         expect(f.text, `${f.name} has a top-level export`).not.toMatch(/^\s*export\s+(\{|\*|default|const|let|var|function|class|async)/m);
       }
     }
-    expect(scanned).toBe(5);
+    expect(scanned).toBe(6);
   });
 
   it('T-B9: every selector in static/light.css begins with .osx- or [data-osx', () => {

@@ -64,6 +64,14 @@ export const entries = [
     // The glue's `require("node:fs")` and `require("node:crypto")` sit in a Node-only branch. Stub them out.
     options: { alias: { highs: highsGlue, 'node:fs': emptyNodeModule, 'node:crypto': emptyNodeModule } },
   },
+  {
+    // D5 amendment 7: the AutoBuilder's own worker. It runs `autoBuild` and loads its own HiGHS, built as optimizer.worker is.
+    name: 'autobuilder.worker',
+    in: path.join(extensionRoot, 'src', 'worker', 'autobuilder.ts'),
+    format: 'iife',
+    loader: {},
+    options: { alias: { highs: highsGlue, 'node:fs': emptyNodeModule, 'node:crypto': emptyNodeModule } },
+  },
 ];
 
 /** Copied as is into `dist/`. `from` is relative to `extensionRoot`. */
