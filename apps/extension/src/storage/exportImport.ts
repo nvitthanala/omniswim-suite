@@ -104,7 +104,7 @@ function manifestVersion(): string {
 
 /** The lineup without its SwimCloud-derived parts: payload `display` and snapshot `results`. */
 function withoutSwimCloudData(record: LineupRecord): LineupRecord {
-  const { results: _results, ...rest } = record;
+  const { results: _results, facts: _facts, ...rest } = record;
   return { ...rest, payload: stripSwimCloudData(record.payload as Lineup) };
 }
 
@@ -243,6 +243,9 @@ function validateFile(file: Row): Map<ExportableStore, Row[]> {
     }
     const seen = new Set<string>();
     rows.forEach((row, i) => {
+      if (!includesSwimCloudData && store === 'lineups' && isRow(row) && Object.hasOwn(row, 'facts')) {
+        issues.push({ path: `${base}[${i}].facts`, message: 'SwimCloud data in a file that says includesSwimCloudData:false' });
+      }
       const path = `${base}[${i}]`;
       const found = validateRecord(store, row, path);
       if (found.length > 0) {

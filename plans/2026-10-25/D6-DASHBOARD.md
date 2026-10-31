@@ -190,3 +190,21 @@ snapshot writes back into SwimCloud, and Recharts versus a custom chart.
 5. **`StorageRepo.putMany` moved into U1-b.** AutoBuilder Accept needed an
    all-or-nothing write. C2 reuses `PutManyOp` from `storage/index.ts` and
    does not rebuild it.
+
+## Amendment 2 (lead rulings, 2026-10-31, slice C2)
+
+1. **Stored `results` stays unchecked.** It has always been stored as
+   `unknown`, and older records or backups may hold other shapes. Strict
+   checks on it would refuse a whole import (T-E3). Readers parse it at use
+   time with the engine's `parseResults`. This overrides section 3, which
+   said the validator runs `parseResults`.
+2. **The new fields are strict.** `facts` runs `parseReportFacts`. Each tag in
+   `tags.coach` and `tags.suggested` passes the tags store's own check.
+3. **Shipped fixtures are never edited** (`tests/fixtures/extension-db/FROZEN.json`).
+4. **Accent** must be `#rrggbb`. The only writer is a colour picker, which
+   writes that form, so no stored value is expected to break. If an older
+   backup holds another form, its import is refused with the path.
+5. **Undo** (`storage/undo.ts`, `createUndoStack(repo, limit = 50)`):
+   `recordUndo({changes})`, `undo()` returns `undone`, `empty` or `changed
+   elsewhere`. It writes the inverse through `putMany` with the revs written
+   after the change. Not wired into the UI yet (U-c).

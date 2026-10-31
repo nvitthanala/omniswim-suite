@@ -13,7 +13,7 @@
  * has no row. No type here has a default that stands in for a missing competition value.
  */
 import type { DBSchema, IndexNames, StoreKey, StoreNames, StoreValue } from 'idb';
-import type { Gender, IsoTime as EngineIsoTime, Lineup, LoadPreference, MeetSwimmer, RulePreset, SessionPreset } from '@omniswim/engine';
+import type { Gender, IsoTime as EngineIsoTime, Lineup, LoadPreference, MeetSwimmer, RulePreset, SessionPreset, ScorerTag, ReportFacts, RivalRef } from '@omniswim/engine';
 
 export const DB_NAME = 'omniswim';
 export const DB_VERSION = 2;
@@ -113,6 +113,10 @@ export interface LineupRecord extends Versioned<Lineup>, Edited {
   };
   /** Snapshot only. SwimCloud-derived (D2 Results). */
   readonly results?: unknown;
+  /** Absent means tags were not recorded. */
+  readonly tags?: { readonly coach: readonly ScorerTag[]; readonly suggested: readonly ScorerTag[] };
+  /** SwimCloud-derived seed and class-year facts. */
+  readonly facts?: ReportFacts;
 }
 /** The payload type is fixed in P4. */
 export interface SwimmerHistoryRecord extends Versioned<unknown> {
@@ -179,6 +183,8 @@ export interface SettingsMap {
   sessionPresetsByMeet: Readonly<Record<string, PresetRef>>;
   /** Session load preference per simulator meet. */
   sessionLoadPreferencesByMeet: Readonly<Record<string, LoadPreference>>;
+  /** Explicit rival per simulator meet. */
+  rivalsByMeet: Readonly<Record<string, RivalRef>>;
 }
 export interface SettingRecord<K extends keyof SettingsMap = keyof SettingsMap> {
   readonly key: K;

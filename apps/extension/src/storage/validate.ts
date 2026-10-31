@@ -23,7 +23,7 @@
  * and `validateLineup` below check shape only (keys, types, enums). Replace them with the engine
  * parsers when P5 lands.
  */
-import { parseRulePreset, parseSessionPreset, parseTimeText, RulePresetError } from '@omniswim/engine';
+import { parseReportFacts, parseRulePreset, parseSessionPreset, parseTimeText, RulePresetError } from '@omniswim/engine';
 import type { RulePreset, SessionPreset } from '@omniswim/engine';
 import { parseLoadPreference } from './sessionPreference';
 import { InvalidRecordError } from './errors';
@@ -95,6 +95,14 @@ function keys(raw: unknown, path: string, required: readonly string[], optional:
 function str(raw: unknown, path: string): string {
   if (typeof raw !== 'string' || raw.trim() === '') return fail(path, 'expected a non-empty string');
   return raw;
+}
+
+function scorerTag(raw: unknown, path: string): void {
+  const tag = keys(raw, path, ['teamId', 'swimmerId', 'role']);
+  swimCloudId(tag.teamId, `${path}.teamId`);
+  swimCloudId(tag.swimmerId, `${path}.swimmerId`);
+  // No 'auto': auto is the absence of a record.
+  oneOf(tag.role, `${path}.role`, ['scorer', 'non-scorer', 'exhibition'] as const);
 }
 function int(raw: unknown, path: string, min: number): number {
   if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < min) return fail(path, `expected a whole number of ${min} or more`);
@@ -319,7 +327,7 @@ export function validateLineup(raw: unknown, path: string): void {
 
 const SETTING_VALUES: { readonly [K in keyof SettingsMap]: (v: unknown, path: string) => void } = {
   theme: (v, p) => void oneOf(v, p, ['light', 'dark', 'system'] as const),
-  accent: (v, p) => void str(v, p),
+  accent: (v, p) => { if (typeof v !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(v)) fail(p, 'expected #rrggbb'); },
   cutCloseThresholdPct: (v, p) => {
     if (finite(v, p) < 0) fail(p, 'a threshold cannot be negative');
   },
@@ -346,6 +354,16 @@ const SETTING_VALUES: { readonly [K in keyof SettingsMap]: (v: unknown, path: st
     for (const [meetKey, preference] of Object.entries(map)) {
       str(meetKey, `${p} key`);
       try { parseLoadPreference(preference); } catch (error) { fail(`${p}.${meetKey}`, error instanceof Error ? error.message : String(error)); }
+    }
+  },
+  rivalsByMeet: (v, p) => {
+    const map = isObj(v) ? v : fail(p, 'expected an object keyed by meet key');
+    for (const [meetKey, rival] of Object.entries(map)) {
+      str(meetKey, `${p} key`);
+      const r = keys(rival, `${p}.${meetKey}`, ['kind'], ['teamId']);
+      const kind = oneOf(r.kind, `${p}.${meetKey}.kind`, ['team', 'closest'] as const);
+      if (kind === 'team') { if (r.teamId === undefined) fail(`${p}.${meetKey}.teamId`, 'missing'); swimCloudId(r.teamId, `${p}.${meetKey}.teamId`); }
+      else if (r.teamId !== undefined) fail(`${p}.${meetKey}.teamId`, 'unknown key');
     }
   },
 };
@@ -419,10 +437,7 @@ const RECORD_CHECKS: { readonly [S in UserStore]: (raw: unknown, path: string) =
   tags(raw, path) {
     const o = keys(raw, path, ['meetKey', 'teamId', 'swimmerId', 'role', 'rev', 'updatedAt']);
     str(o.meetKey, `${path}.meetKey`);
-    swimCloudId(o.teamId, `${path}.teamId`);
-    swimCloudId(o.swimmerId, `${path}.swimmerId`);
-    // No 'auto': auto is the absence of a record.
-    oneOf(o.role, `${path}.role`, ['scorer', 'non-scorer', 'exhibition'] as const);
+    scorerTag({ teamId: o.teamId, swimmerId: o.swimmerId, role: o.role }, path);
     rev(o.rev, `${path}.rev`);
     isoTime(o.updatedAt, `${path}.updatedAt`);
   },
@@ -431,7 +446,7 @@ const RECORD_CHECKS: { readonly [S in UserStore]: (raw: unknown, path: string) =
       raw,
       path,
       ['lineupId', 'meetKey', 'name', 'kind', 'payloadVersion', 'payload', 'builtUnder', 'origin', 'rev', 'createdAt', 'updatedAt'],
-      ['parentLineupId', 'results']
+      ['parentLineupId', 'results', 'tags', 'facts']
     );
     str(o.lineupId, `${path}.lineupId`);
     str(o.meetKey, `${path}.meetKey`);
@@ -444,6 +459,13 @@ const RECORD_CHECKS: { readonly [S in UserStore]: (raw: unknown, path: string) =
     if (o.results !== undefined) {
       if (kind !== 'snapshot') fail(`${path}.results`, 'only a snapshot holds results');
       if (o.results === null) fail(`${path}.results`, 'null results; leave the key out when there are none');
+    }
+    if (o.facts !== undefined) try { parseReportFacts(o.facts); } catch (error) { fail(`${path}.facts`, error instanceof Error ? error.message : String(error)); }
+    if (o.tags !== undefined) {
+      const tags = keys(o.tags, `${path}.tags`, ['coach', 'suggested']);
+      for (const category of ['coach', 'suggested'] as const) list(tags[category], `${path}.tags.${category}`).forEach((tag, i) => {
+        scorerTag(tag, `${path}.tags.${category}[${i}]`);
+      });
     }
     const b = keys(
       o.builtUnder,

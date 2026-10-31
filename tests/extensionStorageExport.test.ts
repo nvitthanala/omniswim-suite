@@ -369,7 +369,8 @@ describe('extension storage export and import (D3 5.6)', () => {
     const leaks: [string, Record<string, unknown>][] = [
       ['swimmerHistory present', { ...good, stores: { ...(good.stores as object), swimmerHistory: [] } }],
       ['rosters present', { ...good, stores: { ...(good.stores as object), rosters: [] } }],
-      ['results present', setAt(good, ['stores', 'lineups', 1, 'results'], { x: 1 })],
+      ['results present', setAt(good, ['stores', 'lineups', 1, 'results'], { payloadVersion: 1, teams: [], events: [], violations: [], rosterUnknown: [] })],
+      ['facts present', setAt(good, ['stores', 'lineups', 0, 'facts'], { payloadVersion: 1, seeds: {}, classYears: {} })],
       ['display present', setAt(good, ['stores', 'lineups', 0, 'payload', 'display'], { swimmers: {}, teams: {}, entryTimes: {} })],
     ];
     for (const [label, file] of leaks) {
@@ -408,6 +409,23 @@ describe('extension storage export and import (D3 5.6)', () => {
     expect(JSON.parse(JSON.stringify(file))).toStrictEqual(file);
     // An undefined-valued key is refused before it can become a stored key that JSON drops.
     await expect(repo.put('meets', { ...withoutRev(fixtureRecord<Record<string, unknown>>('meets', 1)), meetKey: 'm-x', simulatorQuery: undefined } as never, 'new')).rejects.toBeInstanceOf(InvalidRecordError);
+    db.close();
+  });
+
+  it('P7 C2: round trip preserves lineup facts and recorded coach and suggested tags', async () => {
+    const { db, repo } = await newDb();
+    const original = withoutRev(fixtureRecord<Record<string, unknown>>('lineups', 0));
+    const enriched = { ...original, facts: { payloadVersion: 1, seeds: {}, classYears: {} }, tags: { coach: [], suggested: [] } };
+    await repo.put('lineups', enriched as never, 'new');
+    const file = await exportData(repo, { ...FULL, stores: ['lineups'], now: () => '2026-10-28T00:00:00.000Z' });
+    const target = await newDb();
+    await importData(target.db, file, { fileName: 'facts.json', onConflict: 'keep-both' });
+    const stored = (await target.repo.list('lineups'))[0] as LineupRecord;
+    expect(stored.facts).toEqual(enriched.facts);
+    expect(stored.tags).toEqual(enriched.tags);
+    const defaultFile = await exportData(repo, { ...DEFAULT, stores: ['lineups'] });
+    expect((defaultFile.stores.lineups?.[0] as LineupRecord).facts).toBeUndefined();
+    target.db.close();
     db.close();
   });
 

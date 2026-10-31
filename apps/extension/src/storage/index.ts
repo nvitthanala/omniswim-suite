@@ -15,6 +15,8 @@ export type { OpenOmniDbOptions } from './open';
 export { createStorageRepo } from './repo';
 export type { GetResult, PutManyOp, PutManyOptions, StorageRepo, StorageRepoOptions } from './repo';
 export * from './changeBus';
+export { createUndoStack } from './undo';
+export type { UndoChange, UndoEntry, UndoOutcome, UndoStack } from './undo';
 export { assertValidRecord, validateRecord, validateLineup, validateSessionPreset, assertJsonSafe } from './validate';
 export { BUNDLED_SOURCE_MANIFESTS, publishedSourceProblem } from './sourceManifests';
 export { EXPORT_FORMAT, EXPORT_FORMAT_VERSION, EXPORT_STORE_ORDER, exportData, importData } from './exportImport';
