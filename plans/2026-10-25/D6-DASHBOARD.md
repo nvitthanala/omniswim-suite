@@ -168,3 +168,25 @@ If Recharts is chosen anyway (user question F3), pin `"recharts": "3.8.1"`.
 
 F1 to F3 in `QUESTIONS_FOR_USER.md`: the rival default, whether restoring a
 snapshot writes back into SwimCloud, and Recharts versus a custom chart.
+
+## Amendment 1 (lead rulings, 2026-10-31, slices C1 and U1-b)
+
+1. **`diffResults`** returns the shape of `ScenarioDiffResult`: per-swimmer
+   rows (a relay stays one row), per-event rows and team totals. An absent
+   side reads `null`, never 0. A meet-key mismatch throws `ReportDiffError`
+   with code `meet_key_mismatch`. Time changes come from `lineup.display`,
+   so a record stripped of SwimCloud data shows no time changes (U-c must
+   say so).
+2. **CSV.** A dive seed prints as points ("250.00"). A missing swimmer name
+   or a missing result row is a `CsvIssue` (`name_missing` and the like),
+   never the swimmer id or a blank. Seed stays a text cell until U-d's Excel
+   check settles "1:52.34".
+3. **`ClassYearCode`** is derived from the model's own class-year type, so
+   user question E1 changes one place.
+4. **Keys.** A saved lineup's record uses `meetKeyFor(snapshot)` as its
+   store key. Its payload keeps the scoring key `'swimcloud-simulator'`, so
+   it can be re-scored. Two copies of the `meetKeyFor` formula exist
+   (`main.tsx:114`, `autoBuilderRequest.ts:36`); U-a keeps one.
+5. **`StorageRepo.putMany` moved into U1-b.** AutoBuilder Accept needed an
+   all-or-nothing write. C2 reuses `PutManyOp` from `storage/index.ts` and
+   does not rebuild it.

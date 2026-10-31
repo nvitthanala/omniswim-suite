@@ -153,3 +153,35 @@ export { BUILTIN_LCM_TO_SCY, BUILTIN_TABLE_D, builtinLcmToScy } from './sourcing
 // legacy defaulting division helpers private to the engine.
 export type { TeamDivisionResolution, TeamDivisionOptions } from './data/teamDivisions';
 export { resolveTeamDivision, divisionForEntryInSeason, programCompetedInSeason, programSponsorsGender } from './data/teamDivisions';
+
+// Reporting API (P7 C1)
+export {
+  captureReportFacts,
+  diffResults,
+  entryCsv,
+  parseReportFacts,
+  parseResults,
+  ReportDiffError,
+  ReportParseError,
+  scoreProgression,
+  swimmerPoints,
+} from './report';
+export type {
+  ClassYearCode,
+  CsvIssue,
+  CsvIssueKind,
+  Progression,
+  ProgressionOrder,
+  ProgressionPoint,
+  ReportDiffErrorCode,
+  ReportEventDiff,
+  ReportFacts,
+  ReportSwimmerDiff,
+  ReportSwimmerEventChange,
+  ResultsDiff,
+  RoleLabel,
+  SeedFact,
+  SwimmerPoints,
+  UnplacedProgressionEvent,
+} from './report';
+
