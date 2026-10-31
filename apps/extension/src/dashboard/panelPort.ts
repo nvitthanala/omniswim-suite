@@ -29,6 +29,8 @@ export interface PanelListenerRuntime {
         name: string;
         postMessage(message: unknown): void;
         onMessage: { addListener(cb: (message: unknown) => void): void };
+        /** The overlay closed the port, or its page went away. Optional: a test port may not have it. */
+        onDisconnect?: { addListener(cb: () => void): void };
       }) => void,
     ): void;
   };
@@ -40,7 +42,7 @@ export function readNonce(hash: string): string | null {
   return NONCE_PATTERN.test(nonce) ? nonce : null;
 }
 
-export function listenForPanelPort(runtime: PanelListenerRuntime, nonce: string, onSnapshot: (snapshot: SimSnapshot) => void = () => undefined, onTagAction: (action: import('../shared/panelProtocol').ScorerTagActionMessage) => void = () => undefined, onPort: (port: { postMessage(message: unknown): void }) => void = () => undefined, onSessionPresetEdit: (preset: unknown) => void = () => undefined): PanelStats {
+export function listenForPanelPort(runtime: PanelListenerRuntime, nonce: string, onSnapshot: (snapshot: SimSnapshot) => void = () => undefined, onTagAction: (action: import('../shared/panelProtocol').ScorerTagActionMessage) => void = () => undefined, onPort: (port: { postMessage(message: unknown): void }) => void = () => undefined, onSessionPresetEdit: (preset: unknown) => void = () => undefined, onPortClosed: (port: { postMessage(message: unknown): void }) => void = () => undefined): PanelStats {
   const stats: PanelStats = { accepted: 0, rejected: 0, pings: 0, snapshots: 0 };
   const ours = panelPortName(nonce);
   runtime.onConnect.addListener((port) => {
@@ -50,6 +52,7 @@ export function listenForPanelPort(runtime: PanelListenerRuntime, nonce: string,
     }
     stats.accepted += 1;
     onPort(port);
+    port.onDisconnect?.addListener(() => onPortClosed(port));
     port.onMessage.addListener((message) => {
       if (!isPanelPing(message)) return;
       stats.pings += 1;

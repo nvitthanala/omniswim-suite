@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * `globalThis.osxHarness`: the probe that tests/extension-harness drives with `frame.evaluate`.
- * It does five things the harness must check from inside an extension page: solve a model on the
+ * It does the things the harness must check from inside an extension page: solve a model on the
  * page's own worker, put and get one setting through the storage repo, report the panel port's
  * counters, list the worker scripts the page started, and seed the own team, rule preset and scorer tags an AutoBuilder run needs
  * (`seedAutoBuild`). It reads and writes no more than that.
@@ -11,7 +11,7 @@
  * It is reachable only from this page's own JavaScript world. The simulator page cannot see it:
  * the docked iframe is a cross-origin frame there.
  */
-import { createStorageRepo, openOmniDb, saveScorerOwnTeam, saveScorerRulePreset, toSwimCloudId } from '../storage';
+import { createChromeChangeBus, createStorageRepo, openOmniDb, saveScorerOwnTeam, saveScorerRulePreset, toSwimCloudId } from '../storage';
 import type { GetResult, SettingsMap, StorageRepo } from '../storage';
 import type { SolveLpRequest, SolveMipRequest, SolvedMipResponse, SolvedResponse } from '../shared/optimizerProtocol';
 import type { SimSnapshot } from '../shared/bridgeSchema';
@@ -19,7 +19,7 @@ import { meetKeyForSnapshot } from './autoBuilderRequest';
 import { createOptimizerClient } from './optimizerClient';
 import type { PanelStats } from './panelPort';
 
-export type HarnessSetting = 'cutCloseThresholdPct';
+export type HarnessSetting = 'cutCloseThresholdPct' | 'theme' | 'accent';
 
 export interface OsxHarness {
   readonly host: string;
@@ -29,13 +29,15 @@ export interface OsxHarness {
   /** The worker's reply to a request type it does not implement. */
   probeUnsupported(): Promise<string>;
   /** Create the setting, or update it at the stored `rev`. Returns the stored record. */
-  putSetting(key: HarnessSetting, value: SettingsMap[HarnessSetting]): Promise<unknown>;
+  putSetting<K extends HarnessSetting>(key: K, value: SettingsMap[K]): Promise<unknown>;
   getSetting(key: HarnessSetting): Promise<GetResult<'settings'>>;
   /**
    * Store what an AutoBuilder run needs for a meet, as a coach would choose it: the own team, the built-in NSISC v5 rules and a scorer tag per swimmer.
    * Returns the meet key it wrote under.
    */
   seedAutoBuild(snapshot: SimSnapshot, ownTeamId: string, scorerIds: readonly string[]): Promise<string>;
+  /** The number of lineup records in the store. */
+  lineupCount(): Promise<number>;
   /** The script URL of every Worker this page has started, in order. Lets the harness show which worker ran a job. */
   workerStarts(): readonly string[];
   /** `null` when this page is not a docked iframe with a valid nonce. */
@@ -59,7 +61,7 @@ export function installHarness(host: string, panel: PanelStats | null): OsxHarne
   const workerStarts = recordWorkerStarts();
   const optimizer = createOptimizerClient();
   let repoPromise: Promise<StorageRepo> | undefined;
-  const repo = (): Promise<StorageRepo> => (repoPromise ??= openOmniDb().then((db) => createStorageRepo(db)));
+  const repo = (): Promise<StorageRepo> => (repoPromise ??= openOmniDb().then((db) => createStorageRepo(db, { bus: createChromeChangeBus(chrome.storage as never) })));
 
   const harness: OsxHarness = {
     host,
@@ -69,7 +71,7 @@ export function installHarness(host: string, panel: PanelStats | null): OsxHarne
     async putSetting(key, value) {
       const r = await repo();
       const current = await r.get('settings', key);
-      return r.put('settings', { key, value }, current.found ? current.value.rev : 'new');
+      return r.put('settings', { key, value } as Parameters<typeof r.put<'settings'>>[1], current.found ? current.value.rev : 'new');
     },
     async getSetting(key) {
       return (await repo()).get('settings', key);
@@ -82,6 +84,9 @@ export function installHarness(host: string, panel: PanelStats | null): OsxHarne
       await saveScorerRulePreset(r, meetKey, { kind: 'builtin', id: 'nsisc', version: 5 });
       for (const swimmerId of scorerIds) await r.put('tags', { meetKey, teamId, swimmerId: toSwimCloudId(swimmerId), role: 'scorer' }, 'new');
       return meetKey;
+    },
+    async lineupCount() {
+      return (await (await repo()).list('lineups')).length;
     },
     workerStarts: () => [...workerStarts],
     panel: () => panel,

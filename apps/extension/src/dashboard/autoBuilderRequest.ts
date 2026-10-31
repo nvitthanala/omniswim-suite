@@ -32,9 +32,9 @@ import type { PresetRef, StorageRepo } from '../storage';
 import { suggestedTags, suggestOpponentRosters } from './suggestedRosters';
 import type { SuggestedRosterState } from './suggestedRosters';
 
-/** The meet key every dashboard record of this snapshot uses (the scorer tags, the choices, the saved lineup). */
-export const meetKeyForSnapshot = (snapshot: SimSnapshot): string =>
-  `swimcloud-simulator:${JSON.stringify({ teams: [...new Set(snapshot.teams.map((t) => String(t.id)))].sort(), startDate: snapshot.settings.startDate, endDate: snapshot.settings.endDate })}`;
+import { meetKeyForSnapshot } from './meetKey';
+
+export { meetKeyForSnapshot };
 
 /** A snapshot's identity. Two snapshots with the same key hold the same simulator state. */
 export const snapshotKey = (snapshot: SimSnapshot): string => JSON.stringify(snapshot);

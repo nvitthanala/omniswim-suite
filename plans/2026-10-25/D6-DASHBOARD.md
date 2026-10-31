@@ -162,6 +162,7 @@ If Recharts is chosen anyway (user question F3), pin `"recharts": "3.8.1"`.
 | U-b | `dashboard/ScoreChart.tsx` | Markup matches for both themes; the "simulator order" label shows | cursor |
 | U-c | Snapshots, diff and undo UI | Harness: save, diff, undo, then "changed elsewhere" | codex |
 | U-d | Report and CSV views, print CSS | Opens in Excel: "José" reads back; `1:52.34` reads back as written | claude:worker |
+| U-e | Settings: cut threshold, storage estimate, backup export and import; Presets view | Harness: change each setting, export then import a backup, round trip equal | codex |
 | F | Gates, visual check in both themes | Full gates green | claude:finisher |
 
 ## 8. User questions
@@ -208,3 +209,25 @@ snapshot writes back into SwimCloud, and Recharts versus a custom chart.
    `recordUndo({changes})`, `undo()` returns `undone`, `empty` or `changed
    elsewhere`. It writes the inverse through `putMany` with the revs written
    after the change. Not wired into the UI yet (U-c).
+
+## Amendment 3 (lead rulings, 2026-10-31, slice U-a)
+
+1. **Dive scores in stored display text.** The adapter writes a dive seed as
+   points with two decimals ("504.60"). The lineup validator accepts that
+   form only for an individual entry key whose event is diving, and the
+   text must equal `hundredths` exactly. A swim key keeps `parseTimeText`,
+   so a swim written as "75.00" is refused. Before this, Save failed on
+   every recorded meet, because each has a diving event.
+2. **New engine root export `isDivingEvent`.** The extension may import only
+   the engine root (D2 0.4). It is additive.
+3. **Rival tie-breakers.** F1's rule comes first: the nearest final points,
+   then the team above yours. Rank, then team id, break any tie that is
+   left, so the pick is deterministic.
+4. **A missing total is never drawn as zero.** ScoreChart stops a team's
+   line at a gap, shows a visible note, and writes "missing" in the
+   legend, the table and the aria label.
+5. **Suggested tags lose `source` on Save.** The tag schema has no `source`
+   field. The category is kept.
+6. **Moved to U-c:** lineup save, the diff view and Undo.
+7. **New slice U-e:** the Settings cut threshold, storage estimate, backup
+   export and import, and the Presets view (section 1 items U-a left out).

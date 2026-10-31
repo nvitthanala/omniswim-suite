@@ -2,26 +2,24 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Dashboard. One bundle, two hosts: `?host=tab` (a browser tab) and
- * `?host=docked` (the iframe in the simulator page). For now it names itself and its host, owns
- * the optimizer worker, and answers the overlay's port. The page is the only owner of the worker
- * and of storage writes (D3 0.2, 0.4).
+ * Dashboard. One bundle, two hosts: `?host=tab` (a browser tab) and `?host=docked` (the iframe in the simulator
+ * page). This file wires the page to the world: the simulator snapshots, the overlay's port, the optimizer worker, storage and the theme.
+ * What shows is in `Shell.tsx` (the frame and its slots), `liveView.tsx` (the docked tabs) and `tabHost.tsx` (the tab's sections).
+ * The page is the only owner of the worker and of storage writes (D3 0.2, 0.4).
  */
 import { createRoot } from 'react-dom/client';
 import * as React from 'react';
 import { installHarness } from './harness';
 import { listenForPanelPort, readNonce } from './panelPort';
-import { bindTheme } from '../shared/theme';
+import { bindTheme, createAccentSync } from '../shared/theme';
 import { AdapterError, rescoreSimulator, SIMULATOR_SOURCING } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../shared/bridgeSchema';
-import type { Results } from '@omniswim/engine';
-import type { ParityReport } from '@omniswim/swimcloud/browser';
 import type { ScorerTag } from '@omniswim/engine';
 import type { RulePreset, LoadPreference, SessionPreset } from '@omniswim/engine';
 import { sessionLoad, relayRepeatsForSchedule, requireComplete, scoreMeet } from '@omniswim/engine';
 import { createChromeChangeBus, createStorageRepo, openOmniDb, readScorerOwnTeam, saveScorerOwnTeam, readScorerRulePreset, saveScorerRulePreset, listRulePresetChoices, resolveRulePreset, watchChanges, toSwimCloudId, readSessionPreset, readSessionLoadPreference, saveEditedSessionPreset } from '../storage';
 import type { StorageRepo } from '../storage';
-import type { AutoBuildStatusMessage, ScorerTagActionMessage, ScorerTagStateMessage } from '../shared/panelProtocol';
+import type { AutoBuildStatusMessage, PanelSize, ScorerTagActionMessage, ScorerTagStateMessage, ThemeStateMessage } from '../shared/panelProtocol';
 import { panelCutTags, scoreScorerTags } from './scorerTagScoring';
 import { createOptimizerClient } from './optimizerClient';
 import { suggestOpponentRosters, suggestedTags } from './suggestedRosters';
@@ -29,6 +27,14 @@ import './dashboard.css';
 import { postDockedParityReport } from './parity';
 import { SessionPlannerEditor } from './sessionPlannerEditor';
 import { AutoBuilderPanel } from './autoBuilderPanel';
+import { DockedShell, HostShell } from './Shell';
+import type { ShellTab } from './Shell';
+import { ChartTab, SaveTab, ScoreTab, WaitingNote } from './liveView';
+import type { View } from './liveView';
+import { MeetsView, PresetsSlot, SettingsView } from './tabHost';
+import type { SettingsSubscribe } from './tabHost';
+import { meetKeyForSnapshot } from './meetKey';
+import { readThemeSettings } from './settingsStore';
 
 export type DashboardHost = 'tab' | 'docked';
 
@@ -38,9 +44,39 @@ export function readHost(search: string): DashboardHost | null {
   return host === 'tab' || host === 'docked' ? host : null;
 }
 
-type View = { kind: 'empty' } | { kind: 'error'; code: string; reason: string } | { kind: 'not_loaded'; missing: readonly string[] }
-  | { kind: 'preset_incomplete'; pending: readonly string[] }
-  | { kind: 'scored'; snapshot: SimSnapshot; results: Results; parity: ParityReport };
+/** The repo, once the database is open. `null` until then. */
+function useRepo(): StorageRepo | null {
+  const [repo, setRepo] = React.useState<StorageRepo | null>(null);
+  React.useEffect(() => {
+    let live = true;
+    void repoForTags().then((r) => { if (live) setRepo(r); });
+    return () => { live = false; };
+  }, []);
+  return repo;
+}
+
+function TabHostApp(): React.ReactElement {
+  const repo = useRepo();
+  const tabs: readonly ShellTab[] = [
+    { id: 'meets', label: 'Meets', render: () => (repo ? <MeetsView repo={repo} /> : <p>Opening the saved data…</p>) },
+    { id: 'presets', label: 'Presets', render: () => <PresetsSlot /> },
+    { id: 'settings', label: 'Settings', render: () => (repo ? <SettingsView repo={repo} onApplied={() => void applyStoredTheme()} subscribe={subscribeToSettings} /> : <p>Opening the saved data…</p>) },
+  ];
+  return <HostShell tabs={tabs} hostLabel="host: tab" />;
+}
+
+function DockedApp({ view }: { view: View }): React.ReactElement {
+  const tabUrl = React.useMemo(() => chrome.runtime.getURL('dashboard.html?host=tab'), []);
+  const scored = view.kind === 'scored' ? view : null;
+  const tabs: readonly ShellTab[] = [
+    { id: 'score', label: 'Score', render: () => <ScoreTab view={view} /> },
+    { id: 'chart', label: 'Chart', render: ({ expanded, active }) => (scored ? <ChartTab view={scored} repoForMeet={repoForTags} expanded={expanded} active={active} /> : <WaitingNote view={view} />) },
+    { id: 'build', label: 'Build', render: () => (scored ? <AutoBuilderPanel snapshot={scored.snapshot} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} onStatus={postAutoBuildStatus} /> : <WaitingNote view={view} />) },
+    { id: 'plan', label: 'Plan', render: () => (scored ? <SessionPlannerEditor snapshot={scored.snapshot} repoForMeet={repoForTags} /> : <WaitingNote view={view} />) },
+    { id: 'save', label: 'Save', render: () => (scored ? <SaveTab view={scored} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} tabUrl={tabUrl} /> : <WaitingNote view={view} />) },
+  ];
+  return <DockedShell tabs={tabs} hostLabel="host: docked" onSize={postPanelSize} />;
+}
 
 export function App({ host }: { host: DashboardHost | null }) {
   const [view, setView] = React.useState<View>({ kind: 'empty' });
@@ -66,40 +102,14 @@ export function App({ host }: { host: DashboardHost | null }) {
     // The content script accepts this only from its exact docked iframe window and extension origin.
     postDockedParityReport(window.parent, view.parity);
   }, [host, view]);
-  return (
-    <main className="osx-dashboard">
-      <h1>OmniSwim</h1>
-      <p data-testid="host">host: {host ?? 'unknown'}</p>
-      {view.kind !== 'empty' && <section className="osx-results" aria-live="polite">
-        <h2>SwimCloud simulator</h2>
-        {view.kind === 'error' && <p className="osx-status osx-status--warn" data-testid="parity">Not compared: {view.code} — {view.reason}</p>}
-        {view.kind === 'not_loaded' && <p className="osx-status osx-status--warn" data-testid="parity">Not loaded: {view.missing.join(', ')}</p>}
-        {view.kind === 'preset_incomplete' && <p className="osx-status osx-status--warn" data-testid="parity">Preset incomplete: {view.pending.join(', ')}</p>}
-        {view.kind === 'scored' && <>
-          <table data-testid="team-results"><thead><tr><th>Team</th><th>Engine</th><th>SwimCloud</th></tr></thead><tbody>
-            {view.results.teams.map((team) => {
-              const observed = view.parity.kind === 'compared' ? view.parity.teams.find((t) => t.teamId === team.teamId)?.observed : undefined;
-              const name = view.snapshot.teams.find((t) => String(t.id) === String(team.teamId))?.name ?? String(team.teamId);
-              return <tr key={team.teamId}><th scope="row">{name}</th><td>{team.points}</td><td>{observed === undefined ? '—' : observed}</td></tr>;
-            })}
-          </tbody></table>
-          {view.parity.kind === 'not_observed' && <p className="osx-status osx-status--warn" data-testid="parity">Not observed</p>}
-          {view.parity.kind === 'compared' && (view.parity.matches
-            ? <p className="osx-status osx-status--good" data-testid="parity">Matches SwimCloud</p>
-            : <div className="osx-status osx-status--bad" data-testid="parity"><p>{view.parity.differingEvents.length} differing events</p><ul>{view.parity.differingEvents.flatMap((event) => event.rows.filter((row) => row.status === 'mismatch').map((row) => {
-              const name = view.snapshot.teams.find((t) => String(t.id) === String(row.teamId))?.name ?? String(row.teamId);
-              return <li key={`${event.eventKey}:${row.entryKey}`}>{event.eventKey}, {name}: engine {row.engine} vs SwimCloud {row.observed ?? 'not stated'}</li>;
-            }))}</ul></div>)}
-        </>}
-      </section>}
-      {host === 'docked' && view.kind === 'scored' && <SessionPlannerEditor snapshot={view.snapshot} repoForMeet={repoForTags} />}
-      {host === 'docked' && view.kind === 'scored' && <AutoBuilderPanel snapshot={view.snapshot} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} onStatus={postAutoBuildStatus} />}
-    </main>
-  );
+  if (host === 'tab') return <TabHostApp />;
+  if (host === 'docked') return <DockedApp view={view} />;
+  return <main className="osx-dashboard"><h1>OmniSwim</h1><p data-testid="host">host: unknown</p></main>;
 }
 
-// Light is the default (D3 section 4). The attribute selects the token set in dashboard.css.
-bindTheme(document.documentElement);
+// Light until the stored choice is read (D3 section 4). The attribute selects the token set in dashboard.css.
+const themeController = bindTheme(document.documentElement);
+const accentSync = createAccentSync(document.documentElement);
 const container = document.getElementById('root');
 if (!container) throw new Error('dashboard.html has no #root element');
 const host = readHost(location.search);
@@ -107,11 +117,33 @@ let pendingSnapshot: SimSnapshot | null = null;
 let latestPanelPort: { postMessage(message: unknown): void } | null = null;
 let sessionScheduleError: string | undefined;
 let tagRepo: Promise<StorageRepo> | undefined;
+/** The tab host's Settings view listens here for a settings change another context made. */
+const settingsListeners = new Set<() => void>();
+const subscribeToSettings: SettingsSubscribe = (listener) => {
+  settingsListeners.add(listener);
+  return () => { settingsListeners.delete(listener); };
+};
 const optimizer = createOptimizerClient();
 const solveForAutoBuilder = (lp: string, options: Readonly<Record<string, string | number | boolean>>): ReturnType<typeof optimizer.solveLp> => optimizer.solveLp(lp, options);
 /** The page panel shows one status line about a build (D5 amendment 7 item 3). */
 const postAutoBuildStatus = (message: AutoBuildStatusMessage): void => latestPanelPort?.postMessage(message);
-const meetKeyFor = (snapshot: SimSnapshot): string => `swimcloud-simulator:${JSON.stringify({ teams: [...new Set(snapshot.teams.map(t => String(t.id)))].sort(), startDate: snapshot.settings.startDate, endDate: snapshot.settings.endDate })}`;
+/** The docked panel's size, as the coach last asked. Resent when the port connects, because the shell asks before the overlay has connected. */
+let panelSize: PanelSize = 'compact';
+function postPanelSize(size: PanelSize): void {
+  panelSize = size;
+  latestPanelPort?.postMessage({ kind: 'panel-size', size });
+}
+/** Read the stored theme and accent, apply them here, and tell the page panel and the docked frame's chrome (D6 section 5). */
+async function applyStoredTheme(): Promise<void> {
+  try {
+    const stored = await readThemeSettings(await repoForTags());
+    themeController.setPreference(stored.preference);
+    accentSync.set(stored.accent);
+    latestPanelPort?.postMessage({ kind: 'theme-state', preference: stored.preference, ...(stored.accent === undefined ? {} : { accent: stored.accent }) } satisfies ThemeStateMessage);
+  } catch {
+    // A failed read keeps the current theme. It is no reason to flash another one.
+  }
+}
 function buildPlannerState(snapshot: SimSnapshot, meetKey: string, rules: RulePreset | undefined, schedule: SessionPreset | undefined, preference: LoadPreference): ScorerTagStateMessage['planner'] {
   if (!rules) return { perSwimmer: [], violations: ['Choose the meet\'s OmniSwim rule preset before calculating session load.'] };
   const rescored = rescoreSimulator(snapshot, { meetKey, snapshotId: 'live-snapshot' });
@@ -134,13 +166,19 @@ function buildPlannerState(snapshot: SimSnapshot, meetKey: string, rules: RulePr
 const repoForTags = (): Promise<StorageRepo> => (tagRepo ??= openOmniDb().then(db => {
   const bus = createChromeChangeBus(chrome.storage as never);
   const repo = createStorageRepo(db, { bus });
-  void watchChanges(db, bus, change => { if (change.stores === 'unknown' || change.stores.includes('tags') || change.stores.includes('settings')) void publishTagState(); }, { targets: [document, window] });
+  void watchChanges(db, bus, change => {
+    if (change.stores === 'unknown' || change.stores.includes('tags') || change.stores.includes('settings')) void publishTagState();
+    if (change.stores === 'unknown' || change.stores.includes('settings')) {
+      void applyStoredTheme();
+      for (const listener of settingsListeners) listener();
+    }
+  }, { targets: [document, window] });
   return repo;
 }));
 async function publishTagState(error?: string): Promise<void> {
   if (!pendingSnapshot || !latestPanelPort) return;
   const snapshot = pendingSnapshot;
-  const meetKey = meetKeyFor(snapshot);
+  const meetKey = meetKeyForSnapshot(snapshot);
   try {
     const repo = await repoForTags();
     const rows = await repo.list('tags', { index: 'byMeet', value: meetKey });
@@ -167,12 +205,12 @@ async function publishTagState(error?: string): Promise<void> {
       scoringTeamSize: scored.scoringTeamSize, warnings: scored.warnings,
         suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey), planner, sessionSchedule, ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
   } catch (cause) {
-    latestPanelPort.postMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
+    latestPanelPort?.postMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: t.name })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: s.display_name || s.name || String(s.id), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
   }
 }
 async function handleTagAction(action: ScorerTagActionMessage): Promise<void> {
   if (!pendingSnapshot || !latestPanelPort) return;
-  const meetKey = meetKeyFor(pendingSnapshot);
+  const meetKey = meetKeyForSnapshot(pendingSnapshot);
   try {
     const repo = await repoForTags();
     if (action.action === 'choose-rule-preset' && action.rulePresetRef) {
@@ -200,7 +238,7 @@ async function handleTagAction(action: ScorerTagActionMessage): Promise<void> {
 }
 async function handleSessionPresetEdit(raw: unknown): Promise<void> {
   if (!pendingSnapshot || !latestPanelPort) return;
-  const meetKey = meetKeyFor(pendingSnapshot);
+  const meetKey = meetKeyForSnapshot(pendingSnapshot);
   try {
     const repo = await repoForTags();
     const selected = await readSessionPreset(repo, meetKey);
@@ -217,8 +255,11 @@ const panel = nonce ? listenForPanelPort(chrome.runtime, nonce, (snapshot) => {
   window.dispatchEvent(new CustomEvent('osx-snapshot', { detail: snapshot }));
   latestPanelPort?.postMessage({ kind: 'scorer-tags-loading' });
   void publishTagState();
-}, action => { void handleTagAction(action); }, port => { latestPanelPort = port; void publishTagState(); }, raw => { void handleSessionPresetEdit(raw); }) : null;
+}, action => { void handleTagAction(action); }, port => { latestPanelPort = port; void publishTagState(); void applyStoredTheme(); if (panelSize !== 'compact') postPanelSize(panelSize); }, raw => { void handleSessionPresetEdit(raw); },
+// A closed port takes no more messages. Only the port in use is dropped: a newer connect may already have replaced it.
+closed => { if (latestPanelPort === closed) latestPanelPort = null; }) : null;
 // `__OSX_HARNESS__` is false in the production build, so esbuild drops this call and the probe.
 if (__OSX_HARNESS__) installHarness(host ?? 'unknown', panel);
+void applyStoredTheme();
 const root = createRoot(container);
 root.render(<App host={host} />);

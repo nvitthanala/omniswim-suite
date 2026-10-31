@@ -212,3 +212,23 @@ describe('listenForPanelPort (iframe side)', () => {
     expect(seen).toStrictEqual([snapshot]);
   });
 });
+
+describe('a closed port', () => {
+  it('is reported to the iframe, so it can stop posting to it', () => {
+    const fake = fakeRuntime();
+    fake.state.listening = true;
+    const nonce = 'd'.repeat(32);
+    const opened: unknown[] = [];
+    const closed: unknown[] = [];
+    listenForPanelPort(fake.iframeRuntime, nonce, undefined, undefined, (port) => opened.push(port), undefined, (port) => closed.push(port));
+    // A port with another name is not ours: it is never reported open or closed.
+    (fake.runtime.connect({ name: 'someone-else' }) as unknown as FakePort).disconnect();
+    expect(opened).toHaveLength(0);
+    expect(closed).toHaveLength(0);
+    const peer = fake.runtime.connect({ name: panelPortName(nonce) }) as unknown as FakePort;
+    expect(opened).toHaveLength(1);
+    expect(closed).toHaveLength(0);
+    peer.disconnect();
+    expect(closed).toStrictEqual(opened);
+  });
+});

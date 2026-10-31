@@ -47,6 +47,10 @@ const PANEL = `${PANEL_FRAME_SELECTOR} {
   height: 240px;
   z-index: 2147483000;
 }
+${PANEL_FRAME_SELECTOR}[data-osx-size="expanded"] {
+  width: min(640px, calc(100vw - 32px));
+  height: min(520px, calc(100vh - 32px));
+}
 [data-osx-panel-error] {
   position: fixed;
   right: 16px;
@@ -66,6 +70,9 @@ const PANEL = `${PANEL_FRAME_SELECTOR} {
     right: auto;
     left: 16px;
     width: min(360px, calc(100vw - 160px));
+  }
+  ${PANEL_FRAME_SELECTOR}[data-osx-size="expanded"] {
+    width: min(640px, calc(100vw - 160px));
   }
 }
 `;

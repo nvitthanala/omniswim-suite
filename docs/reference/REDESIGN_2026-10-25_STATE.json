@@ -628,7 +628,7 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
-    "RESUME (2026-10-31, after the reset): engine slice A6-closest-no-fallback + lp-baseline-texts-stale committed (see notes). U-a dashboard shell: worker a32c73e6b18c0d4a1 resumed after its 429; wait for its report, then Codex review, full gates, advisor audit, commit apps/** + new dashboard files. Then U-c (snapshots, diff, undo UI), then F (visual check both themes, Excel read-back).",
+    "RESUME (2026-10-31): U-a committed (see git log; Codex reviews UA_CODEX_REVIEW.md and UA_CODEX_ROUND2_REVIEW.md, D6 amendment 3). Next: dispatch U-c to Codex with scratchpad brief-uc.txt (lineup save, diff, undo, plus the three round-2 LOWs); Claude reviews it. Then U-e (Settings extras, Presets), then F (visual check both themes, Excel read-back).",
     "RESUME (2026-10-31): tree clean at 188b3372 after full-gate checkpoint. Next: U-a Shell to Codex (brief: D6 section 1 and 5, amendments 1-2; mount AutoBuilderPanel in Build, ScoreChart in Chart, SessionPlannerEditor in Plan, Save tab with snapshot save incl. facts via captureReportFacts and tags; tab host left nav Meets/Presets/Settings with MeetReport + EntryCsvButton; theme from settings.theme + accent via applyAccent; panelProtocol theme-state; dedupe meetKeyFor). Then U-c. Workers idle: executor ad2051c440db6ce85, worker a32c73e6b18c0d4a1.",
     "RESUME: A9 in flight (executor ad2051c440db6ce85). 1) git status. 2) If no report, SendMessage the executor. 3) Codex review, gates, advisor audit, commit. Then U1 per D5 amendment 7 (worker or Codex). User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md.",
     "RESUME after the limit: 1) git status; diff packages/engine/src/autobuilder, tests/engineAutoBuild.test.ts, tests/helpers/nodeMipSolve.ts, plans/2026-10-25/D5-AUTOBUILDER.md (amendment 1 appended, uncommitted). 2) If the executor report is missing, resume it with SendMessage (A1 agent) rather than re-briefing. 3) npm run build:extension, then full gates; check defaultLimitsConfigC returns improved within 11 s, 3 runs. 4) Commit A1 + amendment as one commit (Codex J8 review: no defect, on the pre-amendment diff; re-review the amendment diff with Codex J terminal term_a6fd5787 first). 5) Next: D5 slice A2 (relays). Open user questions: D5 14.1-14.5, R70 x3, P4 fetch approval, cap-boundary tie rule.",
@@ -654,7 +654,11 @@
     "PR #8 CI run 40259528508 passed (2026-10-26T02:44Z, 13m07s): every step green. Active vitest 2031 passed / 16 skipped, ci budget 16. Legacy vitest 2881 / 29, ci budget 29. Active scripts 63 / 2 skipped; legacy scripts 25 / 0 (the local skip runs in CI, Postgres service healthy). pytest 63 passed. Extension harness 7 passed. Build and extension build green.",
     "P3 legacy behavior changes from R37/R41/R42, each with a failing test first and a golden update: non-scorers removed from places (D2 F18), relay legs checked against the roster (F19), no hardcoded relay limit (F17). Drift-test exceptions listed in D2 section 4.",
     "2026-10-25: D2 Step 0 says commit E1 hashes; no commits this session, so the E1 test and hashes stay uncommitted and frozen after dispatch A.",
-    "P2 optimizer requirement (from Codex review C2, 2026-10-26): bound LP size and pin a HiGHS time_limit in the worker; do not let callers override output_flag or time_limit without a cap."
+    "P2 optimizer requirement (from Codex review C2, 2026-10-26): bound LP size and pin a HiGHS time_limit in the worker; do not let callers override output_flag or time_limit without a cap.",
+    {
+      "id": "gate-bundle-leak",
+      "note": "Bundle leak check: grep -l \"none_found_within_limits|restoreIdleRemovals\" apps/extension/dist/*.js must list only autobuilder.worker.js. Do not grep for highs/HiGHS: optimizer.worker uses HiGHS and dashboard.js has a HiGHS load label."
+    }
   ],
   "decisionsAdded": "R14-R19 recorded 2026-10-25 (second user message): flyover user number; NSISC SwimCloud table, no per-event scorer cap; event order editable on simulator page; sessions advisory, prelims AM/finals later, timed finals; OpenCode added; Chrome fallback in plan section 12; R20-R33 recorded 2026-10-25 (third user message): split timed finals for 1000/1650, auto scorers with tag overrides, diving excluded from load, Table D truncate, team size 18, 2 scoring relays, A final 8, diving cap unlimited, relay swimmer takes a full scoring-team spot (not the halfRateRelaySwimmer flag), Table D distance rows dropped for SwimCloud then SwimSwam, Free SwimCloud account, Q6 after recon, search NSISC docs, keep omniswim-suite/data and all worktrees; R34-R44 recorded 2026-10-25 (fourth user message): relay share 1/4, fast heat top 8 seeds (small field per meet), relays evening timed finals, relay scores only with all four legs on the scoring team, auto scorers from A/B finals plus relay legs plus any split-timed-final heat (roster wins), non-scorers removed from places (legacy differs, D2 F18), relay limit is a setting (F17), A/B finals scorers only, C final 8 fastest non-scorers",
   "userAnswers": [
@@ -1200,6 +1204,10 @@
     {
       "id": "planner-no-change-subscription",
       "note": "Session planner state has no change-bus subscription (only main.tsx:134 watches tags/settings). A later multi-store batch touching session presets will not refresh it across contexts. Add a subscriber in U-a or C2."
+    },
+    {
+      "id": "U-e-settings",
+      "note": "New slice U-e (D6 section 1, gap found by the Codex U-a review): Settings cut threshold, storage estimate, backup export and import; Presets view (still a placeholder)."
     },
     {
       "id": "U-c-diff-times-from-display",

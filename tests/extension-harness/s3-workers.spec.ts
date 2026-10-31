@@ -68,13 +68,38 @@ interface Harness {
   solveLp(lp: string): Promise<{ status: string; objective: number; columns: Record<string, number>; loadMs: number; solveMs: number }>;
   solveMip(lp: string, options?: Record<string, string | number | boolean>): Promise<MipReply>;
   probeUnsupported(): Promise<string>;
-  putSetting(key: 'cutCloseThresholdPct', value: number): Promise<unknown>;
+  putSetting(key: 'cutCloseThresholdPct' | 'theme' | 'accent', value: number | string): Promise<unknown>;
   getSetting(key: 'cutCloseThresholdPct'): Promise<{ found: boolean; value?: { key: string; value: number; rev: number; updatedAt: string } }>;
   panel(): { accepted: number; rejected: number; pings: number } | null;
   seedAutoBuild(snapshot: unknown, ownTeamId: string, scorerIds: readonly string[]): Promise<string>;
+  lineupCount(): Promise<number>;
   workerStarts(): readonly string[];
 }
 type WithHarness = { osxHarness: Harness };
+
+/** Size the page, read the expanded docked panel and the fixture Options button, and refuse a panel outside the viewport, over the button, or no larger than the compact one. */
+async function expandedGeometry(page: Page, width: number, compact: { width: number; height: number } | null): Promise<string> {
+  await page.setViewportSize({ width, height: 800 });
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const g = await page.evaluate(() => {
+    const f = document.querySelector('[data-osx-host]')?.shadowRoot?.querySelector('iframe');
+    const fab = document.getElementById('fixture-fab');
+    const box = (el: Element | null | undefined) => {
+      if (!el || getComputedStyle(el).display === 'none') return null;
+      const r = el.getBoundingClientRect();
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    };
+    return { panel: box(f), fab: box(fab), vw: document.documentElement.clientWidth, vh: innerHeight };
+  });
+  const { panel, fab } = g;
+  if (!panel) throw new Error(`no expanded panel at ${width} px`);
+  if (panel.left < 0 || panel.right > g.vw || panel.top < 0 || panel.bottom > g.vh) throw new Error(`the expanded panel leaves the viewport at ${width} px: ${JSON.stringify(panel)}`);
+  if (fab && panel.left < fab.right && fab.left < panel.right && panel.top < fab.bottom && fab.top < panel.bottom) throw new Error(`the expanded panel covers the Options button at ${width} px`);
+  const w = panel.right - panel.left;
+  const h = panel.bottom - panel.top;
+  if (width === 1280 && compact && (w <= compact.width || h <= compact.height)) throw new Error('the expanded panel is not larger than the compact one');
+  return `${width} px: ${Math.round(w)}x${Math.round(h)}`;
+}
 
 const MODEL_HEAD = 'Maximize\n obj: x + y\nSubject To\n c1: 2 x + 2 y <= 5\nBounds\n 0 <= x <= 3\n 0 <= y <= 3\n';
 /** The relaxation peaks at 2.5. With x and y integer the optimum is 2. */
@@ -132,7 +157,7 @@ test.describe('S3 workers and the docked iframe', () => {
         try {
           results.set(n, { ok: true, detail: await body() });
         } catch (e) {
-          results.set(n, { ok: false, detail: e instanceof Error ? e.message.split('\n')[0] ?? String(e) : String(e) });
+          results.set(n, { ok: false, detail: e instanceof Error ? e.message.split('\n').filter((line) => line.trim() !== '').slice(0, 5).join(' | ') : String(e) });
         }
         const r = results.get(n)!;
         console.log(`[s3] ${variant.name} | ${n}. ${label}: ${r.ok ? 'PASS' : 'FAIL'} | ${r.detail}`);
@@ -388,6 +413,7 @@ test.describe('S3 workers and the docked iframe', () => {
           if (scorerIds.length !== 3) throw new Error(`config C has ${scorerIds.length} swimmers on team 58, not 3`);
           await frame.evaluate(([value, team, ids]) => (globalThis as unknown as WithHarness).osxHarness.seedAutoBuild(value, team, ids), [snapshot, ownTeamId, scorerIds] as const);
           await page.evaluate((value) => window.postMessage({ source: 'osx-bridge', v: 1, kind: 'snapshot', snapshot: value }, location.origin), snapshot);
+          await frame.locator('[data-testid="tab-build"]').click();
           const panel = frame.locator('[data-testid="autobuilder-panel"]');
           await expect(panel).toBeVisible({ timeout: 20_000 });
           const status = panel.locator('[data-testid="ab-status"]');
@@ -442,6 +468,116 @@ test.describe('S3 workers and the docked iframe', () => {
           return `run 1 in autobuilder.worker.js (one start; the optimizer worker reused): "${headline}", page panel data-osx-auto-build=done; run 2 showed worker progress, an optimizer.worker solve (${during.objective}) resolved during it, then Cancel: page panel data-osx-auto-build=cancelled (the status text is in a closed shadow root: its wording is covered by tests/extensionAutoBuilderPanel.test.ts)`;
         });
 
+        await record(12, 'docked tabs, the theme reaches the page panel, expanded size, tab host Meets', async () => {
+          if (!frame) throw new Error('no iframe');
+          await page.setViewportSize({ width: 1280, height: 800 });
+          const pagePanel = page.locator('[data-osx-page-panel]');
+          const frameEl = page.locator('[data-osx-host] iframe');
+          const keep = async (name: string, body: Buffer): Promise<void> => {
+            await testInfo.attach(name, { body, contentType: 'image/png' });
+            if (process.env.OSX_SHOT_DIR) writeFileSync(join(process.env.OSX_SHOT_DIR, name), body);
+          };
+          const suffix = variant.csp === null ? 'v1' : 'v2';
+          const putSetting = (key: 'theme' | 'accent', value: string): Promise<unknown> =>
+            frame!.evaluate(([k, v]) => (globalThis as unknown as WithHarness).osxHarness.putSetting(k as 'theme', v), [key, value] as const);
+
+          // One chart shot per theme at a size. Only the first variant writes them: the CSP header does not change the chart.
+          const chartShots = async (size: 'compact' | 'expanded'): Promise<void> => {
+            await frame!.locator('[data-testid="tab-chart"]').click();
+            for (const theme of ['light', 'dark'] as const) {
+              await putSetting('theme', theme);
+              await expect(frame!.locator('html')).toHaveAttribute('data-osx-theme', theme, { timeout: 10_000 });
+              await expect(frame!.locator('[data-testid="chart"]')).toBeVisible();
+              if (suffix === 'v1') await keep(`chart-${size}-${theme}-v3.png`, await frameEl.screenshot());
+            }
+          };
+
+          // Nothing a tab computes runs before the tab opens: records 8 to 11 opened Score and Build only.
+          for (const id of ['chart', 'plan', 'save']) await expect(frame.locator(`[data-testid="panel-${id}"]`), `the ${id} tab is not rendered before it opens`).toHaveCount(0);
+
+          // Each tab shows its own body, in each theme, and the theme reaches the page panel (a closed shadow root: its host mirrors the theme).
+          const bodies: Readonly<Record<string, string>> = { score: 'team-results', chart: 'chart', build: 'autobuilder-panel', plan: 'session-planner-editor', save: 'save' };
+          for (const theme of ['light', 'dark'] as const) {
+            await putSetting('theme', theme);
+            await expect(frame.locator('html')).toHaveAttribute('data-osx-theme', theme, { timeout: 10_000 });
+            await expect(pagePanel).toHaveAttribute('data-osx-theme', theme, { timeout: 10_000 });
+            for (const [id, marker] of Object.entries(bodies)) {
+              await frame.locator(`[data-testid="tab-${id}"]`).click();
+              await expect(frame.locator(`[data-testid="tab-${id}"]`)).toHaveAttribute('aria-selected', 'true');
+              await expect(frame.locator(`[data-testid="panel-${id}"]`)).toBeVisible();
+              await expect(frame.locator(`[data-testid="${marker}"]`).first(), `${id} shows ${marker}`).toBeVisible({ timeout: 20_000 });
+              await keep(`docked-${id}-${theme}-${suffix}.png`, await frameEl.screenshot());
+            }
+            await keep(`pagepanel-${theme}-${suffix}.png`, await page.screenshot());
+          }
+          // Hidden tabs stay mounted: the Build tab kept its panel while the others were shown.
+          await expect(frame.locator('[data-testid="autobuilder-panel"]')).toHaveCount(1);
+
+          // The chart at the compact width, in both themes (the ScoreChart review shots, -v3).
+          await chartShots('compact');
+          // Expanded size: larger, inside the viewport and clear of the Options button at each width.
+          await frame.locator('[data-testid="tab-score"]').click();
+          const compact = await frameEl.boundingBox();
+          await frame.locator('[data-testid="size-toggle"]').click();
+          await expect(frameEl).toHaveAttribute('data-osx-size', 'expanded', { timeout: 10_000 });
+          const seen: string[] = [];
+          for (const width of [1280, 800, 390]) seen.push(await expandedGeometry(page, width, compact));
+          await page.setViewportSize({ width: 1280, height: 800 });
+          await chartShots('expanded');
+          await frame.locator('[data-testid="size-toggle"]').click();
+          await expect(frameEl).toHaveAttribute('data-osx-size', 'compact', { timeout: 10_000 });
+
+          // Save: a real config with dive entries is stored, and the store holds one more lineup.
+          const lineupCount = (): Promise<number> => frame!.evaluate(() => (globalThis as unknown as WithHarness).osxHarness.lineupCount());
+          const before = await lineupCount();
+          await frame.locator('[data-testid="tab-save"]').click();
+          await frame.locator('[data-testid="snapshot-save"]').click();
+          const status = frame.locator('[data-testid="snapshot-status"]');
+          await expect(status).not.toHaveAttribute('data-phase', /^(idle|saving)$/, { timeout: 90_000 });
+          await expect(status).toHaveAttribute('data-phase', 'saved');
+          await expect(status).toContainText(/Saved "Snapshot /);
+          if ((await lineupCount()) !== before + 1) throw new Error('Save reported saved but the store did not gain one lineup');
+          const saveNote = 'Save stored one snapshot of config C with its dive scores';
+          await expect(frame.locator('a[data-testid="open-in-tab"]')).toHaveAttribute('href', `${extensionBase}/dashboard.html?host=tab`);
+
+          // The tab host: Meets opens a report; a theme chosen in the tab's Settings reaches the docked frame and the page panel.
+          const tabPage = await context!.newPage();
+          try {
+            await tabPage.goto(`${extensionBase}/dashboard.html?host=tab`);
+            await expect(tabPage.locator('[data-testid="host-shell"]')).toBeVisible({ timeout: 15_000 });
+            await expect(tabPage.locator('[data-testid="host"]')).toHaveText('host: tab');
+            for (const theme of ['dark', 'light'] as const) {
+              await tabPage.locator('[data-testid="tab-settings"]').click();
+              await tabPage.locator(`[data-testid="theme-${theme}"]`).click();
+              await expect(tabPage.locator('html')).toHaveAttribute('data-osx-theme', theme, { timeout: 10_000 });
+              await expect(frame.locator('html')).toHaveAttribute('data-osx-theme', theme, { timeout: 10_000 });
+              await expect(pagePanel).toHaveAttribute('data-osx-theme', theme, { timeout: 10_000 });
+              await tabPage.locator('[data-testid="tab-meets"]').click();
+              await tabPage.locator('[data-testid="record-open"]').first().click();
+              await expect(tabPage.locator('[data-testid="record-view"]')).toContainText('(you)', { timeout: 15_000 });
+              await expect(tabPage.locator('[data-testid="record-error"]')).toHaveCount(0);
+              await keep(`tabhost-meets-${theme}-${suffix}.png`, await tabPage.screenshot());
+            }
+          } finally {
+            await tabPage.close();
+          }
+          // A custom accent: the docked chrome carries the hex in light and the lightened mix in dark, and the page panel follows the same theme.
+          await putSetting('accent', '#aa5500');
+          const accentOf = (): Promise<string> => frame!.evaluate(() => document.documentElement.style.getPropertyValue('--osx-accent'));
+          for (const theme of ['light', 'dark'] as const) {
+            await putSetting('theme', theme);
+            await expect(frame.locator('html')).toHaveAttribute('data-osx-theme', theme, { timeout: 10_000 });
+            await expect(pagePanel).toHaveAttribute('data-osx-theme', theme, { timeout: 10_000 });
+            await expect.poll(accentOf, { timeout: 10_000 }).toBe(theme === 'light' ? '#aa5500' : 'color-mix(in srgb, #aa5500 65%, CanvasText)');
+            await frame.locator('[data-testid="tab-chart"]').click();
+            await expect(frame.locator('[data-testid="chart"]')).toBeVisible();
+            await keep(`docked-chart-accent-${theme}-${suffix}.png`, await frameEl.screenshot());
+            await keep(`pagepanel-accent-${theme}-${suffix}.png`, await page.screenshot());
+          }
+          await putSetting('theme', 'light');
+          return `all five docked tabs rendered in both themes (lazy until opened), the stored theme reached the docked chrome, the page panel host and a second tab; a custom accent applied in both themes; expanded sizes ${seen.join(', ')} clear of the Options button; ${saveNote}; Meets opened the snapshot Save stored, with its report, in both themes`;
+        });
+
         // Console problems the injection added: those on the simulator page that the baseline page lacks.
         const extra = consoleProblems.filter((m) => !baselineProblems.includes(m));
         console.log(
@@ -459,7 +595,7 @@ test.describe('S3 workers and the docked iframe', () => {
 
       const failed = [...results].filter(([, r]) => !r.ok).map(([n, r]) => `${n}: ${r.detail}`);
       expect(failed, 'failed assertions').toStrictEqual([]);
-      expect(results.size).toBe(11);
+      expect(results.size).toBe(12);
     });
   }
 });

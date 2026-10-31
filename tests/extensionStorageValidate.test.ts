@@ -7,11 +7,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import { builtinRulePreset } from '@omniswim/engine';
-import { validateRecord } from '../apps/extension/src/storage/validate';
+import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
+import { validateLineup, validateRecord } from '../apps/extension/src/storage/validate';
 import { BUNDLED_SOURCE_MANIFESTS, BUNDLED_TOOL_ARCHIVES, publishedSourceProblem, toolArchiveProblem } from '../apps/extension/src/storage/sourceManifests';
 import { EDITED_STORES, SETTINGS_DEFAULTS, STORE_NAMES, USER_STORES, toSwimCloudId } from '../apps/extension/src/storage/schema';
 import type { UserStore } from '../apps/extension/src/storage/schema';
 import { fixtureRecord, fixtureRecords, hasFixtureStore, removeAt, setAt } from './helpers/extensionRecords';
+import { withNumericSwimmerIds } from './helpers/numericSnapshot';
+import { buildSnapshot } from './helpers/simulatorFixtures';
 
 const paths = (store: UserStore, record: unknown): string[] => validateRecord(store, record).map(i => i.path);
 
@@ -217,6 +220,44 @@ describe('extension storage validation (D3 5.4)', () => {
       expect(paths('lineups', relay)).toEqual(['$.payload.entries[1].legs']);
       const time = setAt(fixtureRecord('lineups', 0), ['payload', 'display', 'entryTimes', 'i|48|1001|100 Freestyle|Women', 'hundredths'], 5001);
       expect(validateRecord('lineups', time)).toHaveLength(1);
+    });
+  });
+
+  describe('display entry times: a dive score is points, a swim time is a clock time', () => {
+    const DIVE_KEY = 'i|48|1001|1-Meter Diving|Women';
+    const SWIM_KEY = 'i|48|1001|100 Freestyle|Women';
+    /** The first fixture lineup with one more entry, a 1-meter dive by the same swimmer, and the given display texts. */
+    const withTimes = (times: Record<string, { text: string; hundredths: number }>): unknown => {
+      const base = fixtureRecord<{ payload: { entries: unknown[]; display: { entryTimes: Record<string, unknown> } } }>('lineups', 0);
+      base.payload.entries.push({ kind: 'individual', teamId: '48', swimmerId: '1001', eventKey: '1-Meter Diving', gender: 'Women', seedSwimId: null });
+      base.payload.display.entryTimes = { [SWIM_KEY]: { text: '50.00', hundredths: 5000 }, ...times };
+      return base;
+    };
+    it('accepts a dive score of three digits on a diving entry, as the adapter writes it', () => {
+      expect(validateRecord('lineups', withTimes({ [DIVE_KEY]: { text: '504.60', hundredths: 50460 } }))).toEqual([]);
+      expect(validateRecord('lineups', withTimes({ [DIVE_KEY]: { text: '95.05', hundredths: 9505 } }))).toEqual([]);
+    });
+    it('refuses a dive score that disagrees with its hundredths, or is not points with two decimals', () => {
+      expect(validateRecord('lineups', withTimes({ [DIVE_KEY]: { text: '504.60', hundredths: 50461 } }))).toHaveLength(1);
+      expect(validateRecord('lineups', withTimes({ [DIVE_KEY]: { text: '504.6', hundredths: 50460 } }))).toHaveLength(1);
+      expect(validateRecord('lineups', withTimes({ [DIVE_KEY]: { text: '8:24.60', hundredths: 50460 } }))).toHaveLength(1);
+      expect(validateRecord('lineups', withTimes({ [DIVE_KEY]: { text: 'NT', hundredths: 0 } }))).toHaveLength(1);
+    });
+    it('refuses a score-form text on a swim entry: 75.00 is not a swim time', () => {
+      expect(validateRecord('lineups', withTimes({ [SWIM_KEY]: { text: '75.00', hundredths: 7500 } }))).toHaveLength(1);
+      expect(validateRecord('lineups', withTimes({ [SWIM_KEY]: { text: '1:15.00', hundredths: 7500 } }))).toEqual([]);
+    });
+    it('keeps the time rule for a display key that matches no entry, even when it names a dive', () => {
+      expect(validateRecord('lineups', withTimes({ 'i|48|9999|1-Meter Diving|Women': { text: '504.60', hundredths: 50460 } }))).toHaveLength(1);
+    });
+    it('accepts the display of every recorded simulator config (each has a dive entry)', () => {
+      for (const name of ['A', 'B', 'C', 'D'] as const) {
+        const adapted = adaptSimulatorSnapshot(withNumericSwimmerIds(buildSnapshot(name).snapshot), { meetKey: `m-${name}`, snapshotId: 'x' });
+        if (adapted.kind !== 'ready') throw new Error(`config ${name} did not adapt: ${adapted.kind}`);
+        const lineup = adapted.adapted.lineup;
+        expect(Object.values(lineup.display?.entryTimes ?? {}).some((t) => Number(t.text.split('.')[0]) > 59), `config ${name} has a dive score`).toBe(true);
+        expect(() => validateLineup(lineup, '$'), `config ${name}`).not.toThrow();
+      }
     });
   });
 

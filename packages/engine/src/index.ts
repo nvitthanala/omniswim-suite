@@ -16,6 +16,8 @@
 // 3.1 Primitives
 export type { Course, EventKey, Gender, Hundredths, IsoDate, IsoTime, NcaaDivision, SwimmerId, TeamId, TimeValue } from './model/primitives';
 export { formatHundredths, parseTimeText } from './model/primitives';
+// Whether an event label (raw or normalized) names a diving event. The extension storage validator uses it to tell a dive score from a swim time.
+export { isDivingEvent } from './lib/cutlineEventNames';
 
 // 3.2 Provenance
 export type { Provenance, Setting, SourceRef } from './model/provenance';

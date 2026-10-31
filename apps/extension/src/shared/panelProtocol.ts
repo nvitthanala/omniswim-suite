@@ -11,6 +11,8 @@
  */
 
 import { simSnapshotSchema } from './bridgeSchema';
+import { isHexColor } from './theme';
+import type { ThemePreference } from './theme';
 import type { SimSnapshot } from './bridgeSchema';
 import type { PresetRef } from '../storage/schema';
 import type { RulePreset } from '@omniswim/engine';
@@ -75,6 +77,41 @@ export interface ScorerTagStateMessage {
   };
   readonly sessionSchedule?: { readonly ref?: PresetRef; readonly preset?: SessionPreset; readonly error?: string; readonly note?: string };
   readonly error?: string;
+}
+
+/**
+ * Iframe to overlay (D6 section 5): the theme the coach chose in settings. The dashboard reads `settings.theme` and `settings.accent` and
+ * follows the change bus; the overlay applies them to its panel frame and to the page panel, so one choice themes all three. `accent`
+ * is `#rrggbb` or absent. The overlay only reads it and sets attributes and style properties, as with every port message.
+ */
+export interface ThemeStateMessage {
+  readonly kind: 'theme-state';
+  readonly preference: ThemePreference;
+  readonly accent?: string;
+}
+
+export const THEME_PREFERENCES: readonly ThemePreference[] = ['light', 'dark', 'system'];
+
+export function isThemeState(m: unknown): m is ThemeStateMessage {
+  if (!m || typeof m !== 'object') return false;
+  const v = m as { kind?: unknown; preference?: unknown; accent?: unknown };
+  return v.kind === 'theme-state' && THEME_PREFERENCES.includes(v.preference as ThemePreference) && (v.accent === undefined || isHexColor(v.accent));
+}
+
+/**
+ * Iframe to overlay (D6 section 1): the docked panel's size. `compact` is 360 by 240 px; `expanded` is larger. The overlay sets one
+ * attribute on the frame and a rule in the shadow stylesheet does the rest, so the page never sees a size from the iframe.
+ */
+export type PanelSize = 'compact' | 'expanded';
+export interface PanelSizeMessage {
+  readonly kind: 'panel-size';
+  readonly size: PanelSize;
+}
+
+export function isPanelSize(m: unknown): m is PanelSizeMessage {
+  if (!m || typeof m !== 'object') return false;
+  const v = m as { kind?: unknown; size?: unknown };
+  return v.kind === 'panel-size' && (v.size === 'compact' || v.size === 'expanded');
 }
 
 /**

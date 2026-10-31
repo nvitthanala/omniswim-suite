@@ -7,10 +7,10 @@ import type { StorageRepo } from '../storage/repo';
 import { listSessionPresetChoices, readSessionLoadPreference, readSessionPreset, saveEditedSessionPreset, saveSessionLoadPreference, saveSessionPresetChoice } from '../storage';
 import { defaultLoadPreference, pendingPenaltyPreference, userPreference } from '../storage/sessionPreference';
 import { rescoreSimulator } from '@omniswim/swimcloud/browser';
+import { meetKeyForSnapshot } from './meetKey';
 
 const slots: SessionSlot[] = ['morning', 'afternoon', 'evening'];
 const refKey = (r: PresetRef): string => JSON.stringify(r);
-const meetKeyForSnapshot = (snapshot: SimSnapshot): string => `swimcloud-simulator:${JSON.stringify({ teams: [...new Set(snapshot.teams.map(t => String(t.id)))].sort(), startDate: snapshot.settings.startDate, endDate: snapshot.settings.endDate })}`;
 const blankFormat = (): EventFormat => ({ kind: 'timed-final', session: { day: 1, slot: 'morning' } });
 function changeMode(current: LoadPreference, mode: LoadPreference['mode']): LoadPreference {
   if (mode === 'off') return { mode: 'off' };

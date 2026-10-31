@@ -6,9 +6,10 @@
  * can run it.
  */
 import { mountDockedPanel } from './dockedPanel';
-import { mountShadowHost, startOverlay, writeSimulatorSettings } from './overlay';
+import { mountShadowHost, startOverlay, themeOf, writeSimulatorSettings } from './overlay';
 import { mountPagePanel } from './pagePanel';
-import { isAutoBuildStatus, isScorerTagState } from '../shared/panelProtocol';
+import { isAutoBuildStatus, isPanelSize, isScorerTagState, isThemeState } from '../shared/panelProtocol';
+import { createAccentSync } from '../shared/theme';
 import type { ParityReport } from '@omniswim/swimcloud/browser';
 import { trustedParityReport } from './parity';
 
@@ -16,10 +17,15 @@ const overlayHost = mountShadowHost(document);
 const panel = mountDockedPanel(overlayHost, chrome.runtime);
 let latestParity: ParityReport | null = null;
 let latestError: string | undefined;
+const frameAccent = createAccentSync(overlayHost.shadowRoot?.querySelector('.osx-root') as HTMLElement);
 const pagePanel = mountPagePanel(document, () => ({ parity: latestParity, error: latestError }));
 panel.onMessage((message) => {
   if (isScorerTagState(message)) { pagePanel.setScorerState(message); return; }
   if (isAutoBuildStatus(message)) { pagePanel.setAutoBuildStatus(message); return; }
+  // The coach's theme reaches the docked frame's chrome and the page panel. Both read it as plain data: an attribute and a style property.
+  if (isThemeState(message)) { themeOf(overlayHost)?.setPreference(message.preference); frameAccent.set(message.accent); pagePanel.setThemeState(message); return; }
+  // The docked panel asks for its size. The shadow stylesheet turns the attribute into a size.
+  if (isPanelSize(message)) { panel.iframe.dataset.osxSize = message.size; return; }
   if (message && typeof message === 'object' && 'kind' in message && (message as {kind?: unknown}).kind === 'scorer-tag-error') {
     const detail = (message as { message?: unknown }).message;
     latestError = typeof detail === 'string' ? detail : 'Scorer tag storage failed';

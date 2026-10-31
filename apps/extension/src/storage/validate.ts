@@ -23,7 +23,7 @@
  * and `validateLineup` below check shape only (keys, types, enums). Replace them with the engine
  * parsers when P5 lands.
  */
-import { parseReportFacts, parseRulePreset, parseSessionPreset, parseTimeText, RulePresetError } from '@omniswim/engine';
+import { entryKey, isDivingEvent, parseReportFacts, parseRulePreset, parseSessionPreset, parseTimeText, RulePresetError } from '@omniswim/engine';
 import type { RulePreset, SessionPreset } from '@omniswim/engine';
 import { parseLoadPreference } from './sessionPreference';
 import { InvalidRecordError } from './errors';
@@ -293,8 +293,27 @@ function nameMap(raw: unknown, path: string): void {
   for (const [id, v] of Object.entries(raw)) str(keys(v, `${path}.${id}`, ['name']).name, `${path}.${id}.name`);
 }
 
-function lineupDisplay(raw: unknown, path: string): void {
+/** A dive score as the adapter writes it: points with two decimals (`(hundredths / 100).toFixed(2)`), such as "504.60". */
+const DIVE_SCORE = /^\d+\.\d{2}$/;
+
+/** The keys of the lineup's own diving entries. Only these may carry a score in `display.entryTimes`; a swim keeps the time form. */
+function divingEntryKeys(entries: readonly unknown[]): ReadonlySet<string> {
+  const found = new Set<string>();
+  for (const e of entries) {
+    const entry = e as { kind?: unknown; eventKey?: unknown };
+    if (entry.kind !== 'individual' || typeof entry.eventKey !== 'string' || !isDivingEvent(entry.eventKey)) continue;
+    try {
+      found.add(entryKey(e as Parameters<typeof entryKey>[0]));
+    } catch {
+      // An id that cannot form a key was refused with the entries; no display key can match it.
+    }
+  }
+  return found;
+}
+
+function lineupDisplay(raw: unknown, path: string, entries: readonly unknown[]): void {
   const o = keys(raw, path, ['swimmers', 'teams', 'entryTimes']);
+  const diving = divingEntryKeys(entries);
   nameMap(o.swimmers, `${path}.swimmers`);
   nameMap(o.teams, `${path}.teams`);
   if (!isObj(o.entryTimes)) return fail(`${path}.entryTimes`, 'expected an object');
@@ -303,6 +322,12 @@ function lineupDisplay(raw: unknown, path: string): void {
     const t = keys(v, p, ['text', 'hundredths']);
     str(t.text, `${p}.text`);
     int(t.hundredths, `${p}.hundredths`, 0);
+    if (diving.has(k)) {
+      // A dive score is points, not a clock time: "504.60" is 50460 hundredths. It must read exactly so.
+      if (!DIVE_SCORE.test(t.text as string)) return fail(`${p}.text`, 'not a dive score (points with two decimals)');
+      if (Number((t.text as string).replace('.', '')) !== t.hundredths) fail(p, 'text and hundredths disagree');
+      continue;
+    }
     let parsed: { hundredths: number } | null;
     try {
       parsed = parseTimeText(t.text as string);
@@ -317,8 +342,9 @@ export function validateLineup(raw: unknown, path: string): void {
   const o = keys(raw, path, ['payloadVersion', 'meetKey', 'entries'], ['display']);
   payloadVersion(o.payloadVersion, `${path}.payloadVersion`);
   str(o.meetKey, `${path}.meetKey`);
-  list(o.entries, `${path}.entries`).forEach((e, i) => lineupEntry(e, `${path}.entries[${i}]`));
-  if (o.display !== undefined) lineupDisplay(o.display, `${path}.display`);
+  const entries = list(o.entries, `${path}.entries`);
+  entries.forEach((e, i) => lineupEntry(e, `${path}.entries[${i}]`));
+  if (o.display !== undefined) lineupDisplay(o.display, `${path}.display`, entries);
 }
 
 /* -------------------------------------------------------------------------- */

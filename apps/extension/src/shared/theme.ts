@@ -154,16 +154,30 @@ function luminance(hex: string): number {
   return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
 }
 
+/** The dark theme lightens its accent: 65% of the accent, 35% of `CanvasText` (white in a dark scheme). The same share as `DARK_TOKENS`. */
+const DARK_ACCENT_SHARE = 0.65;
+
+/** The accent as the dark theme shows it, as `#rrggbb`, for the contrast pick of the text on it. */
+function lightenedForDark(hex: string): string {
+  const channel = (i: number): string => Math.round(parseInt(hex.slice(i, i + 2), 16) * DARK_ACCENT_SHARE + 255 * (1 - DARK_ACCENT_SHARE)).toString(16).padStart(2, '0');
+  return `#${channel(1)}${channel(3)}${channel(5)}`;
+}
+
 /**
  * Apply a user accent to an element that carries the tokens. Accepts only `#rrggbb`. Returns false
  * and changes nothing for anything else (`red`, `#fff`, `#12345g`, `url(x)`), so no free-form
  * string reaches a style property. `--osx-accent-soft` already derives from the accent with
  * color-mix(), so it follows. `--osx-accent-fg` is black or white by contrast.
+ *
+ * `theme` is the resolved theme of `el` (default `'light'`). The dark theme lightens its accent so it reads on a dark surface, and an
+ * inline accent would override that, so in dark the same lightening is applied to the user's accent and the text colour is picked for
+ * the lightened colour. A theme switch needs `applyAccent` again: `createAccentSync` does that.
  */
-export function applyAccent(el: HTMLElement, hex: string): boolean {
+export function applyAccent(el: HTMLElement, hex: string, theme: ResolvedTheme = 'light'): boolean {
   if (!isHexColor(hex)) return false;
-  el.style.setProperty('--osx-accent', hex);
-  el.style.setProperty('--osx-accent-fg', luminance(hex) > 0.4 ? 'black' : 'white');
+  const dark = theme === 'dark';
+  el.style.setProperty('--osx-accent', dark ? `color-mix(in srgb, ${hex} ${DARK_ACCENT_SHARE * 100}%, CanvasText)` : hex);
+  el.style.setProperty('--osx-accent-fg', luminance(dark ? lightenedForDark(hex) : hex) > 0.4 ? 'black' : 'white');
   return true;
 }
 
@@ -171,6 +185,38 @@ export function applyAccent(el: HTMLElement, hex: string): boolean {
 export function clearAccent(el: HTMLElement): void {
   el.style.removeProperty('--osx-accent');
   el.style.removeProperty('--osx-accent-fg');
+}
+
+/**
+ * Keep a user accent on `el` in step with the element's own theme attribute. `set(hex)` applies it (or clears it for `undefined` or a
+ * value that is not `#rrggbb`), and a later change of `data-osx-theme` on `el` (a switch, or system mode following the OS) applies it again for the new theme.
+ */
+export interface AccentSync {
+  set(hex: string | undefined): void;
+  dispose(): void;
+}
+
+export function createAccentSync(el: HTMLElement): AccentSync {
+  let current: string | undefined;
+  const apply = (): void => {
+    if (current === undefined) {
+      clearAccent(el);
+      return;
+    }
+    applyAccent(el, current, el.getAttribute(THEME_ATTRIBUTE) === 'dark' ? 'dark' : 'light');
+  };
+  const Observer = typeof MutationObserver === 'function' ? MutationObserver : undefined;
+  const observer = Observer ? new Observer(apply) : undefined;
+  observer?.observe(el, { attributes: true, attributeFilter: [THEME_ATTRIBUTE] });
+  return {
+    set(hex) {
+      current = isHexColor(hex) ? hex : undefined;
+      apply();
+    },
+    dispose() {
+      observer?.disconnect();
+    },
+  };
 }
 
 // ---- preference and system mode --------------------------------------------------------------
