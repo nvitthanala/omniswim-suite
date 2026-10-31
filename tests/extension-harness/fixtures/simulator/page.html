@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!--
+  SYNTHETIC. Written by hand for tests/extension-harness/s3-workers.spec.ts.
+  It is NOT a capture of swimcloud.com and holds no real team, swimmer or time. The class names only
+  imitate SwimCloud's naming style, so the harness can check that the extension's injection leaves
+  the page's own stylesheets and computed styles alone.
+  Every asset is same-origin and external, so it loads under `default-src 'self'; script-src 'self'`.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="osx-fixture" content="synthetic" />
+    <title>Synthetic Meet Simulator</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="fixture.css" />
+    <style>
+      .c-footer-note { font-size: 12px; color: #666666; }
+    </style>
+  </head>
+  <body>
+    <header class="c-header"><span class="c-brand">Synthetic Site</span></header>
+    <main>
+      <h1 id="fixture-title" class="c-title">Meet Simulator (synthetic)</h1>
+      <div id="simulator" class="c-simulator">
+        <table id="fixture-table" class="c-table-clean">
+          <thead>
+            <tr><th>Event</th><th>Swimmer</th><th>Time</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>50 Free</td><td>Swimmer A</td><td>00:00.00</td></tr>
+            <tr><td>100 Free</td><td>Swimmer B</td><td>00:00.00</td></tr>
+          </tbody>
+        </table>
+        <button id="fixture-button" class="c-btn">Synthetic button</button>
+      </div>
+    </main>
+    <button id="fixture-fab" class="c-fab">Options</button>
+    <p class="c-footer-note">Synthetic fixture. No real data.</p>
+    <script src="fixture.js"></script>
+  </body>
+</html>

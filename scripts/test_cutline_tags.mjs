@@ -1190,8 +1190,13 @@ for (const [team, division] of [
 /* 10. No competition-time literal may live in the new source          */
 /* ------------------------------------------------------------------ */
 
-for (const rel of ['packages/core/src/lib/cutlineTags.ts', 'packages/core/src/data/teamDivisions.ts']) {
+for (const [rel, exportName] of [
+  ['packages/engine/src/lib/cutlineTags.ts', 'export function buildCutlineTag'],
+  ['packages/engine/src/data/teamDivisions.ts', 'export function divisionForTeam'],
+]) {
   const src = fs.readFileSync(path.join(repoRoot, rel), 'utf-8');
+  // The real file, not the core shim: over 1 KB and carrying its named export.
+  if (src.length <= 1024 || !src.includes(exportName)) fail(`${rel} is not the real source (under 1 KB or no "${exportName}")`);
   const clock = src.match(/['"]\d{1,3}:\d{2}\.\d{2}['"]/g);
   if (clock) fail(`${rel} contains competition-time literals: ${clock.join(', ')}`);
   const sprint = src.match(/['"]\d{1,2}\.\d{2}['"]/g);

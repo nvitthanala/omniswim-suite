@@ -1,0 +1,226 @@
+/*
+ * Dashboard page styles. Plain CSS with --osx-* properties; no Tailwind (D3 2.1 item 6).
+ *
+ * The token block below is the output of tokenCss(':root') in src/shared/theme.ts, which is the
+ * source of truth. tests/extensionTheme.test.ts fails if the two drift. Light values come from
+ * recon Q15 only (see theme.ts). Units are px and em, never rem.
+ */
+:root {
+  color-scheme: light;
+  --osx-bg: #FAFAFA;
+  --osx-surface: #FFFFFF;
+  --osx-fg: rgba(0,0,0,0.87);
+  --osx-fg-muted: rgba(0,0,0,0.54);
+  --osx-border: #E0E0E0;
+  --osx-accent: #1565C0;
+  --osx-accent-fg: Canvas;
+  --osx-good: #2E7D32;
+  --osx-warn-bg: #EF6C00;
+  --osx-warn-fg: #000000;
+  --osx-bad: #C62828;
+  --osx-font: Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --osx-radius: 8px;
+  --osx-accent-soft: color-mix(in srgb, var(--osx-accent) 12%, var(--osx-surface));
+}
+:root[data-osx-theme="dark"] {
+  color-scheme: dark;
+  --osx-bg: Canvas;
+  --osx-surface: color-mix(in srgb, Canvas 92%, CanvasText);
+  --osx-fg: CanvasText;
+  --osx-fg-muted: color-mix(in srgb, CanvasText 72%, Canvas);
+  --osx-border: color-mix(in srgb, Canvas 80%, CanvasText);
+  --osx-accent: color-mix(in srgb, #1565C0 65%, CanvasText);
+  --osx-accent-fg: Canvas;
+  --osx-good: CanvasText;
+  --osx-warn-bg: #EF6C00;
+  --osx-warn-fg: #000000;
+  --osx-bad: CanvasText;
+  --osx-font: Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --osx-radius: 8px;
+  --osx-accent-soft: color-mix(in srgb, var(--osx-accent) 12%, var(--osx-surface));
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--osx-bg);
+  color: var(--osx-fg);
+  font-family: var(--osx-font);
+  font-size: 14px;
+}
+
+.osx-dashboard {
+  padding: 16px;
+}
+
+.osx-dashboard p {
+  color: var(--osx-fg-muted);
+}
+
+.osx-results { margin-top: 16px; border-top: 1px solid var(--osx-border); padding-top: 12px; }
+.osx-results h2 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.osx-results table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.osx-results th, .osx-results td { padding: 5px 6px; border-bottom: 1px solid var(--osx-border); text-align: right; }
+.osx-results th:first-child { text-align: left; }
+.osx-status { margin: 10px 0 0; font-size: 12px; }
+.osx-status--good { color: var(--osx-good) !important; }
+.osx-status--bad { color: var(--osx-bad); }
+.osx-status--warn { padding: 7px 9px; background: var(--osx-warn-bg); color: var(--osx-warn-fg) !important; border-radius: var(--osx-radius); }
+.osx-status ul { margin: 6px 0 0; padding-left: 18px; }
+
+/*
+ * AutoBuilder panel (autoBuilderPanel.tsx). Tokens only. State is never shown by colour alone: every delta has a sign and a word,
+ * every block has a sentence. The dark tokens have no good or bad colour on purpose.
+ */
+.osx-ab { display: flex; flex-direction: column; gap: 10px; }
+.osx-ab h3 { margin: 4px 0 0; font-size: 14px; font-weight: 600; }
+.osx-ab h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.osx-ab h5 { margin: 8px 0 4px; font-size: 12px; font-weight: 600; color: var(--osx-fg-muted); }
+.osx-ab p { margin: 4px 0; }
+.osx-ab-controls { display: flex; flex-direction: column; gap: 8px; }
+.osx-ab-controls label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--osx-fg); }
+.osx-ab-controls .osx-ab-check { flex-direction: row; align-items: flex-start; gap: 6px; }
+.osx-ab select, .osx-ab input[type="number"] { font: inherit; color: var(--osx-fg); background: var(--osx-surface); border: 1px solid var(--osx-border); border-radius: 5px; padding: 4px 6px; }
+.osx-ab button { font: inherit; color: var(--osx-fg); background: var(--osx-surface); border: 1px solid var(--osx-border); border-radius: 5px; padding: 5px 10px; cursor: pointer; }
+.osx-ab button:hover:not(:disabled) { background: var(--osx-accent-soft); }
+.osx-ab button:focus-visible, .osx-ab select:focus-visible, .osx-ab input:focus-visible { outline: 2px solid var(--osx-accent); outline-offset: 1px; }
+.osx-ab button:disabled { opacity: 0.55; cursor: not-allowed; }
+.osx-ab-buttons { display: flex; gap: 8px; }
+.osx-ab-status { min-height: 1.4em; font-size: 12px; }
+.osx-ab-status ul { margin: 4px 0 0; padding-left: 18px; }
+.osx-ab-result { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--osx-border); padding-top: 10px; }
+.osx-ab-block { border: 1px solid var(--osx-border); border-radius: var(--osx-radius); background: var(--osx-surface); padding: 8px 10px; font-size: 12px; }
+.osx-ab-points { font-size: 13px; color: var(--osx-fg) !important; }
+.osx-ab-note { font-size: 12px; color: var(--osx-fg-muted) !important; }
+.osx-ab-list { margin: 4px 0 0; padding-left: 0; list-style: none; font-size: 12px; }
+.osx-ab-list li { margin: 3px 0; padding-left: 0; }
+.osx-ab-list li ul { margin: 2px 0 2px 16px; padding: 0; list-style: disc; color: var(--osx-fg-muted); }
+.osx-ab-sign { display: inline-block; min-width: 1.2em; font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; text-align: center; }
+.osx-ab-fieldset { border: 1px solid var(--osx-border); border-radius: var(--osx-radius); margin: 8px 0; padding: 6px 10px; }
+.osx-ab-fieldset legend { font-size: 12px; padding: 0 4px; }
+.osx-ab-choice { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; font-size: 12px; }
+.osx-ab-choice label { display: flex; gap: 6px; align-items: flex-start; }
+.osx-ab-stale { margin: 6px 0; padding: 7px 9px; border: 2px solid var(--osx-fg); border-radius: var(--osx-radius); font-size: 12px; color: var(--osx-fg) !important; background: var(--osx-surface); }
+.osx-ab details summary { cursor: pointer; font-size: 12px; }
+@media (prefers-reduced-motion: no-preference) { .osx-ab button { transition: background-color 120ms ease-out; } }
+.osx-score-chart { color: var(--osx-fg); position: relative; }
+.osx-score-order, .osx-score-empty { color: var(--osx-fg); font-size: 12px; }
+.osx-score-chart svg { display: block; max-width: 100%; overflow: visible; }
+.osx-score-grid line { stroke: var(--osx-border); stroke-width: 1; }
+.osx-score-grid text, .osx-score-tick { fill: var(--osx-fg-muted); font-size: 10px; }
+.osx-score-end-label { font-size: 11px; }
+.osx-score-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0; padding: 0; list-style: none; font-size: 12px; }
+.osx-score-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+/* Plan tab (sessionPlannerEditor.tsx): each label sits above its own control, so nothing wraps beside the wrong neighbour at 360 px. */
+.osx-planner label { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin: 8px 0; font-size: 12px; color: var(--osx-fg); }
+.osx-planner select, .osx-planner input[type="number"] { max-width: 100%; }
+.osx-planner ol { margin: 8px 0; padding-left: 20px; }
+.osx-planner li { margin: 0 0 12px; }
+.osx-planner li > button { margin: 2px 4px 2px 0; }
+.osx-shell input[type="number"] { color: var(--osx-fg); background: var(--osx-surface); border: 1px solid var(--osx-border); border-radius: 5px; padding: 4px 6px; width: 7em; }
+/* A line is stroke only: `fill: none` here, and no rule gives a line a fill. A label is fill only (text has no outline). */
+.osx-score-line { fill: none; }
+.osx-score-line--own { stroke: var(--osx-accent); stroke-width: 3; }
+.osx-score-line--rival { stroke: var(--osx-fg); stroke-width: 3; stroke-dasharray: 6 4; }
+.osx-score-line--other { stroke: var(--osx-fg-muted); stroke-width: 1.5; }
+.osx-score-dot { stroke-width: 2; }
+.osx-score-dot--own { fill: var(--osx-accent); }
+.osx-score-dot--rival { fill: var(--osx-fg); }
+.osx-score-dot--other { fill: var(--osx-fg-muted); }
+.osx-score-end-label--own { fill: var(--osx-accent); }
+.osx-score-end-label--rival { fill: var(--osx-fg); }
+.osx-score-end-label--other { fill: var(--osx-fg-muted); }
+
+/*
+ * Shell (Shell.tsx, liveView.tsx, tabHost.tsx). Tokens only. The open tab is marked by a bar and bold text as well as colour, so the
+ * dark theme, which has no accent colour of its own to rely on, still shows it.
+ */
+.osx-shell { color: var(--osx-fg); background: var(--osx-bg); font-family: var(--osx-font); }
+.osx-shell h1 { margin: 0; font-size: 14px; font-weight: 700; }
+.osx-shell h2 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.osx-shell h3 { margin: 12px 0 4px; font-size: 13px; font-weight: 600; }
+.osx-shell p { margin: 6px 0; color: var(--osx-fg-muted); }
+.osx-shell button, .osx-shell input, .osx-shell select { font: inherit; }
+.osx-shell button { color: var(--osx-fg); background: var(--osx-surface); border: 1px solid var(--osx-border); border-radius: 5px; padding: 4px 10px; cursor: pointer; }
+.osx-shell button:hover:not(:disabled) { background: var(--osx-accent-soft); }
+.osx-shell button:disabled { opacity: 0.55; cursor: not-allowed; }
+.osx-shell button:focus-visible, .osx-shell input:focus-visible, .osx-shell select:focus-visible, .osx-shell a:focus-visible { outline: 2px solid var(--osx-accent); outline-offset: 1px; }
+.osx-shell a { color: var(--osx-accent); }
+.osx-shell input[type="text"], .osx-shell select { color: var(--osx-fg); background: var(--osx-surface); border: 1px solid var(--osx-border); border-radius: 5px; padding: 4px 6px; }
+.osx-shell fieldset { border: 1px solid var(--osx-border); border-radius: var(--osx-radius); margin: 0 0 12px; padding: 6px 10px 8px; }
+.osx-shell legend { font-size: 12px; font-weight: 600; padding: 0 4px; }
+.osx-shell-host { margin: 0 !important; font-size: 11px; }
+
+.osx-shell--docked { display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; overflow: hidden; }
+.osx-shell--docked .osx-shell-head { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px 2px; }
+.osx-shell--docked .osx-shell-size { margin-inline-start: auto; padding: 1px 8px; font-size: 11px; }
+.osx-shell--docked .osx-shell-size[aria-pressed="true"] { border-width: 2px; font-weight: 600; }
+.osx-tabbar { display: flex; border-bottom: 1px solid var(--osx-border); padding: 0 6px; }
+.osx-shell .osx-tab { background: transparent; border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 5px 9px; font-size: 12px; color: var(--osx-fg-muted); }
+.osx-shell .osx-tab[aria-selected="true"] { border-bottom-color: var(--osx-accent); color: var(--osx-fg); font-weight: 700; }
+.osx-shell .osx-tab:hover:not(:disabled) { background: var(--osx-accent-soft); }
+.osx-tabpanel { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 10px 12px; }
+.osx-tabpanel[hidden] { display: none; }
+.osx-tabpanel .osx-results { margin-top: 0; border-top: 0; padding-top: 0; }
+
+.osx-shell--tab { display: grid; grid-template-columns: 168px minmax(0, 1fr); min-height: 100vh; }
+.osx-hostnav { border-inline-end: 1px solid var(--osx-border); background: var(--osx-surface); padding: 16px 10px; }
+.osx-hostnav h1 { font-size: 16px; }
+.osx-sidenav { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
+.osx-shell .osx-sidenav .osx-tab { text-align: start; border-bottom: 0; border-inline-start: 4px solid transparent; padding: 6px 10px; font-size: 13px; }
+.osx-shell .osx-sidenav .osx-tab[aria-selected="true"] { border-inline-start-color: var(--osx-accent); }
+.osx-hostpanel { padding: 16px 24px 32px; max-width: 960px; }
+@media (max-width: 560px) { .osx-shell--tab { grid-template-columns: 1fr; } .osx-hostnav { border-inline-end: 0; border-bottom: 1px solid var(--osx-border); } .osx-sidenav { flex-direction: row; } }
+
+.osx-chart-note { font-size: 12px; }
+.osx-save a { white-space: nowrap; }
+.osx-save label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; max-width: 320px; }
+.osx-meets-body { display: block; }
+.osx-meets-list ul { list-style: none; margin: 0 0 8px; padding: 0; }
+.osx-meets-list li { margin: 2px 0; }
+.osx-shell .osx-record-button { width: 100%; text-align: start; }
+.osx-shell .osx-record-button[aria-pressed="true"] { border-width: 2px; border-color: var(--osx-fg); font-weight: 600; }
+.osx-record-kind, .osx-record-meta { font-size: 12px; color: var(--osx-fg-muted); }
+.osx-record { margin-top: 16px; border-top: 1px solid var(--osx-border); padding-top: 12px; }
+.osx-diff { margin-top: 16px; border-top: 1px solid var(--osx-border); padding-top: 12px; }
+.osx-diff section { margin-top: 12px; }
+.osx-diff table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; }
+.osx-diff caption { text-align: start; font-weight: 600; padding: 4px 0; }
+.osx-diff th, .osx-diff td { border-bottom: 1px solid var(--osx-border); padding: 5px 8px; text-align: start; }
+.osx-diff thead th { color: var(--osx-fg); }
+.osx-diff td { color: var(--osx-fg-muted); }
+.osx-radio { display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 13px; }
+.osx-rival-row { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; font-size: 12px; }
+.osx-settings input[type="color"] { width: 44px; height: 28px; padding: 0; border: 1px solid var(--osx-border); background: var(--osx-surface); }
+
+.osx-meet-report { color: var(--osx-fg); background: var(--osx-bg); }
+.osx-meet-report table { width: 100%; border-collapse: collapse; }
+.osx-meet-report th, .osx-meet-report td { border-bottom: 1px solid var(--osx-border); padding: 6px 8px; text-align: left; }
+.osx-meet-report th { color: var(--osx-fg); }
+.osx-meet-report td { color: var(--osx-fg-muted); }
+.osx-report-print { margin-inline-start: auto; }
+@media print {
+  body * { visibility: hidden !important; }
+  #osx-meet-report, #osx-meet-report * { visibility: visible !important; }
+  #osx-meet-report { position: absolute; inset: 0; width: 100%; color: var(--osx-fg); background: var(--osx-bg); }
+  .osx-report-print { display: none !important; }
+  .osx-score-hidden { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; white-space: normal; }
+}
+@media print {
+:root, :root[data-osx-theme="dark"] {
+  --osx-bg: #FAFAFA !important;
+  --osx-surface: #FFFFFF !important;
+  --osx-fg: rgba(0,0,0,0.87) !important;
+  --osx-fg-muted: rgba(0,0,0,0.54) !important;
+  --osx-border: #E0E0E0 !important;
+  --osx-accent: #1565C0 !important;
+  --osx-accent-fg: Canvas !important;
+  --osx-good: #2E7D32 !important;
+  --osx-warn-bg: #EF6C00 !important;
+  --osx-warn-fg: #000000 !important;
+  --osx-bad: #C62828 !important;
+  --osx-font: Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+  --osx-radius: 8px !important;
+  --osx-accent-soft: color-mix(in srgb, var(--osx-accent) 12%, var(--osx-surface)) !important;
+}
+}

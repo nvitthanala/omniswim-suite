@@ -1,0 +1,1076 @@
+{
+  "source": {
+    "name": "SwimSwam Swimming Time Conversion Tool",
+    "url": "https://swimswam.com/swimming-times-conversion-tool/",
+    "pageSays": "converts using Colorado Timing conversion factors (the page publishes no factors)"
+  },
+  "capturedBy": "Claude (lead), Claude in Chrome, one POST per request, 1.5 s apart, 2026-10-26",
+  "approvedBy": "user, 2026-10-26: Record converter outputs (state file userAnswers Q-D2-swimswam)",
+  "responseHashNote": "responseSha256 is the sha256 of the full HTML response. The page carries ads and per-request markup, so a re-fetch will not reproduce the hash; the request fields and output are the reproducible record. Raw HTML is not archived (third-party page).",
+  "notConverted": [
+    "800_Free Relay: the converter returns the input unchanged (1:00.00 -> 1:00.00, 10:00.00 -> 10:00.00). Treat as no conversion, never as factor 1.0."
+  ],
+  "eventsOffered": "50/100/200 Fly, Back, Breast, Free; 400/500, 800/1000, 1500/1650 Free; 200 IM; 400 IM; 800 Free Relay. No other relays.",
+  "captures": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Fly",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:53.42",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "5028117f4375b4e98b35f58d77197b8a263e1e9f3fe740559fbc567914ac229e",
+      "retrievedAt": "2026-10-26T19:28:22.280Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Fly",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:59.90",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "cb535bb005c834e0c2e2f981dd149d92d9cd5d0d85b6576a9e438bbc1012d7df",
+      "retrievedAt": "2026-10-26T19:28:24.288Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Fly",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:52.79",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "b7b4a5bc7bc84f1673a91d80717f4dff973d76d8b02eac64a45425b355d08cdb",
+      "retrievedAt": "2026-10-26T19:28:26.277Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Fly",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:59.27",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "30f612ed1bec8e331dd94f00d437c2e8734c501b12383b713b11190e0d695b26",
+      "retrievedAt": "2026-10-26T19:28:28.220Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Fly",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:51.53",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "fd745578d7ac9d991e085944ae14acc35feaed66b8345f8c5634a225d781382b",
+      "retrievedAt": "2026-10-26T19:28:30.180Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Fly",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:58.01",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "5e130758d5e3f4f31e622811fcef686facff4702e7e03f0d5d2fc6688d016ae3",
+      "retrievedAt": "2026-10-26T19:28:32.124Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Back",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:52.57",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "5641bf69921e1718f54f21adb57c50acd1273e3aa3349933be4ce07895b01da2",
+      "retrievedAt": "2026-10-26T19:28:34.093Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Back",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "09:06.35",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "1cb505006596710f85d26cb2067b3c8e7ceefc6ed7ac7016f414d605c8e42603",
+      "retrievedAt": "2026-10-26T19:28:36.131Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Back",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:50.29",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "98ee5c9f605c24fd258dd22f43d0df6da77c2befb58b398ff79e3b9b9bb17d0c",
+      "retrievedAt": "2026-10-26T19:28:38.081Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Back",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "09:04.06",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "4e32847d804ff30b5154c4b060f7b43635b5491df312bdc7133800eee8b79e65",
+      "retrievedAt": "2026-10-26T19:28:40.046Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Back",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:45.72",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "d8160cc268d4d55bd6a28fc46a33e9d5bf32c4ce04ef7645382ccaace162e38e",
+      "retrievedAt": "2026-10-26T19:28:41.988Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Back",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:59.49",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "7fadc8179ff177e9e11148855a8320e25b1eec4c875ea6b1bbf2b9dcad35b221",
+      "retrievedAt": "2026-10-26T19:28:43.949Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Breast",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:53.15",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "721246e4244c82812a7e3b149b860521f169f81683058215fd59eb7815f31fab",
+      "retrievedAt": "2026-10-26T19:28:45.901Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Breast",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:59.63",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "262b8a714e28753068709729a0bfca7fc307d23c90a5001944fd2156955f8ece",
+      "retrievedAt": "2026-10-26T19:28:47.825Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Breast",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:52.25",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "bc92dbbc01b244256d6f5160135afec7c72e94eee1f9be39e4b01d9cba2d5d79",
+      "retrievedAt": "2026-10-26T19:28:49.824Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Breast",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:58.73",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "899374462e07505d5292b69e8efeb9d4eb9886a91d0181b1bf8d178d2e10fd7f",
+      "retrievedAt": "2026-10-26T19:28:52.359Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Breast",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:50.45",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "b4a823b35844f25b55e0fbbbab6a80ffff6c1c0394b8ee1a2e9a4ed3f7652c3a",
+      "retrievedAt": "2026-10-26T19:28:54.374Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Breast",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:56.93",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "7b1ba24c92de4457c92d2453598b537704746952cee4ece50a51e22f9637fd01",
+      "retrievedAt": "2026-10-26T19:28:56.363Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Free",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:53.33",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "5cd47798e3d53228645c451209e0680f20719eb8061c9cb3aa4e57005dbfc625",
+      "retrievedAt": "2026-10-26T19:28:58.308Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Free",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:59.81",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "6dea4143aa0bf011465ee3c852e10b0da19617dea7fb6c68e86f7bc6741090c7",
+      "retrievedAt": "2026-10-26T19:29:00.266Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Free",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:52.61",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "a2187eca2227d0e205e9bedc8e916da4957e9dc6a14d3b90913bd17c7d628fd7",
+      "retrievedAt": "2026-10-26T19:29:02.249Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Free",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:59.09",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "2a953a7a886cef9e93299e4cbeaddeefa13235c6eb1a500234de5f87d4e5321a",
+      "retrievedAt": "2026-10-26T19:29:04.178Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Free",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:51.17",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "b5481e608cc020927208cbc0d64d6e432cc9579a037486eceeec5d5d8a211d3b",
+      "retrievedAt": "2026-10-26T19:29:06.112Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Free",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:57.65",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "206d72cebd56cd49616dc68d341b6236c352430afe6f0d89aeacb0283556ad1f",
+      "retrievedAt": "2026-10-26T19:29:08.084Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "400/500_Free",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "01:07.22",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "8e64add844ff2c1dfabd4dd5c03bc83d28ba62b6698bd6004b639e8c2cc7970d",
+      "retrievedAt": "2026-10-26T19:29:10.018Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "400/500_Free",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "11:12.26",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "74fc24895acf52ec978a64c899baa47fa7eb0db75268b528abde1fb79e03a220",
+      "retrievedAt": "2026-10-26T19:29:11.958Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "800/1000_Free",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "01:07.22",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "321a360bd6b8f13c16e073172cb2d4f28b04ba5b19ee96b599fbb0a8707b25f3",
+      "retrievedAt": "2026-10-26T19:29:13.914Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "800/1000_Free",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "11:12.26",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "157a5e448d8af7c62eb96eff257e3e14b96db84e2ff1863818e53db4afec5ebb",
+      "retrievedAt": "2026-10-26T19:29:15.860Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "1500/1650_Free",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:58.82",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "e12a0196ff8c5832f82b598554e70e136549edc1b05b20dad4848f838dc742dc",
+      "retrievedAt": "2026-10-26T19:29:17.790Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "1500/1650_Free",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "09:48.23",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "ca217672e2ce9e5e1be5ef66e80c4ce2476a5fff4f21d32eb1e51764ea65c793",
+      "retrievedAt": "2026-10-26T19:29:19.740Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_IM",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:51.17",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "ce9f6ec13c60692863658606e7c6cd6f27b00023e736b0af0fffbf3609c7cfff",
+      "retrievedAt": "2026-10-26T19:29:21.682Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_IM",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:57.65",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "a57a3480569ec18fef49bb3bdb530e2e0859937e61366953485f93306935703f",
+      "retrievedAt": "2026-10-26T19:29:23.775Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "400_IM",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "00:48.28",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "5a07adcd169266b96951c01d920a84615e877ad1c0876a60962e48b88255a3ef",
+      "retrievedAt": "2026-10-26T19:29:25.787Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "400_IM",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "08:54.77",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "2f90cf2fc8abbb7dcb061f2d8e39ecf6216a77e003411a2e5d81fbe1e971192e",
+      "retrievedAt": "2026-10-26T19:29:27.723Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "800_Free Relay",
+          "minutes": "1",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "1:00.00",
+      "output": "01:00.00",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "8bbe2471b4e2bb118c7988ff27647bebbe59d0752bfd9f767a723a59435317c6",
+      "retrievedAt": "2026-10-26T19:29:29.698Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "800_Free Relay",
+          "minutes": "10",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "10:00.00",
+      "output": "10:00.00",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "b5a355df917c183d5daca3ffc87d73c5603374233440cfc6a54e6e721aa399b9",
+      "retrievedAt": "2026-10-26T19:29:31.643Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Fly",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:41.53",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "0435e27dd30c691419d1571a1237af58ca77a7391fc120756cca74d29b4bb038",
+      "retrievedAt": "2026-10-26T19:30:44.629Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Fly",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:40.90",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "a2dca96f447173f061438b724c79fe7d37bdeedb29c9c5db045f37e1d34f8476",
+      "retrievedAt": "2026-10-26T19:30:46.628Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Fly",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:39.63",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "4deff9e34c43dcf6e31524333aff8bbeaa32af667ed04e3633970aecb3572576",
+      "retrievedAt": "2026-10-26T19:30:48.586Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Back",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:42.30",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "06d61ec9b45b7ce0eb6f89ef17528c01e26013ae545168ca27d7359af0bdfd07",
+      "retrievedAt": "2026-10-26T19:30:50.548Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Back",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:40.02",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "558d34eb410ede994cf72cfe9c2be74bdc47d688ecbf7dff6f2fecc9fbba49e6",
+      "retrievedAt": "2026-10-26T19:30:52.517Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Back",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:35.44",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "9526aab1045a1fd2acf53486936871d81ca838f1a7bce3622ad08b2a36e1a8c2",
+      "retrievedAt": "2026-10-26T19:30:54.486Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Breast",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:41.26",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "7dbd2e6a3472d667131b1d9db9199bd9d053aa5ad2cf667b225e63ccd8efca90",
+      "retrievedAt": "2026-10-26T19:30:56.448Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Breast",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:40.36",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "0d656ba08c54fb27e2587f8cb3aea65fb9c73ad4c433b3d525ad5292cbd5ad1b",
+      "retrievedAt": "2026-10-26T19:30:58.386Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Breast",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:38.55",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "a6baf5a0b65e6ed1cb2c8f93e3c657640248924960ec6e0106d08e65ebd84415",
+      "retrievedAt": "2026-10-26T19:31:00.365Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "50_Free",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:41.44",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "8229d253f8d15f78fabdf09e61034213d3eebe9839c2478ded8d729d23b9b330",
+      "retrievedAt": "2026-10-26T19:31:02.383Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "100_Free",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:40.72",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "cd6234e9ac6830e58af8ed3ae8701df7a24bca32110be2b170ffeb1b2a26a983",
+      "retrievedAt": "2026-10-26T19:31:04.317Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_Free",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:39.27",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "2f0cba476b54950fbc1c2780445e0febafaedf9ccb85cf41da9d4c4afdf9cffe",
+      "retrievedAt": "2026-10-26T19:31:06.329Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "400/500_Free",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "03:21.68",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "a6d7724a5ceb79934616fa71fc0652baef17f08c12823835af0c2bc1664eb8f2",
+      "retrievedAt": "2026-10-26T19:31:08.276Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "800/1000_Free",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "03:21.68",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "c902b8208c60e179754fd471eba7eed6dbadb55e9de88cc2edbeb8023984fb10",
+      "retrievedAt": "2026-10-26T19:31:10.260Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "1500/1650_Free",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:56.47",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "8fac8603596ba21eded7c597b4099ff829472974f8a9d239cfb7fc7217ce94b2",
+      "retrievedAt": "2026-10-26T19:31:12.211Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "200_IM",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:39.27",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "c1795858ac1969a86403c6cd618878e53c26d8793553a45e3e08adab39cc457e",
+      "retrievedAt": "2026-10-26T19:31:14.167Z"
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://swimswam.com/swimming-times-conversion-tool/",
+        "fields": {
+          "convert": "1",
+          "event": "400_IM",
+          "minutes": "3",
+          "seconds": "00",
+          "hundredths": "00",
+          "course_from": "LCM",
+          "course_to": "SCY"
+        }
+      },
+      "input": "3:00.00",
+      "output": "02:36.39",
+      "outputSelector": "#swim-convert-time",
+      "responseSha256": "6069bd0fa22145452d459525ba44118f9cb6816ba510056044f1bfc2f7bc1969",
+      "retrievedAt": "2026-10-26T19:31:16.514Z"
+    }
+  ]
+}

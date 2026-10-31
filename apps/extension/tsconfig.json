@@ -1,0 +1,10 @@
+{
+  // Type-checks the extension source against the shared strict base. DOM is in the
+  // base lib; the service worker uses the `chrome` global from @types/chrome.
+  // Run by `npm run lint:types`. Imports `@omniswim/engine` (root only) when it needs the engine.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["chrome"]
+  },
+  "include": ["src/**/*"]
+}

@@ -17,6 +17,7 @@ __pycache__/
 # Build output
 dist/
 **/dist/
+apps/extension/dist-harness/
 build/
 .vite/
 **/.vite/
@@ -40,6 +41,8 @@ data/*.db-wal
 *.db-wal
 
 # Environment / secrets
+# Private keys. The extension key lives outside the repo (plans/2026-10-25/D3-STORAGE-AND-BUILD.md 2.6).
+*.pem
 .env
 .env.*
 !.env.example
@@ -58,10 +61,13 @@ test-results/
 
 
 # Training footage: third-party race video is not committed to this public repo.
-# See data/training/MANIFEST.md for identity, provenance and checksums.
-data/training/*
-!data/training/MANIFEST.md
-!data/training/checksums.txt
+# See legacy/data/training/MANIFEST.md for identity, provenance and checksums.
+legacy/data/training/*
+!legacy/data/training/MANIFEST.md
+!legacy/data/training/checksums.txt
+# The footage lived in data/training/ before 2026-10-25. Older clones may still
+# hold it there; keep that path ignored too.
+data/training/
 
 # Conference results PDFs and text name every athlete at the meet: keep local.
 data/relay-programs/sources/*.pdf

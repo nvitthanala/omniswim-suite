@@ -74,13 +74,15 @@ against stale code and wrote 39 `UI …` test workspaces into the real
 `data/omniswim.db`. Reuse now needs `PLAYWRIGHT_REUSE_SERVER=1`; otherwise
 a busy port fails the run. Stop the old server or set a free `PORT`.
 
-## 5. `calculatePoints` lives in `utils.ts`, not `scoringEngine.ts`
+## 5. `calculatePoints` lives in `calculatePoints.ts`, not `scoringEngine.ts`
 
 The single most important function in the product — the one that turns a swim
-result into competition points — is exported from
-`packages/core/src/lib/utils.ts`, not from the file named for scoring.
-`scoringEngine.ts` imports it. Searching only `scoringEngine.ts` for "where do
-points get computed" will not find it.
+result into competition points — is defined in
+`packages/core/src/lib/calculatePoints.ts`, not in the file named for scoring.
+`utils.ts` re-exports it, and `scoringEngine.ts` imports it from `./utils`.
+Searching only `scoringEngine.ts` for "where do points get computed" will not
+find it. (Updated 2026-10-25; the D2 extraction moves this file to
+`packages/engine/src/lib/` with a shim at the old path.)
 
 ## 6. The alias resolver is opt-in
 
@@ -177,6 +179,13 @@ which table it used, so a caller can cite it (see `ProvenanceBadge`'s
 conversion tooltip). Guarded by `tests/courseConversionDivision.test.ts` and
 `tests/scmAllOtherEventsConversion.test.ts`.
 
+The extension engine (`packages/engine/src/sourcing/lcmToScy.ts`) truncates
+its LCM to SCY conversion the same way:
+`SCY = truncate((LCM - turn) / divisor)`, in integer hundredths. Its
+factors are inferred from archived SwimSwam converter outputs, not
+published (README R58 and R63, the one approved estimate). README R59 allows
+rounding, but only truncation replays the archived outputs exactly.
+
 ## 11. A cutline table's course must match the swim's own course
 
 `cutlineTableCourseForSwim` (`packages/core/src/lib/cutlineUtils.ts`) decides
@@ -192,6 +201,13 @@ straight into the table parameter, rendering every LCM history row
 `computedCutInOwnCourse`, and its tooltip through `computedCutTooltip`: both
 read the table in the swim's own course. Guarded by
 `tests/naiaMeterCourseAsScm.test.ts` and `tests/naiaScmComputedCut.test.ts`.
+
+The extension engine keeps the same line with one change from README R61. A
+converted time that clears a standard gets the tag `estimated-achieved`
+(`packages/engine/src/sourcing/cutTag.ts`), never `achieved`. When the
+swimmer later swims the cut, `foldEventCutTags` lets the real tag replace
+the estimated one. A legacy metric verdict (`cutTagFromLegacy`) stays
+`converted`: never a cut and never an estimated tag.
 
 ## 12. A robots.txt exemption is an exact path shape, not a pattern
 

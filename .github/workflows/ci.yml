@@ -66,10 +66,10 @@ jobs:
         run: npm audit --omit=dev
         continue-on-error: true
 
-      # Exact versions live in backend/requirements.txt (pdfplumber is pinned), so a
+      # Exact versions live in legacy/backend/requirements.txt (pdfplumber is pinned), so a
       # new upstream release cannot change parser output between two CI runs.
       - name: Install Python PDF deps
-        run: python -m pip install -r backend/requirements.txt
+        run: python -m pip install -r legacy/backend/requirements.txt
 
       # pdftotext, for the tests that re-read the archived qualifying-standard PDFs.
       # ubuntu ships poppler, which lacks the xpdf-only `-table` flag. The altitude tests
@@ -87,15 +87,23 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Legacy lint
+        run: npm run lint:legacy
+
       # The Python parsers feed every PDF meet score. Lint tools install in their
       # own step so they never reach the runtime requirements (requirements.txt is
-      # installed above). Config lives in backend/pyproject.toml.
+      # installed above). Config lives in legacy/backend/pyproject.toml.
       - name: Python backend lint and tests
-        working-directory: backend
+        working-directory: legacy/backend
         run: |
           python -m pip install -r requirements-dev.txt
           python -m ruff check .
           python -m pytest
+
+      # apps/extension/dist/ is not committed (D3 2.4). tests/extensionBuildFreshness.test.ts
+      # (T-B3) fails under CI when it is missing, so build it before any test step.
+      - name: Build OmniSwim extension
+        run: npm run build:extension
 
       # Runs the script suite and the Playwright e2e specs. run-tests.mjs picks a free
       # PORT for the e2e dev server itself; do not set PORT here, because
@@ -103,6 +111,11 @@ jobs:
       # prefers PORT over OMNI_PORT.
       - name: Test
         run: npm test
+        env:
+          PG_TEST_URL: postgres://postgres:postgres@localhost:5432/omni_test
+
+      - name: Legacy test
+        run: npm run test:legacy
         env:
           PG_TEST_URL: postgres://postgres:postgres@localhost:5432/omni_test
 
@@ -130,12 +143,20 @@ jobs:
         run: npm run test:harness
         timeout-minutes: 15
 
+      # The S3 worker harness (D3 section 3): the built OmniSwim extension (built above) in
+      # real Chromium on a synthetic simulator page, with and without a page CSP. It aborts
+      # every request except that page, so it never contacts swimcloud.com. A skip fails
+      # here because CI is set.
+      - name: OmniSwim extension S3 harness
+        run: npm run test:extension-harness
+        timeout-minutes: 10
+
       - name: Build
         run: npm run build
 
-      # The extension bundles are committed artifacts. This does not
-      # regenerate them for the build -- tests/swimCloudExtensionBuildFreshness.test.ts
+      # The legacy extension bundles are committed artifacts. This does not
+      # regenerate them for the build -- legacy/tests/swimCloudExtensionBuildFreshness.test.ts
       # already fails when a committed bundle is stale. This step proves the
-      # build script itself still runs on a clean checkout.
-      - name: Build browser extension
-        run: npm run build:extension
+      # legacy build script itself still runs on a clean checkout.
+      - name: Build legacy browser extension
+        run: npm run build:extension:legacy

@@ -1,0 +1,102 @@
+{
+  "initiative": "Add opencode (free Zen models) as a standby/assist provider for the improvement-plan task",
+  "createdAt": "2026-10-15",
+  "branch": "nvitthanala/improvement-plan-2026-10-10",
+  "paceNote": "Claude quota tier was conserve at start (5h window 75%). One agent at a time. Free models only.",
+  "relatedState": "docs/reference/IMPROVEMENT_PLAN_2026-10-10_STATE.json (owned by the adjacent Claude CLI; do not edit it from here)",
+  "orcaRun": {
+    "id": "run_85b544a8db33",
+    "coordinatorTerminal": "term_17fa440d-607b-4754-8fb1-0410e07de2ba",
+    "note": "Created 2026-10-15 because worker-start returned consumer_fenced with no bound Run."
+  },
+  "status": "2026-10-25: committed on nvitthanala/extension-redesign with user approval (redesign decision R18); routing available=true, new-child worktrees only. Earlier: setup done; read denies verified for read tool only; opencode.available=false in routing until the user approves the commit; nothing committed; no editing worker dispatched",
+  "doneThisSession": [
+    "opencode.json at repo root: default model opencode/deepseek-v4.1-flash-free, read denies for data and the vault, git denied in bash. Parsed by opencode debug config / debug agents.",
+    ".opencode/agents/: scout, finisher, docs-worker, reviewer. All four parse with the intended model and permissions.",
+    "docs/reference/PROVIDER_ROUTING.json: opencode provider added, opencode added to riskClasses.mechanical.build before claude:finisher. standbyOrder left empty.",
+    "Orca smoke worker (opencode2, no --model) read a file and replied SMOKE-OK 2026-10-11 in 21s. Released.",
+    "Advisor audit: routing available set false; deny probe run (see findings.denyProbe); finisher runs targeted tests only; docs-worker cannot edit *_STATE.json.",
+    "Command center: provider-usage-report.mjs now reports opencode (opencode stats, 10-min cache); register.tsx band shows oc <steps>st free or PAID, pane shows 7d sessions/steps/tokens/cost; types updated. limit-handoff.mjs maps opencode to opencode2, fixed usedPct falling through to Cursor, skips opencode if a paid model ran."
+  ],
+  "findings": {
+    "opencodeVersion": "v2.0.29 (npm @opencode/cli). Auth: OpenCode Console 'Personal' stored (paid account; free models only).",
+    "freeModels": [
+      "opencode/deepseek-v4.1-flash-free",
+      "opencode/nemotron-3-ultra-free",
+      "opencode/big-pickle",
+      "opencode/mimo-v2.6-flash-free",
+      "opencode/step-5-preview-free",
+      "opencode/cat-jam-free (untested)",
+      "opencode/longcat-2.5-preview-free (untested)",
+      "opencode/muse-spark-1.3-contributor-free (untested)",
+      "opencode/nemotron-3.5-lightning-free (untested)",
+      "opencode/nemotron-3.5-super-vl-free (untested)",
+      "opencode/space-bunny-free (untested)"
+    ],
+    "microEval": {
+      "tasks": "q1: list non-test files containing entryCapCountsExhibition (6 files). q2: read the exported signature of usePdfMeetImport.",
+      "result": "All 5 tested models were exact on both. Seconds q1/q2: deepseek-v4.1-flash-free 11/8, nemotron-3-ultra-free 15/15, big-pickle 31/10, mimo-v2.6-flash-free 17/10, step-5-preview-free 63/7.",
+      "limit": "Retrieval and reading only. Edit quality, test writing, long context and rate limits were NOT tested. Do not read this as a quality ranking."
+    },
+    "pluginBlocker": {
+      "symptom": "opencode models / opencode run fail with 'ServiceUnavailableError: Location plugins did not finish activating' when run from a Claude pane.",
+      "cause": "Orca's status plugin hangs at activation when ORCA_AGENT_HOOK_ENDPOINT/PORT/TOKEN from another pane are set. Clearing those three vars makes it work. Orca-launched workers are NOT affected (verified by the smoke worker).",
+      "action": "None needed. The Orca-owned plugin file was not edited. Worth reporting to Orca if it recurs."
+    },
+    "orcaLaunch": {
+      "opencode": "worker-start --agent opencode --model ... fails: capability_unsupported.",
+      "opencode2": "worker-start --agent opencode2 works with no --model. --model is rejected (invalid_argument). Model and agent cannot be chosen at launch.",
+      "worktreeCaveat": "A new-child worktree is built from committed files. opencode.json and .opencode/ are untracked, so a child worktree would NOT carry the deny rules or the default model until they are committed."
+    },
+    "dataRule": "Free Zen models may retain or train on prompts (Zen terms not verified). Send code, tests and docs only. Probe 2026-10-15: opencode.json read denies are enforced for the read tool (relative and absolute paths), but a grep returned the contents of denied files, and a shell command can read them too. So the denies are a guardrail, not a data barrier. Physical separation helps: data/omniswim.db, data/meets.json, data/backups, data/swimcloud-captures and the pairing token are untracked, so a child worktree does not contain them. These tracked files DO reach a child worktree: data/rosters (1), data/training (2), hsuroster26-27.txt, oburoster202627.txt, possible_hsu_scoringteam2627.txt. Failing tests print swimmer names and times. Keep briefs narrow and run only targeted tests that do not read those files.",
+    "denyProbe": {
+      "at": "2026-10-15",
+      "method": "Temporary deny-probe.txt and deny-probe-dir/secret.txt with matching read denies, three opencode run prompts, files and rules removed after.",
+      "readRelative": "DENIED (enforced)",
+      "readAbsolute": "DENIED (enforced)",
+      "grepRepo": "LEAKED both tokens",
+      "shell": "not probed; shell is allowed by rule so cat/rg would also leak",
+      "next": "Try a grep action rule, or leave data safety to worktree separation and narrow briefs."
+    },
+    "usageSource": {
+      "cmd": "opencode stats --days 7 --models --cost --json",
+      "note": "Needs ORCA_AGENT_HOOK_* removed from env. cost is the paid-model guard. big-pickle has no -free suffix but costs 0, so detect paid by cost only.",
+      "reload": "The command-center plugin must be reloaded (restart Claude Code) to show the new band segment."
+    }
+  },
+  "candidates": {
+    "note": "Matched against IMPROVEMENT_PLAN state 2026-10-15. Check that state's inFlight fields before taking any item; the adjacent CLI is on T6 (Stryker) and the R7 SwimCloud capture UI split.",
+    "freeTierOk": {
+      "docs": [
+        "README: OMNI_ALLOWED_HOSTS, OMNI_INVITE_CODES, OMNI_ADMIN_EMAILS, OMNI_NO_AUTO_INSTALL, OMNI_PARSE_PDF_MAX_MB; Secure cookie over plain HTTP note",
+        "docs/README.md links missing reference/ROSTER_CATALOG_NOTES.md",
+        "THEORETICAL_MEET_PLAN.md:95 and backlog A10 stale relay tie text",
+        "docs still cite old probe paths scripts/test_post.mjs etc",
+        "ONBOARDING.md baseline numbers trail the vitest count"
+      ],
+      "smallCode": [
+        "metrics/utils.ts:19 stale NaN:NaN comment",
+        "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: Object.hasOwn or Map",
+        "H11 stray JSX spaces (needs a visual check by Claude)",
+        "RelayGroupCard.tsx:186 wire hasRelayLegOverride (UI, needs Claude review)",
+        "WorkspaceSidebar rename UI unreachable (UI, needs Claude review)"
+      ],
+      "review": "reviewer agent as a second opinion on any Claude or Codex diff, read-only"
+    },
+    "notFreeTier": [
+      "anything in packages/core scoring or lineup: formatSecondsToTime carry, relayGroupKey, rankEventsByQuality, prelims ?? 0",
+      "T6 mutation testing (in flight)",
+      "R9 deps (last), H6 renormalize (alone), H2 archive (after others), H4 and H5 (user decisions)",
+      "D1/D6/D7/F6 (source-gated data), D2/D3/T4/A12/F9 (need live captures)"
+    ]
+  },
+  "resumeOrder": [
+    "Decide data safety: grep and shell leak denied paths. Options: untrack or move the 5 tracked roster-bearing files (H5, user decision), or accept narrow briefs only.",
+    "ASK the user: commit opencode.json and .opencode/ so child worktrees carry them? (needed before any editing worker)",
+    "ASK the user: patch ~/.claude/scripts/limit-handoff.mjs so standbyOrder can name opencode?",
+    "first free-tier dispatch: docs-worker on the README env-var item, in a child worktree, reviewed by Claude",
+    "second: finisher on urlClassifier.ts and metrics/utils.ts:19",
+    "then reviewer on the first Claude/Codex core diff that lands"
+  ],
+  "standbyLog": []
+}

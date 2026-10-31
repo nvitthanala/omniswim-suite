@@ -1,0 +1,26 @@
+{
+  "model": "opencode/deepseek-v4.1-flash-free",
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "ask",
+      "*.env.*": "ask",
+      "*.env.example": "allow",
+      "data/omniswim.db*": "deny",
+      "data/meets.json": "deny",
+      "data/rosters/**": "deny",
+      "data/backups/**": "deny",
+      "data/training/**": "deny",
+      "data/swimcloud-captures/**": "deny",
+      "data/swimcloud-pairing-token.json": "deny",
+      "hsuroster26-27.txt": "deny",
+      "oburoster202627.txt": "deny",
+      "possible_hsu_scoringteam2627.txt": "deny",
+      "**/Obsidian Vault/**": "deny"
+    },
+    "bash": {
+      "*": "allow",
+      "git *": "deny"
+    }
+  }
+}

@@ -1,0 +1,305 @@
+// @vitest-environment happy-dom
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The tab host's sections (U-a): plans/2026-10-25/D6-DASHBOARD.md section 1.
+ * Meets lists the saved lineups and snapshots by meet and opens a report for one; a record whose stored results cannot be parsed shows its error and
+ * the page goes on. Settings writes the theme, the accent (`#rrggbb` only) and the rival for each meet to the store.
+ */
+import * as React from 'react';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { groupByMeet, MeetsView, PresetsSlot, SettingsView } from '../apps/extension/src/dashboard/tabHost';
+import { clearAccent, readRival, readSetting, readThemeSettings, saveAccent, saveRival, saveTheme } from '../apps/extension/src/dashboard/settingsStore';
+import { createMemoryChangeBus, createStorageRepo, exportData, openOmniDb, watchChanges } from '../apps/extension/src/storage';
+import type { SettingsSubscribe } from '../apps/extension/src/dashboard/tabHost';
+import { configCWorld, realSolveLp } from './helpers/autoBuilderFixtures';
+import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
+import { freshFactory, steppingClock } from './helpers/extensionDb';
+import { saveSnapshot } from '../apps/extension/src/dashboard/snapshotSave';
+import type { RulePresetRecord } from '../apps/extension/src/storage/schema';
+import { fixtureRecord, withoutRev } from './helpers/extensionRecords';
+
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+let world: ConfigCWorld;
+let root: Root | undefined;
+let host: HTMLElement | undefined;
+const clock = (): string => '2026-10-31T14:05:00.000Z';
+
+beforeAll(async () => {
+  world = await configCWorld();
+  await saveSnapshot(world.snapshot, 'Dual meet snapshot', { repo: world.repo, solveLp: realSolveLp, now: clock, newId: () => 'snap-1' });
+}, 120_000);
+
+afterEach(async () => {
+  if (root) await act(async () => root?.unmount());
+  host?.remove();
+  root = undefined;
+  host = undefined;
+});
+
+const q = (id: string): HTMLElement | null => host?.querySelector<HTMLElement>(`[data-testid="${id}"]`) ?? null;
+const settle = async (): Promise<void> => {
+  for (let i = 0; i < 12; i += 1) await act(async () => new Promise((r) => setTimeout(r, 20)));
+};
+async function mount(element: React.ReactElement): Promise<void> {
+  host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => root?.render(element));
+  await settle();
+}
+async function change(el: HTMLElement | null, value: string): Promise<void> {
+  const target = el as HTMLInputElement | HTMLSelectElement;
+  const proto = target instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(target, value);
+    target.dispatchEvent(new Event(target instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }));
+  });
+  await settle();
+}
+
+describe('Meets', () => {
+  it('says so when nothing is saved', async () => {
+    const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'x' });
+    await mount(React.createElement(MeetsView, { repo: createStorageRepo(db, { now: steppingClock() }) }));
+    expect(q('meets-empty')).not.toBeNull();
+    expect(q('record-open')).toBeNull();
+    db.close();
+  });
+
+  it('lists a saved snapshot under its meet and opens the report and the entry CSV button', async () => {
+    await mount(React.createElement(MeetsView, { repo: world.repo }));
+    expect(host?.querySelectorAll('[data-testid="meet-group"]').length).toBe(1);
+    const open = q('record-open');
+    expect(open?.textContent).toContain('Dual meet snapshot');
+    expect(q('record-view')).toBeNull();
+    await act(async () => open?.click());
+    await settle();
+    expect(open?.getAttribute('aria-pressed')).toBe('true');
+    const view = q('record-view');
+    expect(view?.textContent).toContain('Dual meet snapshot');
+    expect(view?.textContent).toContain('Snapshot');
+    expect(q('record-error')).toBeNull();
+    expect(view?.textContent, 'the report names the coach team').toContain('(you)');
+    expect(view?.textContent).toMatch(/csv/i);
+  });
+
+  it('shows the error of a record whose results cannot be parsed, and keeps the list', async () => {
+    const stored = await world.repo.get('lineups', 'snap-1');
+    if (!stored.found) throw new Error('no snapshot to damage');
+    // A stored record the validator would refuse today (older data, or a write from outside): the page must still show it.
+    const damaged = { ...stored.value, lineupId: 'damaged', name: 'Damaged results', createdAt: '2026-10-30T00:00:00.000Z', results: { payloadVersion: 1, teams: 'not a list' } };
+    const meetsRepo = { ...world.repo, list: async () => [stored.value, damaged] } as unknown as typeof world.repo;
+    await mount(React.createElement(MeetsView, { repo: meetsRepo }));
+    const buttons = [...(host?.querySelectorAll('[data-testid="record-open"]') ?? [])] as HTMLElement[];
+    expect(buttons.map((b) => b.textContent)).toStrictEqual(['Dual meet snapshot', 'Damaged results']);
+    await act(async () => buttons[1]?.click());
+    await settle();
+    expect(q('record-error')?.textContent).toMatch(/could not be read/);
+    expect(q('record-error')?.getAttribute('role')).toBe('alert');
+    expect(host?.querySelectorAll('[data-testid="record-open"]').length, 'the list is still there').toBe(2);
+    await act(async () => buttons[0]?.click());
+    await settle();
+    expect(q('record-error')).toBeNull();
+  });
+
+  it('groups records by meet key, newest first, snapshots and lineups together', () => {
+    const rec = (lineupId: string, meetKey: string, kind: 'lineup' | 'snapshot', createdAt: string) => ({ lineupId, meetKey, kind, createdAt, name: lineupId }) as never;
+    const groups = groupByMeet([rec('a', 'm1', 'lineup', '2026-10-01T00:00:00Z'), rec('b', 'm2', 'snapshot', '2026-10-02T00:00:00Z'), rec('c', 'm1', 'snapshot', '2026-10-03T00:00:00Z')]);
+    expect(groups.map((g) => [g.meetKey, g.records.map((r) => r.lineupId)])).toStrictEqual([['m1', ['c', 'a']], ['m2', ['b']]]);
+  });
+});
+
+describe('Presets', () => {
+  it('lists read-only built-in rule and session presets with their source', async () => {
+    const copy = withoutRev(fixtureRecord<RulePresetRecord>('rulePresets'));
+    await world.repo.put('rulePresets', { ...copy, id: 'coach-copy', name: 'Coach copy', derivedFrom: { builtinId: 'nsisc', builtinVersion: 1 } }, 'new');
+    await mount(React.createElement(PresetsSlot, { repo: world.repo }));
+    expect(q('presets-slot')?.textContent).toMatch(/Rule: NSISC.*Built in v\d+/);
+    expect(q('presets-slot')?.textContent).toMatch(/Session:.*Built in v\d+/);
+    expect(q('presets-slot')?.textContent).toMatch(/Coach copy.*User copy.*Based on NSISC v1; v\d+ available/);
+    expect(q('presets-slot')?.textContent).toMatch(/read only/i);
+  });
+
+  it('shows a visible error when presets cannot be read', async () => {
+    const repo = { list: async () => { throw new Error('database unavailable'); } } as never;
+    await mount(React.createElement(PresetsSlot, { repo }));
+    expect(q('presets-error')?.textContent).toBe('Presets could not be read: database unavailable');
+    expect(host?.querySelector('[data-testid="presets-slot"] ul')).toBeNull();
+  });
+});
+
+describe('Settings', () => {
+  it('shows the default only while the threshold has not been saved, and saves on blur', async () => {
+    const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'threshold' });
+    const repo = createStorageRepo(db, { now: steppingClock() });
+    await mount(React.createElement(SettingsView, { repo }));
+    expect((q('cut-threshold') as HTMLInputElement).value).toBe('1.0');
+    expect(q('threshold-default')?.textContent).toBe('(default)');
+    await change(q('cut-threshold'), '1.5');
+    expect(await readSetting(repo, 'cutCloseThresholdPct')).toBeUndefined();
+    await act(async () => { q('cut-threshold')?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    for (let i = 0; i < 5; i += 1) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    expect(await readSetting(repo, 'cutCloseThresholdPct')).toBe(1.5);
+    expect(q('threshold-default')).toBeNull();
+    db.close();
+  });
+
+  it('never writes a threshold of 0 when the coach clears the box', async () => {
+    const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'threshold-empty' });
+    const repo = createStorageRepo(db, { now: steppingClock() });
+    await mount(React.createElement(SettingsView, { repo }));
+    await change(q('cut-threshold'), '');
+    await act(async () => { q('cut-threshold')?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    for (let i = 0; i < 5; i += 1) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    expect(await readSetting(repo, 'cutCloseThresholdPct')).toBeUndefined();
+    expect(host?.textContent).toContain('Cut threshold not saved: enter a number.');
+    db.close();
+  });
+
+  it('writes the theme and the accent and tells the app each time', async () => {
+    let applied = 0;
+    await mount(React.createElement(SettingsView, { repo: world.repo, onApplied: () => { applied += 1; } }));
+    expect((q('theme-light') as HTMLInputElement).checked).toBe(true);
+    await act(async () => q('theme-dark')?.click());
+    await settle();
+    expect((await readThemeSettings(world.repo)).preference).toBe('dark');
+    expect((q('theme-dark') as HTMLInputElement).checked).toBe(true);
+    await change(q('accent-input'), '#aa5500');
+    expect((await readThemeSettings(world.repo)).accent).toBe('#aa5500');
+    expect(q('settings-status')?.textContent).toBe('Accent: #aa5500.');
+    await act(async () => q('accent-reset')?.click());
+    await settle();
+    expect((await readThemeSettings(world.repo)).accent).toBeUndefined();
+    expect(applied).toBe(3);
+  });
+
+  it('stores the rival of a meet from the teams of its saved snapshot, and the default again for the first option', async () => {
+    await mount(React.createElement(SettingsView, { repo: world.repo }));
+    const select = q('rival-select') as HTMLSelectElement;
+    const options = [...select.options];
+    expect(options[0]?.value).toBe('');
+    const rival = options.find((o) => o.value !== '' && o.value !== world.ownTeamId);
+    if (!rival) throw new Error('no other team to choose');
+    await change(select, rival.value);
+    expect(await readRival(world.repo, world.meetKey)).toStrictEqual({ kind: 'team', teamId: rival.value });
+    await change(q('rival-select'), '');
+    expect(await readRival(world.repo, world.meetKey)).toBeUndefined();
+  });
+});
+
+describe('Settings follows another context', () => {
+  it('refreshes the theme, the accent and the rival when a second repo changes them, and stops listening on unmount', async () => {
+    const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'x' });
+    const bus = createMemoryChangeBus();
+    const mine = createStorageRepo(db, { now: steppingClock(), bus });
+    const other = createStorageRepo(db, { now: steppingClock(), bus });
+    // The same wiring main.tsx has: `watchChanges` over the shared bus, reported to the view.
+    let listeners = 0;
+    const subscribe: SettingsSubscribe = (listener) => {
+      let stopped = false;
+      let stop: (() => void) | undefined;
+      listeners += 1;
+      void watchChanges(db, bus, (change) => { if (change.stores === 'unknown' || change.stores.includes('settings')) listener(); }).then((watch) => {
+        stop = watch.stop;
+        if (stopped) stop();
+      });
+      return () => { stopped = true; stop?.(); listeners -= 1; };
+    };
+    // One saved snapshot, so the view lists the meet and its rival choice.
+    const saved = await world.repo.get('lineups', 'snap-1');
+    if (!saved.found) throw new Error('no snapshot to copy');
+    const { rev: _rev, updatedAt: _updatedAt, ...record } = saved.value;
+    await mine.put('lineups', record, 'new');
+    await mount(React.createElement(SettingsView, { repo: mine, subscribe }));
+    const rivalSelect = q('rival-select') as HTMLSelectElement;
+    expect(rivalSelect.value).toBe('');
+    const rivalTeam = [...rivalSelect.options].find((o) => o.value !== '' && o.value !== world.ownTeamId)?.value;
+    if (rivalTeam === undefined) throw new Error('no other team');
+    expect((q('theme-light') as HTMLInputElement).checked).toBe(true);
+    expect((q('theme-dark') as HTMLInputElement).checked).toBe(false);
+    expect(q('accent-reset')).not.toBeNull();
+    expect((q('accent-reset') as HTMLButtonElement).disabled).toBe(true);
+
+    // Another context writes. The view is not touched.
+    await saveTheme(other, 'dark');
+    await saveAccent(other, '#12ab34');
+    await settle();
+    expect((q('theme-dark') as HTMLInputElement).checked).toBe(true);
+    expect((q('theme-light') as HTMLInputElement).checked).toBe(false);
+    expect((q('accent-input') as HTMLInputElement).value).toBe('#12ab34');
+    expect((q('accent-reset') as HTMLButtonElement).disabled).toBe(false);
+    await clearAccent(other);
+    await settle();
+    expect((q('accent-reset') as HTMLButtonElement).disabled).toBe(true);
+    await saveRival(other, world.meetKey, { kind: 'team', teamId: rivalTeam as never });
+    await settle();
+    expect((q('rival-select') as HTMLSelectElement).value).toBe(rivalTeam);
+
+    await act(async () => root?.unmount());
+    root = undefined;
+    expect(listeners, 'the view stopped listening').toBe(0);
+    db.close();
+  });
+
+  it('Import announces on the bus: a second context hears the imported settings, and the view shows them at once', async () => {
+    const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'import-view' });
+    const bus = createMemoryChangeBus();
+    const mine = createStorageRepo(db, { now: steppingClock(), bus });
+    await mine.put('settings', { key: 'theme', value: 'light' }, 'new');
+    // A backup whose settings say dark.
+    const sourceDb = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'import-source' });
+    const source = createStorageRepo(sourceDb, { now: steppingClock() });
+    await source.put('settings', { key: 'theme', value: 'dark' }, 'new');
+    await source.put('settings', { key: 'accent', value: '#12ab34' }, 'new');
+    const backup = await exportData(source, { stores: ['settings'], includeSwimCloudData: false, includeSettings: true, extensionVersion: 'test' });
+    sourceDb.close();
+    // The second context: it watches the shared bus, as the docked panel and the theme do. It sees the stores a notice names.
+    const heard: string[][] = [];
+    await watchChanges(db, bus, (change) => { if (change !== undefined && change.stores !== 'unknown') heard.push([...change.stores]); });
+    await mount(React.createElement(SettingsView, { repo: mine, bus, openDb: async () => db }));
+    expect((q('theme-light') as HTMLInputElement).checked).toBe(true);
+    await change(q('backup-conflict'), 'replace');
+    const input = q('backup-import') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File([JSON.stringify(backup)], 'backup.json', { type: 'application/json' })], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+    await settle();
+    expect(heard, 'the second context was told which store changed').toContainEqual(['settings']);
+    expect(await readThemeSettings(mine)).toEqual({ preference: 'dark', accent: '#12ab34' });
+    expect((q('theme-dark') as HTMLInputElement).checked, 'this view shows the import without a reload').toBe(true);
+    db.close();
+  });
+
+  it('keeps the threshold the coach is typing when another context changes a setting', async () => {
+    const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: () => 'typing' });
+    const bus = createMemoryChangeBus();
+    const mine = createStorageRepo(db, { now: steppingClock(), bus });
+    const other = createStorageRepo(db, { now: steppingClock(), bus });
+    const subscribe: SettingsSubscribe = (listener) => {
+      let stop: (() => void) | undefined;
+      let stopped = false;
+      void watchChanges(db, bus, (change) => { if (change.stores === 'unknown' || change.stores.includes('settings')) listener(); }).then((watch) => {
+        stop = watch.stop;
+        if (stopped) stop();
+      });
+      return () => { stopped = true; stop?.(); };
+    };
+    await mount(React.createElement(SettingsView, { repo: mine, subscribe }));
+    await change(q('cut-threshold'), '1.5');
+    await saveTheme(other, 'dark');
+    await settle();
+    expect((q('theme-dark') as HTMLInputElement).checked, 'the refresh did run').toBe(true);
+    expect((q('cut-threshold') as HTMLInputElement).value, 'the draft survived it').toBe('1.5');
+    await act(async () => { q('cut-threshold')?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    for (let i = 0; i < 5; i += 1) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    expect(await readSetting(mine, 'cutCloseThresholdPct')).toBe(1.5);
+    await act(async () => root?.unmount());
+    root = undefined;
+    db.close();
+  });
+});

@@ -1,0 +1,2705 @@
+{
+  "version": 2,
+  "stores": {
+    "classYearOverrides": {
+      "keyPath": [
+        "swimmerId",
+        "seasonId"
+      ],
+      "indexes": {
+        "bySeason": {
+          "keyPath": "seasonId",
+          "unique": false,
+          "multiEntry": false
+        }
+      },
+      "records": []
+    },
+    "lineups": {
+      "keyPath": "lineupId",
+      "indexes": {
+        "byMeet": {
+          "keyPath": "meetKey",
+          "unique": false,
+          "multiEntry": false
+        },
+        "byUpdatedAt": {
+          "keyPath": "updatedAt",
+          "unique": false,
+          "multiEntry": false
+        }
+      },
+      "records": [
+        {
+          "lineupId": "l-1",
+          "meetKey": "m-1",
+          "name": "Draft",
+          "kind": "lineup",
+          "payloadVersion": 1,
+          "payload": {
+            "payloadVersion": 1,
+            "meetKey": "m-1",
+            "entries": [
+              {
+                "kind": "individual",
+                "teamId": "48",
+                "swimmerId": "1001",
+                "eventKey": "100 Freestyle",
+                "gender": "Women",
+                "seedSwimId": null
+              },
+              {
+                "kind": "relay",
+                "teamId": "48",
+                "eventKey": "400 Freestyle Relay",
+                "gender": "Women",
+                "letter": "A",
+                "legs": [
+                  {
+                    "swimmerId": "1001",
+                    "basis": {
+                      "kind": "flat-start-swim",
+                      "swimId": "s-1"
+                    }
+                  },
+                  {
+                    "swimmerId": "1002",
+                    "basis": {
+                      "kind": "flyover-estimate",
+                      "swimId": "s-2"
+                    }
+                  },
+                  {
+                    "swimmerId": "1003",
+                    "basis": {
+                      "kind": "split",
+                      "splitId": "sp-3"
+                    }
+                  },
+                  {
+                    "swimmerId": "1004",
+                    "basis": {
+                      "kind": "no-time"
+                    }
+                  }
+                ]
+              }
+            ],
+            "display": {
+              "swimmers": {
+                "1001": {
+                  "name": "Fixture Swimmer One"
+                }
+              },
+              "teams": {
+                "48": {
+                  "name": "Fixture Team"
+                }
+              },
+              "entryTimes": {
+                "i|48|1001|100 Freestyle|Women": {
+                  "text": "50.00",
+                  "hundredths": 5000
+                }
+              }
+            }
+          },
+          "builtUnder": {
+            "rulePreset": {
+              "kind": "user",
+              "id": "rp-1"
+            },
+            "rulePresetRev": 1,
+            "rulePresetValues": {
+              "payloadVersion": 1,
+              "scoring": {
+                "individualPoints": {
+                  "state": "pending",
+                  "question": "SwimCloud's NSISC per-place values (recon Q17). R15 states 16 places.",
+                  "blocks": [
+                    "requireComplete",
+                    "scoreMeet",
+                    "toLegacyScoringSettings"
+                  ]
+                },
+                "relayPoints": {
+                  "state": "pending",
+                  "question": "SwimCloud's NSISC relay per-place values (recon Q17).",
+                  "blocks": [
+                    "requireComplete",
+                    "scoreMeet",
+                    "toLegacyScoringSettings"
+                  ]
+                },
+                "divingPoints": {
+                  "state": "pending",
+                  "question": "SwimCloud's NSISC diving per-place values (recon Q17).",
+                  "blocks": [
+                    "requireComplete",
+                    "scoreMeet",
+                    "toLegacyScoringSettings"
+                  ]
+                },
+                "halfRateRelaySwimmer": {
+                  "state": "set",
+                  "value": true,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "Each relay swimmer gets 1/4 of the relay's points in their own point total",
+                    "where": "plans/2026-10-25/README.md:51",
+                    "verbatim": false
+                  }
+                },
+                "aFinalBracketSize": {
+                  "state": "set",
+                  "value": 8,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "8 swimmers.",
+                    "where": "plans/2026-10-25/README.md:43",
+                    "verbatim": false
+                  }
+                },
+                "nonScorerPlacement": {
+                  "state": "set",
+                  "value": "removed-from-consideration",
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "A non-scorer is removed from the places, and the scorers behind move up, as with an exhibition swimmer.",
+                    "where": "plans/2026-10-25/README.md:58",
+                    "verbatim": false
+                  }
+                },
+                "abFinalsScorersOnly": {
+                  "state": "set",
+                  "value": true,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "In NSISC, the A and B finals hold scorers only.",
+                    "where": "plans/2026-10-25/README.md:60",
+                    "verbatim": false
+                  }
+                },
+                "cFinal": {
+                  "state": "set",
+                  "value": {
+                    "kind": "non-scorers",
+                    "size": 8
+                  },
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "The 8 fastest non-scorers from prelims swim a C final in the evening.",
+                    "where": "plans/2026-10-25/README.md:61",
+                    "verbatim": false
+                  }
+                }
+              },
+              "scorers": {
+                "eligibility": {
+                  "state": "set",
+                  "value": "roster",
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "Only scoring-team swimmers score",
+                    "where": "plans/2026-10-25/README.md:32",
+                    "verbatim": false
+                  }
+                },
+                "autoRules": {
+                  "state": "set",
+                  "value": {
+                    "abFinalTiers": [
+                      "A",
+                      "B"
+                    ],
+                    "includeRelayLegsInFinals": true,
+                    "distanceFinalRequired": true,
+                    "distanceEventPattern": [
+                      "1000",
+                      "1650",
+                      "1500"
+                    ],
+                    "splitTimedFinalMarksScorer": true
+                  },
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "A swimmer who made an A or B final is marked as a scorer.",
+                    "where": "plans/2026-10-25/README.md:38,55,56,57",
+                    "verbatim": false
+                  }
+                },
+                "scoringTeamSize": {
+                  "state": "set",
+                  "value": 18,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "18.",
+                    "where": "plans/2026-10-25/README.md:41,45",
+                    "verbatim": false
+                  }
+                },
+                "scoringTeamScope": {
+                  "state": "set",
+                  "value": "meet",
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "Total roster scoring headcount limitation (total number of team members allowed on scoring team)",
+                    "where": "plans/2026-10-25/00-USER-PLAN.md:21",
+                    "verbatim": true
+                  }
+                },
+                "diverWeight": {
+                  "state": "set",
+                  "value": {
+                    "numerator": 1,
+                    "denominator": 3
+                  },
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "divers are ⅓ of rull roster limit",
+                    "where": "plans/2026-10-25/00-USER-PLAN.md:22",
+                    "verbatim": true
+                  }
+                },
+                "perEventScorerCap": {
+                  "state": "set",
+                  "value": {
+                    "cap": "unlimited"
+                  },
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "No limit on how many swimmers from one team score in an event",
+                    "where": "plans/2026-10-25/README.md:32",
+                    "verbatim": false
+                  }
+                },
+                "divingPerEventScorerCap": {
+                  "state": "set",
+                  "value": {
+                    "kind": "same-as-swimming"
+                  },
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "Same rule as swimming: no limit on how many divers from one team score in an event.",
+                    "where": "plans/2026-10-25/README.md:44",
+                    "verbatim": false
+                  }
+                },
+                "scoringRelaysPerTeamPerEvent": {
+                  "state": "set",
+                  "value": 2,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "2 per team per relay event (the A and B relays).",
+                    "where": "plans/2026-10-25/README.md:42,59",
+                    "verbatim": false
+                  }
+                },
+                "relayEligibleFromScorerPool": {
+                  "state": "pending",
+                  "question": "Not applicable under 'roster' eligibility. Set only if eligibility becomes 'points_pool'.",
+                  "blocks": [
+                    "scorers.eligibility is points_pool"
+                  ]
+                },
+                "relayLegsMustBeScorers": {
+                  "state": "set",
+                  "value": true,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "A relay scores only if all four legs are on the scoring team.",
+                    "where": "plans/2026-10-25/README.md:54",
+                    "verbatim": false
+                  }
+                }
+              },
+              "entries": {
+                "maxIndividualPerSwimmer": {
+                  "state": "set",
+                  "value": "unlimited",
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "you can cut it any way you would like, usually 4I/4R, 3I/5R",
+                    "where": "plans/2026-10-25/00-USER-PLAN.md:24",
+                    "verbatim": true
+                  }
+                },
+                "maxRelayPerSwimmer": {
+                  "state": "set",
+                  "value": "unlimited",
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "you can cut it any way you would like, usually 4I/4R, 3I/5R",
+                    "where": "plans/2026-10-25/00-USER-PLAN.md:24",
+                    "verbatim": true
+                  }
+                },
+                "maxTotalPerSwimmer": {
+                  "state": "set",
+                  "value": 8,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "nsisc caps at 8 total",
+                    "where": "plans/2026-10-25/00-USER-PLAN.md:24",
+                    "verbatim": true
+                  }
+                },
+                "timeTrialsCount": {
+                  "state": "set",
+                  "value": false,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-09-21",
+                    "wording": "These are the user's rulings (2026-09-21 for time trials, 2026-10-01 for",
+                    "where": "packages/engine/src/lib/scoringDefaults.ts:85",
+                    "verbatim": false
+                  }
+                },
+                "exhibitionCounts": {
+                  "state": "set",
+                  "value": true,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-01",
+                    "wording": "These are the user's rulings (2026-09-21 for time trials, 2026-10-01 for exhibition)",
+                    "where": "packages/engine/src/lib/scoringDefaults.ts:85-86",
+                    "verbatim": false
+                  }
+                },
+                "relayLegsAllowTimeTrials": {
+                  "state": "set",
+                  "value": false,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-12",
+                    "wording": "Time trials do not fill relay legs by default",
+                    "where": "docs/reference/IMPROVEMENT_PLAN_2026-10-10_STATE.json:154",
+                    "verbatim": false
+                  }
+                }
+              }
+            },
+            "sessionPreset": {
+              "kind": "builtin",
+              "id": "nsisc-table-c",
+              "version": 1
+            },
+            "sessionPresetValues": {
+              "payloadVersion": 1,
+              "provenance": {
+                "kind": "user-stated",
+                "statedOn": "2026-10-25",
+                "wording": "Table C: NSISC Event Order",
+                "where": "plans/2026-10-25/00-USER-PLAN.md:55-76",
+                "verbatim": true
+              },
+              "events": [
+                {
+                  "eventKey": "800 Freestyle Relay",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final",
+                    "session": {
+                      "day": 1,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Individual Medley",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 2,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 2,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "50 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 2,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 2,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "1000 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final-split",
+                    "slowHeats": {
+                      "day": 2,
+                      "slot": "morning"
+                    },
+                    "fastHeat": {
+                      "day": 2,
+                      "slot": "evening"
+                    },
+                    "fastHeatSize": {
+                      "state": "set",
+                      "value": 8,
+                      "provenance": {
+                        "kind": "user-stated",
+                        "statedOn": "2026-10-25",
+                        "wording": "usually, its 8",
+                        "where": "plans/2026-10-25/README.md:52",
+                        "verbatim": false
+                      }
+                    },
+                    "smallFieldSession": {
+                      "state": "pending",
+                      "question": "Where the one heat swims when entries are at most the fast-heat size. The meet decides (R35).",
+                      "blocks": [
+                        "sessionLoad"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Medley Relay",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final",
+                    "session": {
+                      "day": 2,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "1-Meter Diving",
+                  "gender": "Men",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 2,
+                      "slot": "afternoon"
+                    },
+                    "finals": {
+                      "day": 2,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "100 Butterfly",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 3,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 3,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "400 Individual Medley",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 3,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 3,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 3,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 3,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "400 Medley Relay",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final",
+                    "session": {
+                      "day": 3,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "3-Meter Diving",
+                  "gender": "Women",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 3,
+                      "slot": "afternoon"
+                    },
+                    "finals": {
+                      "day": 3,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "500 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 4,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "100 Backstroke",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 4,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "100 Breaststroke",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 4,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Butterfly",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 4,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Freestyle Relay",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final",
+                    "session": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "3-Meter Diving",
+                  "gender": "Men",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 4,
+                      "slot": "afternoon"
+                    },
+                    "finals": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "100 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 5,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 5,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Backstroke",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 5,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 5,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Breaststroke",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 5,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 5,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "1650 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final-split",
+                    "slowHeats": {
+                      "day": 5,
+                      "slot": "morning"
+                    },
+                    "fastHeat": {
+                      "day": 5,
+                      "slot": "evening"
+                    },
+                    "fastHeatSize": {
+                      "state": "set",
+                      "value": 8,
+                      "provenance": {
+                        "kind": "user-stated",
+                        "statedOn": "2026-10-25",
+                        "wording": "usually, its 8",
+                        "where": "plans/2026-10-25/README.md:52",
+                        "verbatim": false
+                      }
+                    },
+                    "smallFieldSession": {
+                      "state": "pending",
+                      "question": "Where the one heat swims when entries are at most the fast-heat size. The meet decides (R35).",
+                      "blocks": [
+                        "sessionLoad"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "eventKey": "400 Freestyle Relay",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final",
+                    "session": {
+                      "day": 5,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "1-Meter Diving",
+                  "gender": "Women",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 5,
+                      "slot": "afternoon"
+                    },
+                    "finals": {
+                      "day": 5,
+                      "slot": "evening"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "origin": {
+            "kind": "local"
+          },
+          "rev": 1,
+          "createdAt": "2026-10-26T12:00:00.000Z",
+          "updatedAt": "2026-10-26T12:00:00.000Z"
+        },
+        {
+          "lineupId": "l-2",
+          "meetKey": "m-1",
+          "name": "Snapshot of Draft",
+          "kind": "snapshot",
+          "parentLineupId": "l-1",
+          "payloadVersion": 1,
+          "payload": {
+            "payloadVersion": 1,
+            "meetKey": "m-1",
+            "entries": [
+              {
+                "kind": "individual",
+                "teamId": "48",
+                "swimmerId": "1001",
+                "eventKey": "100 Freestyle",
+                "gender": "Women",
+                "seedSwimId": null
+              },
+              {
+                "kind": "relay",
+                "teamId": "48",
+                "eventKey": "400 Freestyle Relay",
+                "gender": "Women",
+                "letter": "A",
+                "legs": [
+                  {
+                    "swimmerId": "1001",
+                    "basis": {
+                      "kind": "flat-start-swim",
+                      "swimId": "s-1"
+                    }
+                  },
+                  {
+                    "swimmerId": "1002",
+                    "basis": {
+                      "kind": "flyover-estimate",
+                      "swimId": "s-2"
+                    }
+                  },
+                  {
+                    "swimmerId": "1003",
+                    "basis": {
+                      "kind": "split",
+                      "splitId": "sp-3"
+                    }
+                  },
+                  {
+                    "swimmerId": "1004",
+                    "basis": {
+                      "kind": "no-time"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "builtUnder": {
+            "rulePreset": {
+              "kind": "user",
+              "id": "rp-1"
+            },
+            "rulePresetRev": 1,
+            "rulePresetValues": {
+              "payloadVersion": 1,
+              "scoring": {
+                "individualPoints": {
+                  "state": "pending",
+                  "question": "SwimCloud's NSISC per-place values (recon Q17). R15 states 16 places.",
+                  "blocks": [
+                    "requireComplete",
+                    "scoreMeet",
+                    "toLegacyScoringSettings"
+                  ]
+                },
+                "relayPoints": {
+                  "state": "pending",
+                  "question": "SwimCloud's NSISC relay per-place values (recon Q17).",
+                  "blocks": [
+                    "requireComplete",
+                    "scoreMeet",
+                    "toLegacyScoringSettings"
+                  ]
+                },
+                "divingPoints": {
+                  "state": "pending",
+                  "question": "SwimCloud's NSISC diving per-place values (recon Q17).",
+                  "blocks": [
+                    "requireComplete",
+                    "scoreMeet",
+                    "toLegacyScoringSettings"
+                  ]
+                },
+                "halfRateRelaySwimmer": {
+                  "state": "set",
+                  "value": true,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "Each relay swimmer gets 1/4 of the relay's points in their own point total",
+                    "where": "plans/2026-10-25/README.md:51",
+                    "verbatim": false
+                  }
+                },
+                "aFinalBracketSize": {
+                  "state": "set",
+                  "value": 8,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "8 swimmers.",
+                    "where": "plans/2026-10-25/README.md:43",
+                    "verbatim": false
+                  }
+                },
+                "nonScorerPlacement": {
+                  "state": "set",
+                  "value": "removed-from-consideration",
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "A non-scorer is removed from the places, and the scorers behind move up, as with an exhibition swimmer.",
+                    "where": "plans/2026-10-25/README.md:58",
+                    "verbatim": false
+                  }
+                },
+                "abFinalsScorersOnly": {
+                  "state": "set",
+                  "value": true,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "In NSISC, the A and B finals hold scorers only.",
+                    "where": "plans/2026-10-25/README.md:60",
+                    "verbatim": false
+                  }
+                },
+                "cFinal": {
+                  "state": "set",
+                  "value": {
+                    "kind": "non-scorers",
+                    "size": 8
+                  },
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "The 8 fastest non-scorers from prelims swim a C final in the evening.",
+                    "where": "plans/2026-10-25/README.md:61",
+                    "verbatim": false
+                  }
+                }
+              },
+              "scorers": {
+                "eligibility": {
+                  "state": "set",
+                  "value": "roster",
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "Only scoring-team swimmers score",
+                    "where": "plans/2026-10-25/README.md:32",
+                    "verbatim": false
+                  }
+                },
+                "autoRules": {
+                  "state": "set",
+                  "value": {
+                    "abFinalTiers": [
+                      "A",
+                      "B"
+                    ],
+                    "includeRelayLegsInFinals": true,
+                    "distanceFinalRequired": true,
+                    "distanceEventPattern": [
+                      "1000",
+                      "1650",
+                      "1500"
+                    ],
+                    "splitTimedFinalMarksScorer": true
+                  },
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "A swimmer who made an A or B final is marked as a scorer.",
+                    "where": "plans/2026-10-25/README.md:38,55,56,57",
+                    "verbatim": false
+                  }
+                },
+                "scoringTeamSize": {
+                  "state": "set",
+                  "value": 18,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "18.",
+                    "where": "plans/2026-10-25/README.md:41,45",
+                    "verbatim": false
+                  }
+                },
+                "scoringTeamScope": {
+                  "state": "set",
+                  "value": "meet",
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "Total roster scoring headcount limitation (total number of team members allowed on scoring team)",
+                    "where": "plans/2026-10-25/00-USER-PLAN.md:21",
+                    "verbatim": true
+                  }
+                },
+                "diverWeight": {
+                  "state": "set",
+                  "value": {
+                    "numerator": 1,
+                    "denominator": 3
+                  },
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "divers are ⅓ of rull roster limit",
+                    "where": "plans/2026-10-25/00-USER-PLAN.md:22",
+                    "verbatim": true
+                  }
+                },
+                "perEventScorerCap": {
+                  "state": "set",
+                  "value": {
+                    "cap": "unlimited"
+                  },
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "No limit on how many swimmers from one team score in an event",
+                    "where": "plans/2026-10-25/README.md:32",
+                    "verbatim": false
+                  }
+                },
+                "divingPerEventScorerCap": {
+                  "state": "set",
+                  "value": {
+                    "kind": "same-as-swimming"
+                  },
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "Same rule as swimming: no limit on how many divers from one team score in an event.",
+                    "where": "plans/2026-10-25/README.md:44",
+                    "verbatim": false
+                  }
+                },
+                "scoringRelaysPerTeamPerEvent": {
+                  "state": "set",
+                  "value": 2,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "2 per team per relay event (the A and B relays).",
+                    "where": "plans/2026-10-25/README.md:42,59",
+                    "verbatim": false
+                  }
+                },
+                "relayEligibleFromScorerPool": {
+                  "state": "pending",
+                  "question": "Not applicable under 'roster' eligibility. Set only if eligibility becomes 'points_pool'.",
+                  "blocks": [
+                    "scorers.eligibility is points_pool"
+                  ]
+                },
+                "relayLegsMustBeScorers": {
+                  "state": "set",
+                  "value": true,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "A relay scores only if all four legs are on the scoring team.",
+                    "where": "plans/2026-10-25/README.md:54",
+                    "verbatim": false
+                  }
+                }
+              },
+              "entries": {
+                "maxIndividualPerSwimmer": {
+                  "state": "set",
+                  "value": "unlimited",
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "you can cut it any way you would like, usually 4I/4R, 3I/5R",
+                    "where": "plans/2026-10-25/00-USER-PLAN.md:24",
+                    "verbatim": true
+                  }
+                },
+                "maxRelayPerSwimmer": {
+                  "state": "set",
+                  "value": "unlimited",
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "you can cut it any way you would like, usually 4I/4R, 3I/5R",
+                    "where": "plans/2026-10-25/00-USER-PLAN.md:24",
+                    "verbatim": true
+                  }
+                },
+                "maxTotalPerSwimmer": {
+                  "state": "set",
+                  "value": 8,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-25",
+                    "wording": "nsisc caps at 8 total",
+                    "where": "plans/2026-10-25/00-USER-PLAN.md:24",
+                    "verbatim": true
+                  }
+                },
+                "timeTrialsCount": {
+                  "state": "set",
+                  "value": false,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-09-21",
+                    "wording": "These are the user's rulings (2026-09-21 for time trials, 2026-10-01 for",
+                    "where": "packages/engine/src/lib/scoringDefaults.ts:85",
+                    "verbatim": false
+                  }
+                },
+                "exhibitionCounts": {
+                  "state": "set",
+                  "value": true,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-01",
+                    "wording": "These are the user's rulings (2026-09-21 for time trials, 2026-10-01 for exhibition)",
+                    "where": "packages/engine/src/lib/scoringDefaults.ts:85-86",
+                    "verbatim": false
+                  }
+                },
+                "relayLegsAllowTimeTrials": {
+                  "state": "set",
+                  "value": false,
+                  "provenance": {
+                    "kind": "user-stated",
+                    "statedOn": "2026-10-12",
+                    "wording": "Time trials do not fill relay legs by default",
+                    "where": "docs/reference/IMPROVEMENT_PLAN_2026-10-10_STATE.json:154",
+                    "verbatim": false
+                  }
+                }
+              }
+            },
+            "sessionPreset": {
+              "kind": "builtin",
+              "id": "nsisc-table-c",
+              "version": 1
+            },
+            "sessionPresetValues": {
+              "payloadVersion": 1,
+              "provenance": {
+                "kind": "user-stated",
+                "statedOn": "2026-10-25",
+                "wording": "Table C: NSISC Event Order",
+                "where": "plans/2026-10-25/00-USER-PLAN.md:55-76",
+                "verbatim": true
+              },
+              "events": [
+                {
+                  "eventKey": "800 Freestyle Relay",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final",
+                    "session": {
+                      "day": 1,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Individual Medley",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 2,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 2,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "50 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 2,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 2,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "1000 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final-split",
+                    "slowHeats": {
+                      "day": 2,
+                      "slot": "morning"
+                    },
+                    "fastHeat": {
+                      "day": 2,
+                      "slot": "evening"
+                    },
+                    "fastHeatSize": {
+                      "state": "set",
+                      "value": 8,
+                      "provenance": {
+                        "kind": "user-stated",
+                        "statedOn": "2026-10-25",
+                        "wording": "usually, its 8",
+                        "where": "plans/2026-10-25/README.md:52",
+                        "verbatim": false
+                      }
+                    },
+                    "smallFieldSession": {
+                      "state": "pending",
+                      "question": "Where the one heat swims when entries are at most the fast-heat size. The meet decides (R35).",
+                      "blocks": [
+                        "sessionLoad"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Medley Relay",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final",
+                    "session": {
+                      "day": 2,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "1-Meter Diving",
+                  "gender": "Men",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 2,
+                      "slot": "afternoon"
+                    },
+                    "finals": {
+                      "day": 2,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "100 Butterfly",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 3,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 3,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "400 Individual Medley",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 3,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 3,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 3,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 3,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "400 Medley Relay",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final",
+                    "session": {
+                      "day": 3,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "3-Meter Diving",
+                  "gender": "Women",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 3,
+                      "slot": "afternoon"
+                    },
+                    "finals": {
+                      "day": 3,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "500 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 4,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "100 Backstroke",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 4,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "100 Breaststroke",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 4,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Butterfly",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 4,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Freestyle Relay",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final",
+                    "session": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "3-Meter Diving",
+                  "gender": "Men",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 4,
+                      "slot": "afternoon"
+                    },
+                    "finals": {
+                      "day": 4,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "100 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 5,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 5,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Backstroke",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 5,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 5,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "200 Breaststroke",
+                  "gender": "both",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 5,
+                      "slot": "morning"
+                    },
+                    "finals": {
+                      "day": 5,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "1650 Freestyle",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final-split",
+                    "slowHeats": {
+                      "day": 5,
+                      "slot": "morning"
+                    },
+                    "fastHeat": {
+                      "day": 5,
+                      "slot": "evening"
+                    },
+                    "fastHeatSize": {
+                      "state": "set",
+                      "value": 8,
+                      "provenance": {
+                        "kind": "user-stated",
+                        "statedOn": "2026-10-25",
+                        "wording": "usually, its 8",
+                        "where": "plans/2026-10-25/README.md:52",
+                        "verbatim": false
+                      }
+                    },
+                    "smallFieldSession": {
+                      "state": "pending",
+                      "question": "Where the one heat swims when entries are at most the fast-heat size. The meet decides (R35).",
+                      "blocks": [
+                        "sessionLoad"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "eventKey": "400 Freestyle Relay",
+                  "gender": "both",
+                  "format": {
+                    "kind": "timed-final",
+                    "session": {
+                      "day": 5,
+                      "slot": "evening"
+                    }
+                  }
+                },
+                {
+                  "eventKey": "1-Meter Diving",
+                  "gender": "Women",
+                  "format": {
+                    "kind": "prelims-finals",
+                    "prelims": {
+                      "day": 5,
+                      "slot": "afternoon"
+                    },
+                    "finals": {
+                      "day": 5,
+                      "slot": "evening"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "results": {
+            "synthetic": "storage fixture, not a competition result"
+          },
+          "origin": {
+            "kind": "local"
+          },
+          "rev": 1,
+          "createdAt": "2026-10-26T12:30:00.000Z",
+          "updatedAt": "2026-10-26T12:30:00.000Z"
+        }
+      ]
+    },
+    "meets": {
+      "keyPath": "meetKey",
+      "indexes": {
+        "byUpdatedAt": {
+          "keyPath": "updatedAt",
+          "unique": false,
+          "multiEntry": false
+        }
+      },
+      "records": [
+        {
+          "meetKey": "m-1",
+          "name": "Fixture Championship",
+          "gender": "Women",
+          "teamIds": [
+            "48",
+            "58"
+          ],
+          "simulatorQuery": "?teams=48,58",
+          "rulePreset": {
+            "kind": "user",
+            "id": "rp-1"
+          },
+          "sessionPreset": {
+            "kind": "builtin",
+            "id": "nsisc-table-c",
+            "version": 1
+          },
+          "origin": {
+            "kind": "local"
+          },
+          "rev": 1,
+          "createdAt": "2026-10-26T12:00:00.000Z",
+          "updatedAt": "2026-10-26T12:00:00.000Z"
+        },
+        {
+          "meetKey": "m-2",
+          "name": "Fixture Dual",
+          "gender": "Men",
+          "teamIds": [
+            "48"
+          ],
+          "rulePreset": {
+            "kind": "builtin",
+            "id": "generic",
+            "version": 1
+          },
+          "origin": {
+            "kind": "local"
+          },
+          "rev": 3,
+          "createdAt": "2026-10-26T12:00:00.000Z",
+          "updatedAt": "2026-10-26T12:30:00.000Z"
+        }
+      ]
+    },
+    "meta": {
+      "keyPath": "key",
+      "indexes": {},
+      "records": [
+        {
+          "key": "changeRev",
+          "value": 7
+        },
+        {
+          "key": "db",
+          "schemaVersion": 2,
+          "createdAt": "2026-10-26T12:00:00.000Z",
+          "installId": "00000000-0000-4000-8000-000000000001",
+          "migrationLog": [
+            {
+              "from": 0,
+              "to": 1,
+              "at": "2026-10-26T12:00:00.000Z"
+            },
+            {
+              "from": 1,
+              "to": 2,
+              "at": "2026-10-27T00:00:00.000Z"
+            }
+          ]
+        }
+      ]
+    },
+    "rosters": {
+      "keyPath": [
+        "teamId",
+        "seasonId",
+        "gender"
+      ],
+      "indexes": {
+        "byFetchedAt": {
+          "keyPath": "fetchedAt",
+          "unique": false,
+          "multiEntry": false
+        }
+      },
+      "records": [
+        {
+          "teamId": "48",
+          "seasonId": "26",
+          "gender": "Women",
+          "memberIds": [
+            "1001",
+            "1002"
+          ],
+          "sourceUrl": "https://www.swimcloud.com/team/48/roster/?season_id=26",
+          "fetchedAt": "2026-10-26T12:00:00.000Z",
+          "parser": {
+            "name": "fixture",
+            "confidence": "high"
+          }
+        }
+      ]
+    },
+    "rulePresets": {
+      "keyPath": "id",
+      "indexes": {
+        "byName": {
+          "keyPath": "name",
+          "unique": false,
+          "multiEntry": false
+        }
+      },
+      "records": [
+        {
+          "id": "rp-1",
+          "name": "NSISC copy",
+          "payloadVersion": 1,
+          "payload": {
+            "payloadVersion": 1,
+            "scoring": {
+              "individualPoints": {
+                "state": "pending",
+                "question": "SwimCloud's NSISC per-place values (recon Q17). R15 states 16 places.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet",
+                  "toLegacyScoringSettings"
+                ]
+              },
+              "relayPoints": {
+                "state": "pending",
+                "question": "SwimCloud's NSISC relay per-place values (recon Q17).",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet",
+                  "toLegacyScoringSettings"
+                ]
+              },
+              "divingPoints": {
+                "state": "pending",
+                "question": "SwimCloud's NSISC diving per-place values (recon Q17).",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet",
+                  "toLegacyScoringSettings"
+                ]
+              },
+              "halfRateRelaySwimmer": {
+                "state": "set",
+                "value": true,
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "Each relay swimmer gets 1/4 of the relay's points in their own point total",
+                  "where": "plans/2026-10-25/README.md:51",
+                  "verbatim": false
+                }
+              },
+              "aFinalBracketSize": {
+                "state": "set",
+                "value": 8,
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "8 swimmers.",
+                  "where": "plans/2026-10-25/README.md:43",
+                  "verbatim": false
+                }
+              },
+              "nonScorerPlacement": {
+                "state": "set",
+                "value": "removed-from-consideration",
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "A non-scorer is removed from the places, and the scorers behind move up, as with an exhibition swimmer.",
+                  "where": "plans/2026-10-25/README.md:58",
+                  "verbatim": false
+                }
+              },
+              "abFinalsScorersOnly": {
+                "state": "set",
+                "value": true,
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "In NSISC, the A and B finals hold scorers only.",
+                  "where": "plans/2026-10-25/README.md:60",
+                  "verbatim": false
+                }
+              },
+              "cFinal": {
+                "state": "set",
+                "value": {
+                  "kind": "non-scorers",
+                  "size": 8
+                },
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "The 8 fastest non-scorers from prelims swim a C final in the evening.",
+                  "where": "plans/2026-10-25/README.md:61",
+                  "verbatim": false
+                }
+              }
+            },
+            "scorers": {
+              "eligibility": {
+                "state": "set",
+                "value": "roster",
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "Only scoring-team swimmers score",
+                  "where": "plans/2026-10-25/README.md:32",
+                  "verbatim": false
+                }
+              },
+              "autoRules": {
+                "state": "set",
+                "value": {
+                  "abFinalTiers": [
+                    "A",
+                    "B"
+                  ],
+                  "includeRelayLegsInFinals": true,
+                  "distanceFinalRequired": true,
+                  "distanceEventPattern": [
+                    "1000",
+                    "1650",
+                    "1500"
+                  ],
+                  "splitTimedFinalMarksScorer": true
+                },
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "A swimmer who made an A or B final is marked as a scorer.",
+                  "where": "plans/2026-10-25/README.md:38,55,56,57",
+                  "verbatim": false
+                }
+              },
+              "scoringTeamSize": {
+                "state": "set",
+                "value": 18,
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "18.",
+                  "where": "plans/2026-10-25/README.md:41,45",
+                  "verbatim": false
+                }
+              },
+              "scoringTeamScope": {
+                "state": "set",
+                "value": "meet",
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "Total roster scoring headcount limitation (total number of team members allowed on scoring team)",
+                  "where": "plans/2026-10-25/00-USER-PLAN.md:21",
+                  "verbatim": true
+                }
+              },
+              "diverWeight": {
+                "state": "set",
+                "value": {
+                  "numerator": 1,
+                  "denominator": 3
+                },
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "divers are ⅓ of rull roster limit",
+                  "where": "plans/2026-10-25/00-USER-PLAN.md:22",
+                  "verbatim": true
+                }
+              },
+              "perEventScorerCap": {
+                "state": "set",
+                "value": {
+                  "cap": "unlimited"
+                },
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "No limit on how many swimmers from one team score in an event",
+                  "where": "plans/2026-10-25/README.md:32",
+                  "verbatim": false
+                }
+              },
+              "divingPerEventScorerCap": {
+                "state": "set",
+                "value": {
+                  "kind": "same-as-swimming"
+                },
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "Same rule as swimming: no limit on how many divers from one team score in an event.",
+                  "where": "plans/2026-10-25/README.md:44",
+                  "verbatim": false
+                }
+              },
+              "scoringRelaysPerTeamPerEvent": {
+                "state": "set",
+                "value": 2,
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "2 per team per relay event (the A and B relays).",
+                  "where": "plans/2026-10-25/README.md:42,59",
+                  "verbatim": false
+                }
+              },
+              "relayEligibleFromScorerPool": {
+                "state": "pending",
+                "question": "Not applicable under 'roster' eligibility. Set only if eligibility becomes 'points_pool'.",
+                "blocks": [
+                  "scorers.eligibility is points_pool"
+                ]
+              },
+              "relayLegsMustBeScorers": {
+                "state": "set",
+                "value": true,
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "A relay scores only if all four legs are on the scoring team.",
+                  "where": "plans/2026-10-25/README.md:54",
+                  "verbatim": false
+                }
+              }
+            },
+            "entries": {
+              "maxIndividualPerSwimmer": {
+                "state": "set",
+                "value": "unlimited",
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "you can cut it any way you would like, usually 4I/4R, 3I/5R",
+                  "where": "plans/2026-10-25/00-USER-PLAN.md:24",
+                  "verbatim": true
+                }
+              },
+              "maxRelayPerSwimmer": {
+                "state": "set",
+                "value": "unlimited",
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "you can cut it any way you would like, usually 4I/4R, 3I/5R",
+                  "where": "plans/2026-10-25/00-USER-PLAN.md:24",
+                  "verbatim": true
+                }
+              },
+              "maxTotalPerSwimmer": {
+                "state": "set",
+                "value": 8,
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-25",
+                  "wording": "nsisc caps at 8 total",
+                  "where": "plans/2026-10-25/00-USER-PLAN.md:24",
+                  "verbatim": true
+                }
+              },
+              "timeTrialsCount": {
+                "state": "set",
+                "value": false,
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-09-21",
+                  "wording": "These are the user's rulings (2026-09-21 for time trials, 2026-10-01 for",
+                  "where": "packages/engine/src/lib/scoringDefaults.ts:85",
+                  "verbatim": false
+                }
+              },
+              "exhibitionCounts": {
+                "state": "set",
+                "value": true,
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-01",
+                  "wording": "These are the user's rulings (2026-09-21 for time trials, 2026-10-01 for exhibition)",
+                  "where": "packages/engine/src/lib/scoringDefaults.ts:85-86",
+                  "verbatim": false
+                }
+              },
+              "relayLegsAllowTimeTrials": {
+                "state": "set",
+                "value": false,
+                "provenance": {
+                  "kind": "user-stated",
+                  "statedOn": "2026-10-12",
+                  "wording": "Time trials do not fill relay legs by default",
+                  "where": "docs/reference/IMPROVEMENT_PLAN_2026-10-10_STATE.json:154",
+                  "verbatim": false
+                }
+              }
+            }
+          },
+          "rev": 1,
+          "createdAt": "2026-10-26T12:00:00.000Z",
+          "updatedAt": "2026-10-26T12:00:00.000Z",
+          "origin": {
+            "kind": "local"
+          },
+          "derivedFrom": {
+            "builtinId": "nsisc",
+            "builtinVersion": 1
+          }
+        },
+        {
+          "id": "rp-2",
+          "name": "Generic, unlimited total",
+          "payloadVersion": 1,
+          "payload": {
+            "payloadVersion": 1,
+            "scoring": {
+              "individualPoints": {
+                "state": "set",
+                "value": [
+                  20,
+                  17,
+                  16,
+                  15,
+                  14,
+                  13,
+                  12,
+                  11,
+                  9,
+                  7,
+                  6,
+                  5,
+                  4,
+                  3,
+                  2,
+                  1
+                ],
+                "provenance": {
+                  "kind": "published",
+                  "source": {
+                    "sourceId": "ncaa-rule7-scoring",
+                    "manifest": "data/scoring_rules/sources/manifest.json",
+                    "sha256": "5b98f8f69470606ea179b053b86d7fb4451f61a874c0fff5d8d18b369d6bb92e",
+                    "url": "https://meets.swimdna.org/media/ncaascoring.pdf",
+                    "publisher": "NCAA",
+                    "locator": "Rule 7-6-4"
+                  }
+                }
+              },
+              "relayPoints": {
+                "state": "set",
+                "value": {
+                  "kind": "table",
+                  "points": [
+                    40,
+                    34,
+                    32,
+                    30,
+                    28,
+                    26,
+                    24,
+                    22,
+                    18,
+                    14,
+                    12,
+                    10,
+                    8,
+                    6,
+                    4,
+                    2
+                  ]
+                },
+                "provenance": {
+                  "kind": "published",
+                  "source": {
+                    "sourceId": "ncaa-rule7-scoring",
+                    "manifest": "data/scoring_rules/sources/manifest.json",
+                    "sha256": "5b98f8f69470606ea179b053b86d7fb4451f61a874c0fff5d8d18b369d6bb92e",
+                    "url": "https://meets.swimdna.org/media/ncaascoring.pdf",
+                    "publisher": "NCAA",
+                    "locator": "Rule 7-6-4"
+                  }
+                }
+              },
+              "divingPoints": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "halfRateRelaySwimmer": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "aFinalBracketSize": {
+                "state": "set",
+                "value": 8,
+                "provenance": {
+                  "kind": "published",
+                  "source": {
+                    "sourceId": "ncaa-rule7-scoring",
+                    "manifest": "data/scoring_rules/sources/manifest.json",
+                    "sha256": "5b98f8f69470606ea179b053b86d7fb4451f61a874c0fff5d8d18b369d6bb92e",
+                    "url": "https://meets.swimdna.org/media/ncaascoring.pdf",
+                    "publisher": "NCAA",
+                    "locator": "Rule 7-6-4"
+                  }
+                }
+              },
+              "nonScorerPlacement": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "abFinalsScorersOnly": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "cFinal": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              }
+            },
+            "scorers": {
+              "eligibility": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "autoRules": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "scoringTeamSize": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "scoringTeamScope": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "diverWeight": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "perEventScorerCap": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "divingPerEventScorerCap": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "scoringRelaysPerTeamPerEvent": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "relayEligibleFromScorerPool": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "relayLegsMustBeScorers": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              }
+            },
+            "entries": {
+              "maxIndividualPerSwimmer": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "maxRelayPerSwimmer": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "maxTotalPerSwimmer": {
+                "state": "set",
+                "value": "unlimited",
+                "provenance": {
+                  "kind": "user-edited",
+                  "editedAt": "2026-10-26T12:30:00.000Z",
+                  "previous": null
+                }
+              },
+              "timeTrialsCount": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "exhibitionCounts": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              },
+              "relayLegsAllowTimeTrials": {
+                "state": "pending",
+                "question": "No rule states this for a generic championship. NCAA Rule 7 publishes no pool, diver weight or entry limit.",
+                "blocks": [
+                  "requireComplete",
+                  "scoreMeet"
+                ]
+              }
+            }
+          },
+          "rev": 2,
+          "createdAt": "2026-10-26T12:00:00.000Z",
+          "updatedAt": "2026-10-26T12:30:00.000Z",
+          "origin": {
+            "kind": "local"
+          },
+          "derivedFrom": {
+            "builtinId": "generic",
+            "builtinVersion": 1
+          }
+        }
+      ]
+    },
+    "sessionPresets": {
+      "keyPath": "id",
+      "indexes": {
+        "byName": {
+          "keyPath": "name",
+          "unique": false,
+          "multiEntry": false
+        }
+      },
+      "records": [
+        {
+          "id": "sp-1",
+          "name": "NSISC order copy",
+          "payloadVersion": 1,
+          "payload": {
+            "payloadVersion": 1,
+            "provenance": {
+              "kind": "user-stated",
+              "statedOn": "2026-10-25",
+              "wording": "Table C: NSISC Event Order",
+              "where": "plans/2026-10-25/00-USER-PLAN.md:55-76",
+              "verbatim": true
+            },
+            "events": [
+              {
+                "eventKey": "800 Freestyle Relay",
+                "gender": "both",
+                "format": {
+                  "kind": "timed-final",
+                  "session": {
+                    "day": 1,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "200 Individual Medley",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 2,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 2,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "50 Freestyle",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 2,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 2,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "1000 Freestyle",
+                "gender": "both",
+                "format": {
+                  "kind": "timed-final-split",
+                  "slowHeats": {
+                    "day": 2,
+                    "slot": "morning"
+                  },
+                  "fastHeat": {
+                    "day": 2,
+                    "slot": "evening"
+                  },
+                  "fastHeatSize": {
+                    "state": "set",
+                    "value": 8,
+                    "provenance": {
+                      "kind": "user-stated",
+                      "statedOn": "2026-10-25",
+                      "wording": "usually, its 8",
+                      "where": "plans/2026-10-25/README.md:52",
+                      "verbatim": false
+                    }
+                  },
+                  "smallFieldSession": {
+                    "state": "pending",
+                    "question": "Where the one heat swims when entries are at most the fast-heat size. The meet decides (R35).",
+                    "blocks": [
+                      "sessionLoad"
+                    ]
+                  }
+                }
+              },
+              {
+                "eventKey": "200 Medley Relay",
+                "gender": "both",
+                "format": {
+                  "kind": "timed-final",
+                  "session": {
+                    "day": 2,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "1-Meter Diving",
+                "gender": "Men",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 2,
+                    "slot": "afternoon"
+                  },
+                  "finals": {
+                    "day": 2,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "100 Butterfly",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 3,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 3,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "400 Individual Medley",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 3,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 3,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "200 Freestyle",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 3,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 3,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "400 Medley Relay",
+                "gender": "both",
+                "format": {
+                  "kind": "timed-final",
+                  "session": {
+                    "day": 3,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "3-Meter Diving",
+                "gender": "Women",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 3,
+                    "slot": "afternoon"
+                  },
+                  "finals": {
+                    "day": 3,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "500 Freestyle",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 4,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 4,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "100 Backstroke",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 4,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 4,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "100 Breaststroke",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 4,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 4,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "200 Butterfly",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 4,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 4,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "200 Freestyle Relay",
+                "gender": "both",
+                "format": {
+                  "kind": "timed-final",
+                  "session": {
+                    "day": 4,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "3-Meter Diving",
+                "gender": "Men",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 4,
+                    "slot": "afternoon"
+                  },
+                  "finals": {
+                    "day": 4,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "100 Freestyle",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 5,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 5,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "200 Backstroke",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 5,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 5,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "200 Breaststroke",
+                "gender": "both",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 5,
+                    "slot": "morning"
+                  },
+                  "finals": {
+                    "day": 5,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "1650 Freestyle",
+                "gender": "both",
+                "format": {
+                  "kind": "timed-final-split",
+                  "slowHeats": {
+                    "day": 5,
+                    "slot": "morning"
+                  },
+                  "fastHeat": {
+                    "day": 5,
+                    "slot": "evening"
+                  },
+                  "fastHeatSize": {
+                    "state": "set",
+                    "value": 8,
+                    "provenance": {
+                      "kind": "user-stated",
+                      "statedOn": "2026-10-25",
+                      "wording": "usually, its 8",
+                      "where": "plans/2026-10-25/README.md:52",
+                      "verbatim": false
+                    }
+                  },
+                  "smallFieldSession": {
+                    "state": "pending",
+                    "question": "Where the one heat swims when entries are at most the fast-heat size. The meet decides (R35).",
+                    "blocks": [
+                      "sessionLoad"
+                    ]
+                  }
+                }
+              },
+              {
+                "eventKey": "400 Freestyle Relay",
+                "gender": "both",
+                "format": {
+                  "kind": "timed-final",
+                  "session": {
+                    "day": 5,
+                    "slot": "evening"
+                  }
+                }
+              },
+              {
+                "eventKey": "1-Meter Diving",
+                "gender": "Women",
+                "format": {
+                  "kind": "prelims-finals",
+                  "prelims": {
+                    "day": 5,
+                    "slot": "afternoon"
+                  },
+                  "finals": {
+                    "day": 5,
+                    "slot": "evening"
+                  }
+                }
+              }
+            ]
+          },
+          "rev": 1,
+          "createdAt": "2026-10-26T12:00:00.000Z",
+          "updatedAt": "2026-10-26T12:00:00.000Z",
+          "origin": {
+            "kind": "local"
+          },
+          "derivedFrom": {
+            "builtinId": "nsisc-table-c",
+            "builtinVersion": 1
+          }
+        }
+      ]
+    },
+    "settings": {
+      "keyPath": "key",
+      "indexes": {},
+      "records": [
+        {
+          "key": "fetchPosture",
+          "value": "on-click",
+          "rev": 2,
+          "updatedAt": "2026-10-26T12:30:00.000Z"
+        },
+        {
+          "key": "theme",
+          "value": "dark",
+          "rev": 1,
+          "updatedAt": "2026-10-26T12:00:00.000Z"
+        }
+      ]
+    },
+    "swimmerHistory": {
+      "keyPath": "swimmerId",
+      "indexes": {
+        "byFetchedAt": {
+          "keyPath": "fetchedAt",
+          "unique": false,
+          "multiEntry": false
+        }
+      },
+      "records": [
+        {
+          "swimmerId": "1001",
+          "payloadVersion": 1,
+          "payload": {
+            "synthetic": "storage fixture, not a swim history"
+          },
+          "fetchedAt": "2026-10-26T12:00:00.000Z",
+          "sourceUrl": "https://www.swimcloud.com/swimmer/1001/",
+          "parser": {
+            "name": "fixture",
+            "confidence": "high",
+            "warnings": []
+          }
+        }
+      ]
+    },
+    "tags": {
+      "keyPath": [
+        "meetKey",
+        "teamId",
+        "swimmerId"
+      ],
+      "indexes": {
+        "byMeet": {
+          "keyPath": "meetKey",
+          "unique": false,
+          "multiEntry": false
+        }
+      },
+      "records": [
+        {
+          "meetKey": "m-1",
+          "teamId": "48",
+          "swimmerId": "1001",
+          "role": "scorer",
+          "rev": 1,
+          "updatedAt": "2026-10-26T12:00:00.000Z"
+        },
+        {
+          "meetKey": "m-1",
+          "teamId": "58",
+          "swimmerId": "2002",
+          "role": "exhibition",
+          "rev": 2,
+          "updatedAt": "2026-10-26T12:30:00.000Z"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,1274 @@
+{
+  "initiative": "chrome-extension-redesign-2026-10-25",
+  "plan": "plans/2026-10-25/01-REDESIGN-PLAN.md",
+  "decisions": "plans/2026-10-25/README.md#decisions-user-2026-10-25",
+  "created": "2026-10-25",
+  "branch": {
+    "base": "main @ d7d5c976 (PR #7 merged 2026-10-25)",
+    "work": "nvitthanala/extension-redesign",
+    "pr7": "https://github.com/nvitthanala/omniswim-suite/pull/7 merged 2026-10-25 as d7d5c976; GitHub CI build-and-test passed (14m10s) incl. Postgres round-trip"
+  },
+  "gatesAtCreation": {
+    "ref": "nvitthanala/improvement-plan-2026-10-10 @ 12f3947e, oyster worktree",
+    "lint": "npm run lint: exit 0",
+    "scripts": "npm test: 89 passed, 0 failed, 1 skipped (Postgres round-trip, needs PG_TEST_URL)",
+    "vitest": "npx vitest run: 314 files passed, 1 skipped; 4932 tests passed, 25 skipped",
+    "ranBy": "lead, 2026-10-25"
+  },
+  "phases": [
+    {
+      "id": "P0",
+      "name": "Simulator recon",
+      "status": "done",
+      "doc": "plans/2026-10-25/02-SIMULATOR-RECON.md",
+      "log": [
+        "2026-10-25 lead (Opus 5.5) started recon; Claude in Chrome connected (Browser 1). User asleep; work continues unattended. Raw captures go to session scratchpad only.",
+        "Q1-Q6 answered and written to 02-SIMULATOR-RECON.md Findings. Store reachable from page (S1 yes). Bundle copy in session scratchpad recon/bundle/.",
+        "S2 sent once: 200, accepted; honored-vs-clamped unsettled (no pre-2023 data for roster). Q8-Q13, Q17-Q21 written. NSISC men 2026 = teams 58, 48, 412 (repo capture meet-356467).",
+        "Fixtures A-D captured from the store, sanitized in page, moved in checksummed 1000-char chunks, all 7 files verified (length + djb2). Offline re-score with SwimCloud rule: 0 mismatches, totals equal. Copied to tests/fixtures/swimcloud/simulator/ with README.",
+        "Swimmer-profile check for S2 hit a Cloudflare challenge; stopped per posture, tab closed."
+      ],
+      "resumePoint": "P0 done. Next in resumeOrder: P1.engine.",
+      "route": "Claude in Chrome, normal start (plan section 12), signed out",
+      "open": [
+        "S2 extent: server accepts a 7-year span (200) but honored-vs-clamped unsettled; user can open swimmer T58-S04 profile by hand (see recon Findings S1/S2 summary)",
+        "Q16: 1280 px and 390 px views not captured (window maximized; resize had no effect); recheck in P1 harness"
+      ],
+      "keyFindings": [
+        "No sign-in needed (signed out works)",
+        "Data: GET /api/teams/{id}/simulator/ per team, JSON, no swim dates, team-scoped swims, no conversion, no cuts",
+        "Scoring in browser (gf); points by index in full list; capped entries 0 and keep index (opposite of R41); no tie splitting",
+        "SwimCloud scoring16 == code TOP16, relay x2; no NSISC preset; no A-final or relays-scoring rule",
+        "Redux store reachable from MAIN world (S1 yes)",
+        "No CSP/XFO on /meetsimulator/; swimcloud.com 301 -> www; no service worker",
+        "3-year window = date-picker minDate only; Season mode reaches 10 seasons"
+      ],
+      "uncommitted": [
+        "plans/2026-10-25/02-SIMULATOR-RECON.md",
+        "docs/reference/REDESIGN_2026-10-25_STATE.json",
+        "tests/fixtures/swimcloud/simulator/ (7 JSON + README)",
+        "data/swimcloud-captures/simulator/ (gitignored raw evidence + manifest.json; never commit)"
+      ],
+      "reconImpacts": {
+        "P2": [
+          "Placement policy must be a setting: SwimCloud and legacy keep the place and award 0 to an over-cap/non-scorer entry; NSISC (R41) removes it and moves scorers up. SwimCloud and legacy share the place-kept shape, so P2 may reuse that path.",
+          "Tie policy must be a setting: the SwimCloud simulator does not split ties (results pages share a rank).",
+          "Per-event per-team scorer cap (maxScorersPerTeam) is separate from the meet-wide scoring-team size (18).",
+          "Add the page chosen entries (simulatedMeet.splashes) to SimSnapshot; otherwise parity needs SwimCloud auto-entry logic (not decoded).",
+          "Diving: take the highest score across eventcourse \"6\" and \"\" rows."
+        ],
+        "P3": [
+          "NSISC points = SwimCloud scoring16 = code TOP16 (no change). maxRelaysScoringPerTeam has no SwimCloud source; R25 stays the source.",
+          "Results pages mark non-scorers with an X exhibition label in the rank cell (no place); matches R41."
+        ],
+        "D1": [
+          "No CSP/XFO on /meetsimulator/: docked iframe allowed (recheck in harness).",
+          "matches: https://www.swimcloud.com/* only (bare host 301s to www).",
+          "Content script needs MAIN world to reach the Redux store; no service worker, page-thread XHR hook works."
+        ]
+      }
+    },
+    {
+      "id": "P1",
+      "name": "Foundation: merge, reorg, engine extraction, extension skeleton",
+      "status": "done (uncommitted); awaiting user checks",
+      "items": [
+        {
+          "id": "P1.merge",
+          "status": "verified-committed",
+          "note": "Merged d7d5c976; local main fast-forwarded"
+        },
+        {
+          "id": "P1.routing",
+          "status": "verified-committed",
+          "note": "codex available=true, citing R13. The oyster worktree still holds an uncommitted opencode entry for the same file; left out pending the user approval its own availableNote requires."
+        },
+        {
+          "id": "P1.reorg",
+          "status": "verified-committed",
+          "doc": "plans/2026-10-25/03-REPO-REORG.md",
+          "dispatch": "orca run_e227c1d43d7e task_d2a54ddb3b3e, codex, worktree C:/Users/nihar/orca/workspaces/omniswim-suite/redesign-reorg (branch nvitthanala/redesign-reorg, ff to 50d318dd). Attempts: ctx_6b84497f0e61 failed (worktree based on main, plan files missing); ctx_93e03ee451f3 failed (Codex update menu); ctx_a73688b491b3 running. Codex baseline in its worktree: vitest 4892 passed / 65 skipped (311+4 files; extra skips need gitignored local data); run-tests.mjs did not exit there. Dispatch marked failed (turn unobserved) but the terminal is alive; follow-up sent to term_b1cfdf6c with the worktree baseline as target and the F15 source-scan fix.",
+          "commit": "d9f5c894 (Codex moves) + 8109785f (review fix-up)",
+          "note": "Codex dispatch ctx_a73688b491b3 released. Claude architect review found: Python settings path legacy/legacy (fixed + pytest), 3 moved tests reading legacy/data (silent skips, fixed), 2 source scans ENOENT on fresh checkout (fixed, non-vacuity asserts), skip budget split (legacy/tests/skip-budget.json + --config/--budget flags), Stryker includes legacy/tests, chart scan covers legacy, e2e/harness copy scoring_settings, harness EXTENSION_DIR, vitest double run in CI, eslint . minus legacy, .bat launchers resolve repo root, data/training kept ignored, dead root playwright.config.ts removed. Also: test_scoring_preset_routes now uses a temp data copy (it had started the server on the real data/ and migrated data/omniswim.db to v9; backup data/omniswim-pre-v9-20261025T212107Z.db). Main clone had 382 stale CRLF working files; re-checked out as LF.",
+          "followUps": [
+            "Roster suggester: conference-scale (8 teams) solve time not measured. A 21-swimmer ILP takes about 0.4 s in Node.",
+            "package-lock.json stale extraneous entries for moved workspaces: regenerate on a clean clone",
+            "active tests that guard only legacy code (uiAmberRatchet, uiCaseAndColorRatchet, navigationTargets, tests/harness, test_chart_bundle) belong in legacy/ eventually",
+            "gates must run with full local data: the main clone has only part of the captures; oyster worktree data is the full set"
+          ],
+          "verifiedBy": [
+            "fresh worktree at d9f5c894 + fix-up, oyster gitignored data copied in, SKIP_BUDGET_ENV=local, no Postgres: npm ci 0, lint 0, lint:legacy 0, build 0",
+            "vitest active 2047 passed / 0 skipped + legacy 2885 / 25 = 4932 / 25 (baseline 4932 / 25)",
+            "scripts active 65 / 0 skipped + legacy 24 / 1 = 89 / 1 (baseline 89 / 1); playwright e2e PASS",
+            "skip budgets (local column): active 0 of 0, legacy 25 of 25",
+            "legacy/backend: ruff clean, pytest 63 passed (includes test_scoring_settings_location.py)",
+            "test_scoring_preset_routes leaves data/backups and data/omniswim.db-wal untouched",
+            "NOT verified: CI column of both budgets, the Postgres tests, the harness step (CI runs only on PRs and main)"
+          ]
+        },
+        {
+          "id": "D1",
+          "status": "done-uncommitted",
+          "owner": "architect",
+          "what": "build tooling and extension layout",
+          "note": "esbuild per entry; manifest skeleton; recon decision table in D3 spec 2.7",
+          "recon": "D3 2.7 \"Recon outcome\" table filled 2026-10-25 from recon Q5, S1, Q19-Q21: JSON via XHR + Redux store; MAIN world at document_start, one script hooks XHR/fetch (path ^/api/teams/d+/simulator/$) and reads the store on mount; matches www only; no host_permissions/DNR; iframe not blocked (recheck in P1 harness); R7 wider window deferred until S2 extent settles."
+        },
+        {
+          "id": "D2",
+          "status": "verified-committed",
+          "owner": "architect",
+          "what": "packages/engine public API",
+          "dispatch": "claude architect (background), output -> plans/2026-10-25/D2-ENGINE-API.md",
+          "doc": "plans/2026-10-25/D2-ENGINE-API.md",
+          "note": "Spec by architect, written in by the lead. Findings folded: F13 scoring-team size now pending (plan F2), F7/Q-D3 Table C distance format (plan F3 acceptance), F14 D3 import rule 4, F8 recon Q17, F12 docs/INVARIANTS.md #5, F15 sent to the reorg worker. Not code; nothing to test yet."
+        },
+        {
+          "id": "D3",
+          "status": "verified-committed",
+          "owner": "architect",
+          "what": "IndexedDB schema v1 + migrations",
+          "dispatch": "claude architect (background) with D1 pre-recon part and S3, output -> plans/2026-10-25/D3-STORAGE-AND-BUILD.md",
+          "doc": "plans/2026-10-25/D3-STORAGE-AND-BUILD.md",
+          "note": "Spec by architect; lead wrote it in verbatim in substance and folded its 9 plan changes into 01-REDESIGN-PLAN.md 2/3.2/3.3/3.4/3.5 and recon Q19-21. Not code; nothing to test yet."
+        },
+        {
+          "id": "S3",
+          "status": "verified",
+          "what": "content-script worker strategy",
+          "note": "Primary: worker in extension page (tab or docked iframe). Settled by harness tests/extension-harness/s3-workers.spec.ts in P1.skeleton. Harness dispatched 2026-10-26 as P1.harness.",
+          "result": "Option D confirmed by harness (both CSP variants); runtime.connect reaches the iframe directly"
+        },
+        {
+          "id": "S4",
+          "status": "verified",
+          "what": "HiGHS wasm size and solve time in MV3",
+          "dispatch": "orca task_a527c6461950, opencode2, worktree .../redesign-s4-highs (ff to 50d318dd). ctx_72ffd7179d13 stopped (Flint 40B endpoint down; worktree lacked opencode.json); ctx_b77f91e238a4 running.",
+          "note": "highs 1.15.4: wasm 3,531,401 B + 168,432 B loader, 36 ms load. Formulation A (column-to-z links): 20ev/60sw optimal 18-47 s; 40ev/100sw no proof in 120 s. Formulation B (x[s,e] assignment vars): 20ev optimal 1.0 s, 40ev optimal 3.0 s (lead rerun, structured synthetic values). D4 must use B. Table in 01-REDESIGN-PLAN.md F4. Not yet measured inside the extension worker. spikes/ not committed.",
+          "verifiedBy": [
+            "lead reran formulation A with structured values: 20ev optimal 30-47 s, 40ev time limit (confirms OpenCode order of magnitude)",
+            "lead ran formulation B: 20ev 1.0 s, 40ev 3.0 s, both Optimal; 20ev objective 691 equals A optimum"
+          ]
+        },
+        {
+          "id": "P1.engine",
+          "status": "verified-uncommitted",
+          "owner": "executor",
+          "note": "Spec: D2-ENGINE-API.md sections 2 (steps 0/A/B/C) and 2.5 (E1-E7). Base on the reorg commit.",
+          "workspace": "main clone (has the full local data: same meets.json sha as oyster, 625 capture files vs 367). No worktree, no commits (user has not asked).",
+          "identityCheck": "No commits, so E2 R100 is replaced by: each engine file sha256 == sha256 of git show HEAD:packages/core/src/<p>; each shim is exactly the 2 lines of D2 2.2. Orchestrator runs it.",
+          "steps": {
+            "step0": {
+              "status": "done items 1-4; item 5 (E1 fingerprint) in executor dispatch A",
+              "baseline": "docs/reference/P1_ENGINE_BASELINE.json (per-file vitest pass/skip, per-script PASS/SKIP)",
+              "results": [
+                "npm ci 0",
+                "npm run lint 0",
+                "vitest active 2047/0 + legacy 2885/25 = 4932/25 (D2 expected 4932/25)",
+                "scripts active 65/0 + legacy 24/1 = 89/1 (expected 89/1)",
+                "skip budget local 25/25",
+                "golden harness: golden-after-F1.json byte-identical (git diff --exit-code 0)"
+              ],
+              "ranBy": "lead, 2026-10-25",
+              "e1": {
+                "status": "built, frozen",
+                "files": [
+                  "tests/engineExtractionFingerprint.test.ts",
+                  "tests/fixtures/engineExtractionFingerprint.json (106 hashes)"
+                ],
+                "deviations": [
+                  "theoretical-meet fixture dir is a capture store, not workspaces: decision (b), generator legacy/scripts/gen_engine_fingerprint_workspace.ts with theoreticalMeetGolden.test.ts:99-100 params -> tests/fixtures/engineExtractionFingerprintTheoretical.workspace.json, separate test tests/engineExtractionFingerprintTheoretical.test.ts",
+                  "optimizer activeEntryIds are uuids: projected to plan positions (accepted)",
+                  "non-discriminating cases kept, labelled in header: optimize-undo-workspace has no women rows; applyWhatIf on/off identical; NSISC vs GENERIC_TOP16 calculatePoints identical",
+                  "buildCutlineTag on swim rows only (diving rows carry points, not clock standards)"
+                ],
+                "verifiedByExecutor": "109 passed; hashes identical across processes; 7 planted core mutations each failed the test, restored byte for byte"
+              }
+            },
+            "A": {
+              "status": "verified-uncommitted",
+              "agent": "executor a6132e4936c50409d (resume with SendMessage; B and C go to the same agent after A is verified)",
+              "executorReport": {
+                "vitestActive": "2172/0 (2047+125)",
+                "vitestLegacy": "2885/25",
+                "scripts": "65/0 + 24/1",
+                "engineLint": "pass",
+                "stryker_ncaaScoringRules": "693 mutants: 472 killed, 6 timeout, 214 survived, 1 no coverage (no comparable baseline)",
+                "canary": "react+fetch in course.ts fails enginePurity, engine tsc, eslint; does NOT fail raceAnalysisPurity"
+              },
+              "orchestratorChecks": [
+                "identity.cjs: 17 moved, 0 problems (byte-identical to HEAD, shims exact)",
+                "golden-after-F1.json unchanged after executor harness run",
+                "config diffs read: eslint engine+extension blocks, tsconfig paths, core dep, lock, stryker 1 path, 2 JSON readers repointed",
+                "full gates rerun by lead: lint 0, engine lint 0, vitest active 2172/0, legacy 2885/25, scripts 65/0 + 24/1, golden byte-identical; per-file identical to baseline + 3 new files (fingerprint 109, theoretical 9, enginePurity 7)"
+              ],
+              "frozen": {
+                "tests/engineExtractionFingerprint.test.ts": "1e2feac9 (header edited after hashing; hash JSON 64f41b1e unchanged)",
+                "tests/fixtures/engineExtractionFingerprintTheoretical.json": "3db114bb",
+                "workspace fixture": "f7c3289e"
+              },
+              "followUpsForB": [
+                "vacuity test in engineExtractionFingerprint.test.ts depends on counters filled by other tests (fails alone; Stryker perTest risk): make it self-contained, hashes untouched",
+                "raceAnalysisPurity has no import ban: add react/node import patterns so E5 row 4 fires",
+                "wire npm run lint -w @omniswim/engine into root lint:types",
+                "stale header line asking orchestrator to confirm id projection"
+              ]
+            },
+            "B": {
+              "status": "verified-uncommitted",
+              "agent": "same executor",
+              "executorReport": {
+                "moved": "62 (61 ts + team_colors.json); engine 79 files; 61 shims; core JSON removed",
+                "repoints": "altitudeAdjustment, theoreticalMeetShellNits, relayLegCredits, optimizeStepOwnership (import+mock), test_cutlines (engine+core walk), test_cutline_tags, stryker 9 paths; each source scan guarded >1KB + named export",
+                "newTests": "tests/engineSingleInstance.test.ts (E4, 4 tests; replacing a shim with a copy fails all 4)",
+                "followUpsDone": "vacuity test self-contained; raceAnalysisPurity import ban; lint:types runs engine lint",
+                "E6": "relayScoring 161 mutants: 144 killed, 0 timeout, 11 survived, 6 no coverage (expected 145/0/10/6); extra survivor L185 rosterLookup && usesScorerRoster -> ||"
+              },
+              "frozenSha8": {
+                "tests/engineExtractionFingerprint.test.ts": "cd8e9a47",
+                "tests/engineExtractionFingerprintTheoretical.test.ts": "b9dbece2",
+                "tests/fixtures/engineExtractionFingerprint.json": "64f41b1e",
+                "tests/fixtures/engineExtractionFingerprintTheoretical.json": "3db114bb",
+                "tests/fixtures/engineExtractionFingerprintTheoretical.workspace.json": "f7c3289e"
+              },
+              "orchestratorChecks": [
+                "identity.cjs: 79 moved, 0 problems",
+                "golden-after-F1.json unchanged",
+                "full gates: lint 0 (incl engine tsc), vitest active 2176/0, legacy 2885/25, scripts 65/0 + 24/1; per-file identical to baseline + 4 new files",
+                "E5 canaries (run via node --import tsx): cutlines.ts -> test_cutlines FAIL; cutlineTags.ts and teamDivisions.ts -> test_cutline_tags FAIL; NCAA_ALTITUDE_ADJUSTMENT_TABLE in engine utils.ts -> altitude test FAIL; import react in course.ts -> enginePurity FAIL, raceAnalysisPurity FAIL, eslint FAIL, engine tsc PASSES (tsc resolves react; tsc half guards DOM globals only). All restored, cmp clean."
+              ],
+              "e6Check": "HEAD-copy Stryker was killed by Claude Code for low system memory at 144/161 (partial, inconclusive); not restarted per harness rule. ~12 node.exe processes (~6 GB) remain; command lines unreadable (no wmic, no PowerShell) so none killed. Replacement check: L185 mutant applied by hand in HEAD copy, full active+legacy vitest with --maxWorkers=2 (running). If no test fails at HEAD either, the 144/11 delta predates the move. RESULT: at HEAD with the L185 mutant, active 2046 pass / 1 fail (demoSeed git-tracked check; archive copy has no git, unrelated), legacy 2885/0. No test kills L185 pre-move either: 144/0/11/6 drift predates the move (MUTATION_RESULTS_2026-10-14 ran on the pre-reorg tree). E6 accepted.",
+              "mockGrep": "vi.mock/vi.spyOn on moved paths: none left (two core mocks target optimizeClient and scenarioDiffClient, which stay in core)"
+            },
+            "C": {
+              "status": "verified-uncommitted",
+              "advisor": "NSISC points stay pending (Q-NSISC-points); E5 row 4 fix = engine lint runs eslint; determinism ban in new dirs; P1 items only; table C/D rows from 00-USER-PLAN cited lines; full generic sha from manifest",
+              "executorReport": {
+                "vitestActive": "2261/0 (+85)",
+                "engineFiles": "93 (79 moved + 14 new)",
+                "newTests": [
+                  "engineModel",
+                  "engineLegacyBridge",
+                  "engineNsiscDrift",
+                  "engineBuiltinVersions",
+                  "engineTestPresets.ts helper",
+                  "enginePurity scanDeterminism"
+                ],
+                "rootExports": "17 values + types (see executor report); bridge only at @omniswim/engine/rules/legacyBridge (LEGACY_UNLIMITED, toLegacyScoringSettings)",
+                "pending": {
+                  "nsisc": "individual/relay/diving points (+ relayEligibleFromScorerPool n/a)",
+                  "generic": "21 paths",
+                  "tableC": "smallFieldSession on 1000/1650",
+                  "tableD": "U:85-87 rows (R29)"
+                },
+                "openChoices": [
+                  "divingPerEventScorerCap same-as-swimming (D2 printed {cap:unlimited}, not a valid type value)",
+                  "bridge throws when swim/dive numeric caps differ in overCap",
+                  "D9 cites scoringDefaults.ts:122, statedOn 2026-10-10",
+                  "Table C 23 rows; dive keys 1-Meter/3-Meter Diving",
+                  "bridge not exported from root"
+                ]
+              },
+              "leadChecks": [
+                "golden unchanged",
+                "identity 79/0",
+                "frozen fingerprint hashes intact",
+                "engineBuiltinVersions reads plans/2026-10-25/00-USER-PLAN.md + README.md: both tracked and unmodified",
+                "full gates rerun by lead (--maxWorkers=4): lint 0 (engine tsc+eslint), vitest active 2261/0, legacy 2885/25, scripts 65/0 + 24/1, golden byte-identical; per-file = baseline + 8 new engine test files (builtinVersions 26, fingerprint 109, theoretical 9, legacyBridge 15, model 34, nsiscDrift 5, purity 12, singleInstance 4)",
+                "after fixes, lead reran: identity 79/0; frozen hashes intact; lint 0; vitest active 2268/0, legacy 2885/25; scripts 65/0 + 24/1; golden byte-identical; per-file baseline + 8 engine files (builtinVersions 28, fingerprint 109, theoretical 9, legacyBridge 20, model 34, nsiscDrift 5, purity 12, singleInstance 4)"
+              ],
+              "audit": {
+                "by": "architect (Opus), read-only, 2026-10-26",
+                "verdict": "accept with fixes",
+                "blocking": [
+                  "F1 D9 provenance: statedOn 2026-10-12, source IMPROVEMENT_PLAN_2026-10-10_STATE.json:154 (lead verified)",
+                  "F2 Table D pending text misstates R29 (lead verified README:46)",
+                  "F3 bridge emits settings legacy scorer throws on: own/unlimited dive -> 999 with meet pool; per-event cap 0; numeric per-event cap with meet pool (individualScoring.ts:258-281)"
+                ],
+                "nonBlocking": [
+                  "F4 BUILTIN_TABLE_D is an array (D2 prints single) - deviation, amend D2",
+                  "F5 extra exports parseProvenance, parseSetting, RulePresetErrorCode, RulePresetError.paths - additive, amend D2",
+                  "F6 exhibitionCounts wording"
+                ],
+                "openChoices": {
+                  "a": "right (amend D2 s4)",
+                  "b": "right but incomplete (F3)",
+                  "c": "wrong (F1)",
+                  "d": "right",
+                  "e": "right"
+                },
+                "clean": "scope, parseCap, no ?? fallbacks, no conference, TimeValue|null, stripSwimCloudData, pins, drift 4 exceptions, Table C 23 rows, Table D 19 set rows, generic sha"
+              },
+              "fixes": {
+                "done": "F1 D9 provenance (2026-10-12, IMPROVEMENT_PLAN_2026-10-10_STATE.json:154); F2 Table D pending text quotes R29 (+test vs README:46); F3 bridge refuses cap<1 and per-event cap with meet pool, own/unlimited dive writes nothing beside unlimited swimming (4 tests failed before, pass after; 200 generated presets each score a swim and a dive); F6 exhibitionCounts cites scoringDefaults.ts:85-86",
+                "hashes": {
+                  "nsisc_v1": "d753a428...72348",
+                  "tableD_v1": "ad287084...80359"
+                }
+              }
+            }
+          },
+          "resumePoint": "P1.engine done (uncommitted). Next: P1.skeleton.",
+          "docDebt": [
+            "stale core paths in comments: legacy/backend/pdf_parser.py:40,:1238; README.md:243,:259; data/*/manifest.json descriptions; some test comments"
+          ],
+          "d2Amendments": [
+            "3.12 BUILTIN_TABLE_D is readonly Builtin<TableDPreset>[]",
+            "s4 divingPerEventScorerCap = {kind:same-as-swimming} (R27); {cap:unlimited} is not a valid union value",
+            "3 public API adds parseProvenance, parseSetting, RulePresetErrorCode, RulePresetError.paths",
+            "E5 row 4: engine lint = tsc + eslint (tsc cannot catch a resolvable import)",
+            "E2: content-hash identity vs HEAD instead of R100 (no commits)",
+            "E6 relayScoring 161: 144/0/11/6 (L185 survives pre-move too)",
+            "recorded in D2 section 8 (2026-10-26)"
+          ],
+          "apiSurface": "root @omniswim/engine: values BUILTIN_RULE_PRESETS, BUILTIN_SESSION_PRESETS, BUILTIN_TABLE_D (array), RulePresetError, builtinRulePreset, capAllows, editSetting, entryKey, formatHundredths, parseCap, parseProvenance, parseRulePreset, parseSetting, parseTimeText, pendingPaths, requireComplete, stripSwimCloudData; types per D2 3.1-3.4, 3.6, 3.7, 3.11, 3.12. Subpath ./rules/legacyBridge: LEGACY_UNLIMITED, toLegacyScoringSettings. Extension imports the root only (eslint rule).",
+          "notCommitted": "All P0, D1 and P1.engine work is uncommitted in the main clone; user has not asked for commits.",
+          "crossProviderReview": {
+            "status": "done",
+            "provider": "codex via Orca",
+            "run": "run_7bb00e2eebad",
+            "task": "task_b09d09dbbdbf",
+            "dispatch": "ctx_17225310ce2d",
+            "terminal": "term_0732e751-f61e-4066-97f0-f4794e377f49",
+            "output": "docs/reference/P1_ENGINE_CODEX_REVIEW.md (only file it may write)",
+            "note": "launch quirk again: brief left as unsent draft; sent Enter; now running. Codex quota ~67% remaining (usedPct 33).",
+            "verdict": "accept, no findings",
+            "file": "docs/reference/P1_ENGINE_CODEX_REVIEW.md",
+            "leadNote": "shallow: ~2.5 min, no counterexamples or line citations; counts as the cross-provider sign-off, the Opus architect audit (3 blocking findings, fixed) is the substantive review",
+            "released": true
+          }
+        },
+        {
+          "id": "P1.skeleton",
+          "status": "verified-uncommitted (live unpacked load pending: user)",
+          "owner": "worker (Sonnet)",
+          "agent": "worker ad3bb516c860372bd (resume via SendMessage)",
+          "scope": "D3 section 6 item 1 only: build skeleton, 5 entries, manifest+key, T-B1..T-B9, bridge per D3 2.7 recon outcome (XHR/fetch hook + store read, SimSnapshot incl. simulatedMeet.splashes), overlay validates+logs, optimizer.worker placeholder error, jsdom bridge test. IndexedDB schema v1 (item 2) is a separate later dispatch.",
+          "decisions": [
+            "build:extension -> apps/extension/build.mjs; legacy -> build:extension:legacy; CI build step moves before Test and vitest (T-B3 fails under CI without dist)",
+            "esbuild pinned exactly 0.28.2 (lock version)",
+            "private key at C:/Users/nihar/.omniswim/extension-key.pem, *.pem gitignored",
+            "loads-unpacked check is the user (developer mode is a browser settings change); jsdom test is the automated stand-in"
+          ],
+          "advisor": "plan reviewed 2026-10-26",
+          "workerReport": {
+            "snapshot": "teams[], swimmers|null, swims|null (kind ind/split/leadoff/relay), settings (SETTINGS_KEYS in src/shared/protocol.ts + inactiveSwimmers ids), splashes|null (simulatedMeet.splashes), totalScores|null; null = not loaded yet, never empty",
+            "deviations": [
+              "sim-bridge built with minifyWhitespace+minifySyntax (4906 B vs 5000 cap; 7.1 KB unminified) against D3 2.2 minify:false - ratified by lead (no identifier mangling)",
+              "dist has dashboard.css byproduct (9 files)",
+              "happy-dom instead of jsdom (jsdom not installed)",
+              "schema: points optional; unverified isRelay/isDiving/exhibition dropped; splash id/legposition/relay_id from archived bundle not live capture"
+            ],
+            "found": [
+              "sim-overlay.js ~800 KB, mostly zod: consider zod/mini",
+              "zod new F() probe disabled by z.config({jitless:true}), asserted by a test; T-B7 regex cannot see aliased Function"
+            ]
+          },
+          "leadChecks": [
+            "identity 79/0 and frozen fingerprint hashes intact",
+            "only 17 apps/extension files untracked under apps/; private key at C:/Users/nihar/.omniswim/extension-key.pem, not in repo; *.pem ignored; dist ignored",
+            "ci.yml: new build before Test; legacy build renamed step",
+            "fresh build 0: 5 entries + manifest, dashboard.html, light.css, dashboard.css; bridge 4906 B",
+            "lint 0; vitest active 2301/0 (2268 + extensionBridge 22, freshness 4, boundaries 7), legacy 2885/25; scripts 65/0 + 24/1; legacy build byte-identical bundles; golden byte-identical",
+            "after fixes: identity 79/0; build 0, bridge 4975 B; lint 0; vitest active 2312/0 (extensionBridge 33, freshness 4, boundaries 7), legacy 2885/25; scripts 65/0 + 24/1; golden unchanged"
+          ],
+          "userCheck": "Load unpacked from apps/extension/dist (chrome://extensions, Developer mode). Open https://www.swimcloud.com/meetsimulator/?teams=48,58 with console: expect [OmniSwim] SimSnapshot {...}; [OmniSwim] bridge error = store path changed; dropped a malformed bridge message (reason) = schema mismatch. Toolbar icon opens dashboard tab (host: tab).",
+          "audit": {
+            "by": "architect (Opus), read-only, 2026-10-26",
+            "verdict": "accept with fixes",
+            "findings": [
+              "1 XHR reuse: listeners accumulate, wrong URL label, reads other bodies (reproduced)",
+              "2 schema accepts rows missing Q5 keys; idOf null on missing team/swimmer (reproduced)",
+              "3 fetch(null/undefined) throws synchronously in wrapper; fetch path no status check (reproduced)",
+              "4 overlay no-write test vacuous (happy-dom lacks indexedDB; no chrome spies); Function-block part of jitless test vacuous",
+              "5 .osx-root rule dead (no stylesheet in shadow root); reset deferred to item 4",
+              "6 SimSnapshot lacks meetChanges, rosters, exhibition for P2 parity",
+              "7 legacy/docs string edits outside D3 6 scope list: ratified by lead"
+            ],
+            "clean": "manifest least privilege, CSP, WAR, public key only, T-B1..T-B9 non-vacuous, T-B3 CI order, rename callers, placeholder honest, no invented values"
+          },
+          "ratified": [
+            "bridge minifyWhitespace+minifySyntax (5 KB cap)",
+            "legacy/docs string edits for build:extension:legacy",
+            "sim-bridge also minifyIdentifiers (4975 B; 5768 B without) - cap kept, source readable in repo"
+          ],
+          "fixes": "audit 1-6 done: XHR per-send token + once + responseURL check; required Q5 row keys, missing team/swimmer posts error; fetch URL read in try, native promise unchanged, non-200 -> http-status; no-write test spies chrome.storage/runtime + indexedDB.open; dead .osx-root removed; SimSnapshot adds rosters {swimmers,swims}|null, settings.meetChanges, splash exhibition. 12 bridge tests failed before, pass after.",
+          "risks": [
+            "required splash keys are guesses from the archived bundle (id, eventtime nullable, relay_id/legposition optional): the live load may post a bridge error naming the path - fix the schema from that path, never loosen to optional silently",
+            "sim-overlay.js ~800 KB (zod); consider zod/mini later"
+          ]
+        },
+        {
+          "id": "P1.storage",
+          "status": "verified-uncommitted",
+          "owner": "executor (Sonnet)",
+          "agent": "executor a2afde234ad7aa36e (resume via SendMessage)",
+          "spec": "D3 section 5 + 6 item 2; D2 section 3 type names via @omniswim/engine root",
+          "phases": "a types+schema, b open+migrations (T-M), c repository+change bus, d export/import (T-E), e T-P1",
+          "baseline": "lint 0; active 2312/0; legacy 2885/25; scripts 65/0 + 24/1",
+          "usageNote": "dispatched with Claude 5h window at 77% (resets 2026-10-26T12:20Z = 7:20am Central); if limit hits: log, check tree, resume this agent via SendMessage after reset",
+          "executorReport": {
+            "files": "apps/extension/src/storage/{schema,errors,migrations,open,repo,changeBus,validate,sourceManifests,exportImport,presets,index}.ts",
+            "tests": "extensionStorage{Migrations,Export,Presets,Repo,Validate,Boundary} (+67), fixtures tests/fixtures/extension-db/{v1,v1.expected-current,FROZEN}.json, helpers tests/helpers/extensionDb.ts + extensionRecords.ts (ratified by lead)",
+            "stores": "meta(key), settings(key), rulePresets(id; byName), sessionPresets(id; byName), meets(meetKey; byUpdatedAt), tags([meetKey,teamId,swimmerId]; byMeet), lineups(lineupId; byMeet, byUpdatedAt), swimmerHistory(swimmerId; byFetchedAt), rosters([teamId,seasonId,gender]; byFetchedAt)",
+            "api": "openOmniDb, createStorageRepo (get/list/put/delete/putCache with expectedRev), change bus (memory + chrome.storage), exportData/importData, presets resolve/list/newerBuiltinVersion, validateRecord/assertValidRecord, toSwimCloudId",
+            "gates": "build 0; lint 0; active 2379/0; legacy 2885/25; scripts 65/0 + 24/1",
+            "plants": "16, all caught",
+            "deviationsForArchitect": "a-h (see audit brief)",
+            "found": [
+              "T-B6 storage regex in extensionBundleBoundaries matches nothing (covered by extensionStorageBoundary)",
+              "idb@8 openDB ignores injected factory; async upgrade reject does not abort tx (handled)"
+            ],
+            "notBuilt": "SW osx/storage dispatcher (sw/), settings-read helper"
+          },
+          "audit": {
+            "by": "architect (Opus), read-only",
+            "verdict": "accept with fixes",
+            "blocking": [
+              "open.ts: async migration failure still opens DB at new version (reproduced)",
+              "changeBus: out-of-order/lost notice never recovered (reproduced)"
+            ],
+            "low": [
+              "validateRecord(meta) TypeError",
+              "exportedAt not strict ISO",
+              "export not single transaction",
+              "lineup ids accept 0123",
+              "T-B6 storage regex vacuous"
+            ],
+            "deviationsRuled": "a-h all accepted",
+            "openDecisions": [
+              "P4: rosters memberIds:[] rejected merges verified-empty with never-fetched (CLAUDE.md rule 4) - decide in P4",
+              "P3: teamIds non-empty may reject a draft meet before teams are picked"
+            ],
+            "tracked": [
+              "cache delete (5.7 clear cache) - later phase",
+              "SW osx/storage dispatcher - later phase"
+            ]
+          },
+          "fixes": "audit 1-7 done (8 of 9 new tests failed before, 9/9 after): open awaits migration chain + meta.db.schemaVersion===db.version (new DatabaseInconsistentError); change bus reports MissedChange unknown on rev gap; validateRecord guards store name; strict ISO exportedAt (isStrictIsoInstant); StorageRepo.listMany single-transaction export; lineup ids use SwimCloud id rule; T-B6 storage regex fixed + plant proof",
+          "leadChecks": [
+            "after fixes: identity 79/0; frozen hashes intact; build 0 (bridge 4975 B); lint 0; vitest active 2388/0, legacy 2885/25; scripts 65/0 + 24/1; golden unchanged; per-file baseline unchanged"
+          ]
+        },
+        {
+          "id": "P1.harness",
+          "status": "verified-uncommitted",
+          "owner": "worker (Sonnet)",
+          "agent": "worker a3edf15cdb3f6177d (resume via SendMessage)",
+          "scope": "D3 3 + 6 item 3: HiGHS 1.15.4 in optimizer.worker (2-var fixture solve), docked iframe with nonce + runtime.connect port (SW relay if needed), tests/extension-harness/s3-workers.spec.ts via scripts/run-extension-harness.mjs, synthetic fixture page, all other requests aborted; CSP variants none and default-src self; assertions 1-5 per variant",
+          "baseline": "lint 0; active 2388/0; legacy 2885/25; scripts 65/0 + 24/1",
+          "results": {
+            "variants": {
+              "1 no CSP": "1-6 PASS",
+              "2 default-src self; script-src self": "1-6 PASS"
+            },
+            "port": "chrome.runtime.connect reached the iframe directly on attempt 1; no SW relay needed; foreign nonce rejected",
+            "csp": "docked iframe loads under default-src self: D3 CSP table -> keep docked iframe, no side panel",
+            "timing": "wasm load ~30 ms; LP solve ~25 ms (incl warm-up); MIP ~6.6 ms",
+            "sizes": "highs.wasm 3,531,401; optimizer.worker.js 265,329; dashboard.js 721,959; sim-overlay.js 804,945; sim-bridge.js 4,975; service-worker.js 596"
+          },
+          "leadChecks": [
+            "clean npm ci with hand-edited lock: integrity verified",
+            "fresh build: dist incl highs.wasm",
+            "harness run by lead: both variants all PASS, 0 aborted",
+            "gates: lint 0; active 2398/0; legacy 2885/25; scripts 65/0 + 24/1; golden unchanged; identity 79/0",
+            "cleanup round (2026-10-26) rerun by lead: identity 79/0; fresh build; grep osxHarness over dist/ = no match, present only in dist-harness/dashboard.js; harness 2/2 PASS; lint 0; active 2399/0 (+1 T-B10); legacy 2885/25; scripts 65/0 + 24/1; golden unchanged"
+          ]
+        },
+        {
+          "id": "P1.shadow",
+          "status": "verified-uncommitted",
+          "owner": "worker (Sonnet)",
+          "agent": "worker a2831f9f5adc0bd3d (resume via SendMessage)",
+          "scope": "D3 4 traps 1-8 + tokens; light values only from recon Q15; dark and unrecorded tokens via CSS system colors; accent #rrggbb validated; tests a-f",
+          "resumePoint": "if interrupted: check apps/extension tree, rerun gates, SendMessage the agent",
+          "report": {
+            "files": [
+              "apps/extension/src/shared/theme.ts (new)",
+              "apps/extension/src/overlay/shadowStyle.ts (new)",
+              "overlay/overlay.ts",
+              "overlay/dockedPanel.ts",
+              "dashboard/main.tsx",
+              "static/dashboard.html",
+              "static dashboard.css (tokenCss(:root) output)",
+              "tests/extensionTheme.test.ts (new, a-f + css drift)",
+              "tests/extension-harness/s3-workers.spec.ts step 5"
+            ],
+            "api": "theme.ts: ThemePreference, ResolvedTheme, THEME_ATTRIBUTE, TOKEN_NAMES, LIGHT_TOKENS, DARK_TOKENS, tokenCss(scope), DARK_QUERY, isHexColor, applyAccent(el,hex):boolean, clearAccent(el), bindTheme(el,opts?):ThemeController{preference,resolved,setPreference,dispose}. shadowStyle.ts: ROOT_CLASS, SHADOW_CSS. overlay.ts: mountShadowHost(doc,opts?{theme,matchMedia}), themeOf(host), STOPPED_KEY_EVENTS, ShadowHostOptions.",
+            "deviations": [
+              "extra token --osx-accent-soft (color-mix of accent and surface)",
+              "applyAccent picks accent-fg black/white by WCAG luminance, not color-mix",
+              "an accent override also overrides the dark theme accent",
+              "dark accent = color-mix(#1565C0 65%, CanvasText)",
+              "--osx-good/warn/bad = CanvasText (neutral placeholder): Q15 records none and no system color means them"
+            ],
+            "gaps": [
+              "trap 8: iframe dashboard binds its own theme (always light); no preference crosses the boundary yet. Safe only while both are pinned light. P2/P3 must pass the theme to the iframe (URL param or port message).",
+              "keyboard guard is at the wrapper; a page capture-phase listener on window/document still runs first (inherent)."
+            ],
+            "workerGates": "lint 0; active 2427/0 (2399 + 27 theme + 1 lead bridge test); scripts 65/0; harness 2/2 variants PASS"
+          },
+          "leadReview": "read theme.ts, shadowStyle.ts, overlay.ts, dockedPanel.ts: light values match Q15 exactly; nonce/port code unchanged; files coherent despite reported backup slip",
+          "leadChecks": [
+            "final gate run 2026-10-26 (scratchpad/final/gate.sh): identity 79/0; build 0; probe not in dist; sim-bridge 4,993 B; harness 2/2 PASS; lint 0; vitest active 2427/0; legacy 2885/25; npm test 65/0; per-file compare vs P1_ENGINE_BASELINE OK; legacy scripts 25 entries match baseline",
+            "run was killed by the harness for low memory during test:legacy vitest tail / before golden; NOT restarted (rule). golden-after-F1.json unchanged on disk; no engine change this round"
+          ],
+          "crossReview": "Codex read-only (dispatch ctx_9eecacfbdd8e, no tests run): shadow traps, theme, accent validation, Q15 tokens and tests clean. One minor claim (empty final URL resolves against the page URL) is unreachable: content scripts match only /meetsimulator/*, which never matches ^/api/teams/d+/simulator/$, so an empty URL is refused. No change.",
+          "advisorAudit": "Opus advisor 2026-10-26: no code blocker; asked for scope check (done: only apps/extension, tests/extension*, state; golden byte-identical), D3 section 12 (done), cross-provider review (done), vault (done)."
+        },
+        {
+          "id": "P1.extReview",
+          "status": "done 2026-10-26; findings triaged",
+          "owner": "Codex via Orca (read-only, worktree current)",
+          "run": "run_028800fc49b9",
+          "dispatch": "ctx_4a93ee175805",
+          "terminal": "term_c8fdd10a-92f5-4b6c-aa3f-e2399487c1ad",
+          "brief": "scratchpad codex-ext-review.txt: bridge, shared protocol/schema, storage, optimizer worker/client/port, manifest; overlay excluded (P1.shadow editing)",
+          "resumePoint": "orca orchestration check --json; orca terminal read the terminal; triage findings, reproduce each before fixing",
+          "findings": [
+            "C1 minor, FIXED by lead: XHR response-url error posted the raw final (non-simulator) URL. Now posts the requested simulator URL. Test asserts the final URL never appears in posted messages.",
+            "C2 minor, DEFERRED to P2: optimizer worker accepts unbounded LP text and arbitrary HiGHS options. Only extension pages reach the worker (trusted code). P2 optimizer must cap model size and pin time_limit; recorded in notes.",
+            "Lead found (missed by Codex): fetch path had no final-URL check, so a redirected simulator fetch posted a non-simulator body. FIXED: fetch now fails response-url when sim(r.url) !== u, reads no body. New test; confirmed red without the check."
+          ],
+          "leadChecks": [
+            "tests/extensionBridge 34/34; new fetch test red with check removed, green restored",
+            "sim-bridge.js 4,993 B (budget 5,000; 7 B headroom - next bridge change must shrink something)"
+          ],
+          "note": "Codex review took ~2 min and was shallow (second time). Weight it accordingly."
+        },
+        {
+          "id": "P1.liveCheck",
+          "status": "verified 2026-10-26",
+          "date": "2026-10-26",
+          "userReport": "SimSnapshot posted (data null at first), then bridge error store-shape: missing store path: origRosters.48.relays.flystart; host dataset osxPanel connected, osxState error; panel covers the Options button when the window is narrow or split",
+          "findings": [
+            "F1 relay rows carry no flystart key (live store teams 48, 58; flystart never null elsewhere: splits true, ind/leadoff false). Fixed: bridge requires 8 keys on relays (ROW reordered, slice(0,8)); schema refine allows missing flystart only for kind relay. Tests: fixture inflation drops relay flystart (12 tests went red first), 2 new tests, schema variants for ind/split. Bridge 4,974 B.",
+            "F2 docked panel covered SwimCloud .btn-fab Options (fixed bottom 15 right 10, shown below 992 px). Fixed: panel geometry moved to shadow stylesheet; below 991.98 px anchors left, width min(360px, 100vw - 160px). Harness assertion 7 at 1280/800/390 against a synthetic FAB; confirmed red with the rule reverted."
+          ],
+          "gates": "lint 0; active vitest 2429/0; extension tests 161/0; scripts 65/0; harness 7/7 both variants. CI on e4dd3ffc passed (13m57s, includes legacy + golden).",
+          "notes": [
+            "Chrome tools cannot open chrome:// or chrome-extension:// pages: the user must press Reload on the extension card.",
+            "resize_window cannot un-maximize the window; inner width at full screen is 1534 CSS px. Q16 real-page widths still unmeasured."
+          ],
+          "resumePoint": "user reloads the extension; lead rechecks live in tab (javascript_tool: host dataset, console [OmniSwim]); then commit the fixes and continue with the answers backlog",
+          "liveRecheck": {
+            "bridge": "lead tab after user reload: osxState ready, no bridge error, team responses 48 and 58 captured; fresh snapshot: 66 swimmers, swims ind 256 / split 94 / leadoff 44 / relay 10 (relay rows without flystart), 110 splashes, totals 58: 193 (1st), 48: 91 (2nd)",
+            "panel": "user, own tab, 2026-10-26: panel moved left at narrow width, Options button works"
+          },
+          "observation": "In the Claude-in-Chrome automated tab the docked iframe was absent after connecting (osxPanel connected, pongs 1, wrapper empty), and inserting an extension iframe detached the debugger. Cause unverified. Implication: the automated tab is fine for reading the store and bridge; any live panel or dashboard check needs the user tab or the Playwright harness."
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "Read-only overlay + parity",
+      "status": "done: overlay, parity, in-page panel (d22375ee, ecb9960f)"
+    },
+    {
+      "id": "P3",
+      "name": "Rules (F2)",
+      "status": "mostly done: presets incl. nsisc v5/generic v2, scorer tags, suggested rosters, Apply (refuses NSISC: one page cap, R67). Open: R70 questions, cap-boundary tie rule"
+    },
+    {
+      "id": "P4",
+      "name": "Data sourcing (F1)",
+      "status": "partial: cut tags (51ab931e), LCM to SCY engine (8d188a27). Blocked on user fetch approval: LCM swims, wider window, roster season, relay splits"
+    },
+    {
+      "id": "P5",
+      "name": "Meet planner (F3)",
+      "status": "done at test level: 1daca28b, bad0de6f, 6ce422bd. Live UI check pending"
+    },
+    {
+      "id": "P6",
+      "name": "AutoBuilder (F4)",
+      "status": "engine A1-A9, prune fix 73800dd9, autoBuildObjective c6183e33; U1-a 88535957, U1-b 46c23705, Accept in mode terms 1d257e46. Done except a live check in Chrome (needs user E4-style approval)."
+    },
+    {
+      "id": "P7",
+      "name": "Dashboard, theming, charts, carry-overs",
+      "status": "C1 b55f9ede, C2 cc92734b, U-b ScoreChart 06187e69, U-d MeetReport+EntryCsvButton 188b3372 (components, not mounted). Next: U-a Shell (docked tabs Score/Chart/Build/Plan/Save, tab left nav, theme from settings, theme-state to page panel, one meetKeyFor), then U-c snapshots/diff/undo UI, then F (visual check both themes, Excel check)."
+    },
+    {
+      "id": "P8",
+      "name": "Opponent prediction, SwimCloud-wide hints",
+      "status": "pending"
+    },
+    {
+      "id": "P9",
+      "name": "Share-ready",
+      "status": "pending"
+    }
+  ],
+  "openQuestions": [
+    "Q3 New South ISC sources: search the web next session (R32)",
+    "Q4 answered by recon: simulator works signed out (Free plan inferred to work)",
+    "Q6 approve extra fetches after recon (R31)",
+    "Q-D1 rest: SwimCloud 16-place table equals code TOP16 (recon Q17); SwimCloud has no relays-scoring or A-final rule; R25/R26 stay the sources",
+    "Q-D2 rest: archive SwimSwam factors for 400-500, 800-1000, 1500-1650 if SwimCloud has no conversion (R29)",
+    "Q-NSISC-points: ANSWERED yes (R45). Shipped as nsisc v2 in commit 75dd5520. Ties split through legacyBridge into lib/individualScoring.ts:683.",
+    {
+      "id": "Q-semantic-colors",
+      "asked": "2026-10-26",
+      "question": "Q15 records no good/warn/bad color and SwimCloud has none to copy. Pick a source for --osx-good/--osx-warn/--osx-bad (or approve a named palette). Until then they are CanvasText and no UI may use them to tell states apart.",
+      "blocks": "any P2+ UI that colors cut tags or warnings",
+      "status": "light ANSWERED (R46), dark warn ANSWERED (R57: reuse the light pair). OPEN: dark good and bad (800 shades fail 4.5:1 on dark Canvas)."
+    },
+    {
+      "id": "Q-D2-swimswam",
+      "asked": "2026-10-26",
+      "finding": "https://swimswam.com/swimming-times-conversion-tool/ retrieved 2026-10-26 (HTTP 200, 183,623 B, sha256 78beb0ad343425971e037039657893ef11c7e343228ba73088a013c14636513a, not archived in repo). It publishes NO factors: the form posts to SwimSwam (server-side conversion) and the page says it converts using Colorado Timing's conversion factors. Values could only be inferred from form outputs, which the provenance rules forbid. A web search found no published Colorado Time Systems table. The archived NCAA D1 standards PDF (data/cutlines/sources) publishes SCM->SCY factors 400m->500y 1.153, 800m->1000y 1.153, 1500m->1650y 1.013, other 0.906, but these are 25 m course factors, not LCM.",
+      "question": "R29 LCM distance rows: (a) no estimate (R29 fallback), (b) look for Colorado Time Systems' own published table, (c) other source",
+      "blocks": "P4 Table D distance rows only",
+      "status": "ANSWERED 2026-10-26, see userAnswers Q-D2-swimswam"
+    },
+    "Q-classyear-source: no recon shows which SwimCloud page carries a class year; P4 must confirm it before RosterRecord.classYears is filled",
+    "Q-classyear-codes: D2 uses FR/SO/JR/SR/GR, legacy engine uses FR/SO/JR/SR/HS (HS = recruit); reconcile before recruits (R52)",
+    "Gap: the D3 5.7 \"export a backup\" prompt before a schema upgrade is not built; a P1 build cannot open a v2 database",
+    "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
+  ],
+  "resumeOrder": [
+    "RESUME (2026-10-31): S1 committed (see git log; D6 amendment 7). P7 and its follow-ups F2 and S1 are done. Unblocked follow-ups left in notes: planner-no-change-subscription, A9-gate-duplication, A8-explain-in-gate-reserve. Everything else needs the user: 34 questions in plans/2026-10-25/QUESTIONS_FOR_USER.md (I4 Excel check, D1-D5 fetch approvals).",
+    "RESUME (2026-10-31): tree clean at 188b3372 after full-gate checkpoint. Next: U-a Shell to Codex (brief: D6 section 1 and 5, amendments 1-2; mount AutoBuilderPanel in Build, ScoreChart in Chart, SessionPlannerEditor in Plan, Save tab with snapshot save incl. facts via captureReportFacts and tags; tab host left nav Meets/Presets/Settings with MeetReport + EntryCsvButton; theme from settings.theme + accent via applyAccent; panelProtocol theme-state; dedupe meetKeyFor). Then U-c. Workers idle: executor ad2051c440db6ce85, worker a32c73e6b18c0d4a1.",
+    "RESUME: A9 in flight (executor ad2051c440db6ce85). 1) git status. 2) If no report, SendMessage the executor. 3) Codex review, gates, advisor audit, commit. Then U1 per D5 amendment 7 (worker or Codex). User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md.",
+    "RESUME after the limit: 1) git status; diff packages/engine/src/autobuilder, tests/engineAutoBuild.test.ts, tests/helpers/nodeMipSolve.ts, plans/2026-10-25/D5-AUTOBUILDER.md (amendment 1 appended, uncommitted). 2) If the executor report is missing, resume it with SendMessage (A1 agent) rather than re-briefing. 3) npm run build:extension, then full gates; check defaultLimitsConfigC returns improved within 11 s, 3 runs. 4) Commit A1 + amendment as one commit (Codex J8 review: no defect, on the pre-amendment diff; re-review the amendment diff with Codex J terminal term_a6fd5787 first). 5) Next: D5 slice A2 (relays). Open user questions: D5 14.1-14.5, R70 x3, P4 fetch approval, cap-boundary tie rule.",
+    "RESUME (if interrupted 2026-10-29 afternoon): read N2 and J4 reports (orca orchestration inbox); review sessionLoad.ts against D2 3.11; rebuild + full gates; commit planner core, then planner UI.",
+    "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
+    "step 2: git status. Delete tmp-flake-load*.txt (Cursor K scratch, untracked) once K reports. Leave omniswim-suite/data/ out of commits.",
+    "step 3: npm run build:extension, then the full gates (lint, vitest --maxWorkers=4, npm test, golden, mutation, harness). extensionBuildFreshness should go green after the rebuild.",
+    "step 4: review and commit separately: (a) L engine relay checks after an architect review (rule schema change); (b) J extension followups (parity.ts files new); (c) K flake fix; (d) scripts/bench/rosterSuggestTiming.ts + PROVIDER_ROUTING.json (Cursor available, agent.ps1 workaround). Release dispatches ctx_1e5b5591c135 and ctx_68371d15afd3.",
+    "step 5: ask the user the inFlight[2026-10-29 round].userDecisions questions.",
+    "DONE: answers backlog (NSISC v2, storage fields, zod/mini, colors, conversion capture).",
+    "DONE: engine LCM->SCY (8d188a27)",
+    "DONE: P2 risk. profile_fastest_times answers without a challenge (bests only; see p2Risk).",
+    "DONE (d22375ee): P2 UI. Overlay forwards the validated snapshot over the nonce port and keeps the console log; dashboard re-scores and shows team totals plus the parity line. Codex wrote it; Claude reviewed (advisor audit). Gates green: vitest 2693, npm test 65, golden, harness 2/2.",
+    "DONE (24a0eee1): stored rule presets migrate on read, ties pending. Diff audit skipped: one-function mechanical change with a red test; no cross-provider review for the same reason.",
+    "NEXT: P3 rules per plan (preset editor and pickers). Then P4 sourcing (flyover, history, cut-tag wiring incl. estimated-cut tag, conversion-source picker hiding retired built-ins), then P5 planner.",
+    "DONE: P3.core-a over-cap removal (see p3CoreA). NEXT unblocked: P3.ui (preset editor, dropdowns) against the Results surface, budget permitting. P3.core-b waits on Q-roster-untagged.",
+    "2026-10-27 plan: (1) DONE abe52033 mixed-event fix. (2) R68 recon by the lead in Chrome: every-swim endpoint and relay splits. (3) R67 relay exhibition: scoring-relay limit with over-limit relays exhibition (executor). (4) P3.core-b roster mode per R65 (executor). (5) R66 design: write path into the SwimCloud page (architect), then P3.ui on the page.",
+    "DONE 2026-10-27: R68 recon (see r68Recon). NEXT: R67 relay exhibition, then P3.core-b (R65), then R66 write-path design, then P4 history adapter."
+  ],
+  "notes": [
+    "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
+    "oyster has an uncommitted PROVIDER_ROUTING.json change and untracked .opencode/ files; not part of PR #7.",
+    "PR #8 CI run 40259528508 passed (2026-10-26T02:44Z, 13m07s): every step green. Active vitest 2031 passed / 16 skipped, ci budget 16. Legacy vitest 2881 / 29, ci budget 29. Active scripts 63 / 2 skipped; legacy scripts 25 / 0 (the local skip runs in CI, Postgres service healthy). pytest 63 passed. Extension harness 7 passed. Build and extension build green.",
+    "P3 legacy behavior changes from R37/R41/R42, each with a failing test first and a golden update: non-scorers removed from places (D2 F18), relay legs checked against the roster (F19), no hardcoded relay limit (F17). Drift-test exceptions listed in D2 section 4.",
+    "2026-10-25: D2 Step 0 says commit E1 hashes; no commits this session, so the E1 test and hashes stay uncommitted and frozen after dispatch A.",
+    "P2 optimizer requirement (from Codex review C2, 2026-10-26): bound LP size and pin a HiGHS time_limit in the worker; do not let callers override output_flag or time_limit without a cap.",
+    {
+      "id": "gate-bundle-leak",
+      "note": "Bundle leak check: grep -l \"none_found_within_limits|restoreIdleRemovals\" apps/extension/dist/*.js must list only autobuilder.worker.js. Do not grep for highs/HiGHS: optimizer.worker uses HiGHS and dashboard.js has a HiGHS load label."
+    },
+    {
+      "id": "undo-accept-expect-absent",
+      "note": "AutoBuilder Accept is not undoable (U-c ruling 2026-10-31): undoing a tag delete needs putMany to expect an absent row (no rev exists after a delete). Add an expectAbsent op to putMany, then record Accept in the undo stack.",
+      "status": "closed 2026-10-31 (S1, D6 amendment 7)"
+    },
+    {
+      "id": "U-c-lineup-no-results",
+      "note": "U-c ruling 2026-10-31: saved lineups hold no results (D3, validate.ts:486), so only snapshots open a report, chart or diff. A later slice may re-score a lineup against its meet model if the coach wants lineup reports."
+    },
+    {
+      "id": "U-e-raw-db-no-bus",
+      "note": "importData and clearFetchedSwimCloudData write through a raw IDB handle (openOmniDb in tabHost), not the repo, so other contexts (docked panel, Meets, theme) see an imported settings or tags change only after a reload. Route through the repo or emit a change-bus notice.",
+      "status": "closed 2026-10-31 (S1, D6 amendment 7)"
+    }
+  ],
+  "decisionsAdded": "R14-R19 recorded 2026-10-25 (second user message): flyover user number; NSISC SwimCloud table, no per-event scorer cap; event order editable on simulator page; sessions advisory, prelims AM/finals later, timed finals; OpenCode added; Chrome fallback in plan section 12; R20-R33 recorded 2026-10-25 (third user message): split timed finals for 1000/1650, auto scorers with tag overrides, diving excluded from load, Table D truncate, team size 18, 2 scoring relays, A final 8, diving cap unlimited, relay swimmer takes a full scoring-team spot (not the halfRateRelaySwimmer flag), Table D distance rows dropped for SwimCloud then SwimSwam, Free SwimCloud account, Q6 after recon, search NSISC docs, keep omniswim-suite/data and all worktrees; R34-R44 recorded 2026-10-25 (fourth user message): relay share 1/4, fast heat top 8 seeds (small field per meet), relays evening timed finals, relay scores only with all four legs on the scoring team, auto scorers from A/B finals plus relay legs plus any split-timed-final heat (roster wins), non-scorers removed from places (legacy differs, D2 F18), relay limit is a setting (F17), A/B finals scorers only, C final 8 fastest non-scorers",
+  "userAnswers": [
+    {
+      "id": "Q-NSISC-points",
+      "answered": "2026-10-26",
+      "answer": "User: yes, exactly 20-17-16-15-14-13-12-11-9-7-6-5-4-3-2-1 individual and diving, relays x2, ties split. User adds: SwimCloud 16-place scoring preset matches it.",
+      "action": "engine nsisc v2 with provenance user-stated (2026-10-26) + 2026 NSISC results PDF evidence; SwimCloud scoring16 as parity reference"
+    },
+    {
+      "id": "Q-semantic-colors",
+      "answered": "2026-10-26",
+      "answer": "Material 800: good #2E7D32, warn #EF6C00, bad #C62828",
+      "action": "theme.ts light tokens; provenance user-chosen, not Q15; dark derives via color-mix"
+    },
+    {
+      "id": "Q6",
+      "answered": "2026-10-26",
+      "answer": "Extra SwimCloud requests only on a user click: one at a time, no background fetches, stop on any Cloudflare challenge"
+    },
+    {
+      "id": "Q-D2",
+      "answered": "2026-10-26",
+      "answer": "Approved: archive SwimSwam conversion factors for 400-500, 800-1000, 1500-1650 once, with manifest {url, sha256, retrievedAt}"
+    },
+    {
+      "id": "S2-intent",
+      "answered": "2026-10-26",
+      "answer": "User (verbatim intent): apply the date range so you can search an athlete's history in the selected event and project performance against the simulator field. The wide range also pulls in former swimmers not on the current roster; the expanded range is meant to pull historical swims only for athletes on the CURRENT season roster. Transitive to recruits: add a swimmer, project from their history, with conversions, historical swims, and rebuild the scoring roster if a recruit presents an edge. Swimmer 1130590 transferred into Henderson State, is a senior this year (SwimCloud lists otherwise); their 2022-23 swims were at a different school.",
+      "implication": "Team-scoped swims (recon Q8) mean a transfer's prior-school swims never arrive in a team simulator request. Full history needs per-swimmer requests (Q6: user click only). The 1130590 profile check cannot settle the 3-year clamp. Filter any wide team window to current-season roster members. SwimCloud class year can be wrong: needs a user override."
+    },
+    {
+      "id": "Q16",
+      "answered": "2026-10-26",
+      "answer": "Lead may un-maximize the user Chrome window, measure SwimCloud at 1280 and 390 px read-only, then restore it"
+    },
+    {
+      "id": "P4-empty-roster",
+      "answered": "2026-10-26",
+      "answer": "Allow memberIds:[] marked verified-empty with fetchedAt and source, distinct from not loaded"
+    },
+    {
+      "id": "P3-draft-meets",
+      "answered": "2026-10-26",
+      "answer": "Allow teamIds:[] as status draft; scoring and optimizer refuse a draft"
+    },
+    {
+      "id": "history-fetch",
+      "answered": "2026-10-26",
+      "answer": "One click per roster: Load history fetches each current-roster swimmer history sequentially, slow, with progress, cached (never refetch), stop on any Cloudflare challenge"
+    },
+    {
+      "id": "class-year",
+      "answered": "2026-10-26",
+      "answer": "Source class year from SwimCloud automatically; user may select and change it; the user value is stored, marked user-set, and wins"
+    },
+    {
+      "id": "recruit-id",
+      "answered": "2026-10-26",
+      "answer": "Recruits are added by SwimCloud swimmer link/ID only (not manual times, not legacy import)"
+    },
+    {
+      "id": "recruit-rebuild",
+      "answered": "2026-10-26",
+      "answer": "Rerun the optimizer with the recruit added; show point change and event moves; nothing changes until the user accepts"
+    },
+    {
+      "id": "zod-size",
+      "answered": "2026-10-26",
+      "answer": "Switch sim-overlay validation to zod/mini"
+    },
+    {
+      "id": "commit",
+      "answered": "2026-10-26",
+      "answer": "One commit per P0/P1 item on nvitthanala/extension-redesign"
+    },
+    {
+      "id": "push",
+      "answered": "2026-10-26",
+      "answer": "Push to draft PR #8 after committing"
+    },
+    {
+      "id": "next",
+      "answered": "2026-10-26",
+      "answer": "User does the live load check first and reports back; lead fixes what it finds; then move forward"
+    },
+    {
+      "id": "warn-contrast",
+      "answered": "2026-10-26",
+      "answer": "Lead corrected its claim: #EF6C00 is 3.08:1 on white, 2.95:1 on #FAFAFA. User chose: warn is a fill only (badge/chip background with dark text, ~6.8:1), never a text or thin-icon color. Green 5.13:1, red 5.62:1 pass as text."
+    },
+    {
+      "id": "dark-warn",
+      "answered": "2026-10-26",
+      "answer": "yes: carry the light warn pair (#EF6C00 fill, #000000 text) into dark mode. Good and bad stay system colors in dark."
+    },
+    {
+      "id": "Q-D2-swimswam",
+      "answered": "2026-10-26",
+      "sequence": [
+        "\"use the table d from the handwritten plan\"",
+        "lead showed Table D distance rows give 4:00.00 400m -> 3:28.37 500y vs the user check ~4:34",
+        "\"do 3, if needed, find the factors for all of the time conversions using the swimswam time convertor from lcm to scy, completely disregard table d, its incorrect.\"",
+        "\"i take that back. dont use it.\"",
+        "asked to clarify; user picked: go ahead with the SwimSwam search",
+        "lead search: no published Colorado Timing table found (swimswam, swimstandards, swimtimeconverter list none verifiable)"
+      ],
+      "answer": "Record converter outputs: submit the SwimSwam converter once per event with a fixed LCM test time; archive each response (url, sha256, date); store the factor with a tool-derived label naming converter, input and output; est. badge; never used for cut tags. Table D is disregarded for every row (user: incorrect)."
+    },
+    {
+      "id": "conversion-rules",
+      "answered": "2026-10-26",
+      "answer": "User: \"4:00.00 in scm is 4:34ish scy, 4:00.00LCM to scy is 4:28.9 like you calculated. you can round, we dont need precision beyond final resultant times to hundreths of seconds. remember to be able to convert from the appropriate source to scy. you can tag them as estimated cut achieved, but when they actually get the cut, then they get the normal tag.. dont worry about the 800 free relay conversion ... we are trying to source individual swims and relay splits\". README R59-R61."
+    },
+    {
+      "id": "relay-split-and-flyover",
+      "answered": "2026-10-26",
+      "answer": "R62: yes, relay splits use the individual conversion for stroke and distance. Flyover: \"subtract a little bit of time due to the momentum gained and reaction on the exchange of the entering swimmer\". Lead rule: never subtract the flyover from a time that is already a flying-start split."
+    },
+    {
+      "id": "provenance-exception",
+      "answered": "2026-10-26",
+      "answer": "R63: yes, an exception. Added to CLAUDE.md data-provenance rule 2."
+    },
+    {
+      "date": "2026-10-27",
+      "answers": {
+        "R64": "per-event scorer cap may be unlimited (preset setting)",
+        "R65": "Q-roster-untagged = (c): coach tags first, else not scored; AutoBuilder shows swaps later",
+        "R66": "Q-P3-ui-target: read AND write the SwimCloud simulator page; features on the page, not only the docked panel",
+        "R67": "Q-relay-overcap: relays beyond the scoring-relay limit are exhibition; add a scoring-relay limit field",
+        "R68": "Q-history-depth: look for an every-swim endpoint and pull bests; find relay splits (example swimmer 1472365, 19.06 split, results/357106)",
+        "R69": "Q-R61-weaker-real: show both tags"
+      },
+      "liveCheck": "P2 parity: 2026-27 season, teams HSU/Delta State/Ouachita: Matches SwimCloud (757/624/530). 2025-26 season threw unsupported_gender on swims[55].eventgender X; fixed in abe52033, needs a re-check. The tie claim was mine: the recorded config C used the 2025-26 range, which I did not say."
+    },
+    {
+      "date": "2026-10-27b",
+      "answers": {
+        "R70": "opponents: build a best-fit scoring roster per untagged opponent, user-editable",
+        "R71": "relay swimming does not add untagged swimmers; scoring relays need all legs on the scoring roster (NSISC); outside NSISC user assumes non-scoring relays are all non-scorers (unsourced)",
+        "R72": "NCAA rule book 2025-27 read: 7-10-1, 5-5-1, 5-2-1-a, 5-7-1-g; archived in b905e878 (data/scoring_rules/sources/ncaa-rulebook-2025-27.pdf)"
+      },
+      "liveCheck": "2025-26 and 2026-27 both load with no error. IndexedDB empty: the production build opens no database yet (only the harness does); 0.1.0 is the extension version. Not a defect."
+    },
+    {
+      "date": "2026-10-27c",
+      "answers": {
+        "archiveRulebook": "yes: archived data/scoring_rules/sources/ncaa-rulebook-2025-27.pdf + .txt, manifest id ncaa-rulebook-2025-27",
+        "R73": "NSISC total cap is 7 (R4 8 was wrong)",
+        "R74": "exhibition swims do not count toward the total cap"
+      }
+    },
+    {
+      "date": "2026-10-27d",
+      "answers": {
+        "R75": "entry limits apply to every swimmer (scorer, non-scorer, exhibition); the roster only decides scoring and scoring-relay eligibility. Supersedes R74."
+      }
+    }
+  ],
+  "commits": [
+    {
+      "date": "2026-10-26",
+      "approvedBy": "user (area commits, push to PR #8)",
+      "shas": {
+        "docs+recon fixtures": "cfe894e7",
+        "engine extraction": "3eb39255",
+        "extension app": "d301d4e4",
+        "state file": "this commit"
+      },
+      "note": "Only the tip is verified green; intermediate commits share package.json/lock/eslint and are not tested alone (user accepted)."
+    },
+    {
+      "sha": "e71ffcfd",
+      "subject": "Record the user's 2026-10-26 answers"
+    },
+    {
+      "sha": "75dd5520",
+      "subject": "Add NSISC v2 with the confirmed points"
+    },
+    {
+      "sha": "7380ad70",
+      "subject": "Offer only the newest built-in in preset pickers"
+    },
+    {
+      "sha": "32aa949c",
+      "subject": "Add empty rosters, draft meets, class-year overrides"
+    },
+    {
+      "sha": "96863182",
+      "subject": "Archive SwimSwam LCM to SCY conversions"
+    },
+    {
+      "sha": "56681df0",
+      "subject": "Validate the overlay with zod/mini"
+    },
+    {
+      "sha": "29c4484f",
+      "subject": "Add the status colors from R46 and R57"
+    },
+    {
+      "sha": "8d188a27",
+      "subject": "Convert LCM to SCY from the SwimSwam capture"
+    },
+    {
+      "sha": "92c438d6",
+      "subject": "Re-score the simulator with exact SwimCloud parity"
+    },
+    {
+      "sha": "24a0eee1",
+      "subject": "Migrate stored rule presets on read"
+    },
+    "d22375ee Show simulator parity in the docked panel"
+  ],
+  "lowPriority": {
+    "since": "2026-10-29 late",
+    "trigger": "Budget tier critical: 5h 80% used, resets in about 2h",
+    "resumePoint": "A4 in flight with executor ad2051c440db6ce85. If interrupted: git status, then SendMessage that agent to continue.",
+    "rule": "one agent at a time; no new heavy Claude agents until reset",
+    "endedAt": "2026-10-29 ~11pm CT: limit reset; executor hit 429 mid-A4 (at the bench script) and was resumed by SendMessage"
+  },
+  "codexRuns": [
+    {
+      "item": "nsisc-v2",
+      "dispatch": "ctx_348b0f9a7026",
+      "terminal": "term_6ed9ebeb-0d70-4151-bf24-bc6ecfd77c38",
+      "worktree": "current",
+      "started": "2026-10-26T16:2xZ",
+      "brief": "scratchpad codex-nsisc-v2.txt (cites README.md:69 = R45)",
+      "review": "Claude (lead plus advisor) reviewed the diff, a different provider than Codex. Lead fixed 5 extension tests Codex could not edit (picker now shows newest version only) and added the evidence comment.",
+      "result": "done; worker released 2026-10-26",
+      "gates": "lint ok; active vitest 144 files 2431 passed; npm test 65/0; golden diff clean; extension tests 191 passed"
+    }
+  ],
+  "storageFieldsDone": {
+    "commit": "32aa949c",
+    "review": "Codex read-only (Orca ctx_144994e95538, released): one P2 finding, test default export omitted classYearOverrides; fixed in the commit. Migration, import and provenance: no findings.",
+    "leadChecks": "v1 validate.ts:403 already refused empty teamIds and empty memberIds, so no v1 record falls into a newly refused state; P1 open.ts writes meta.db.schemaVersion in the upgrade tx, so a healthy install passes the new refusal."
+  },
+  "liveCheckNext": [
+    "Storage: nothing to check until a UI feature opens the database (preset editor, P3.ui)."
+  ],
+  "budget": "2026-10-29: Claude windows reset (user-stated); Codex and Cursor available",
+  "conversionCapture": {
+    "done": "2026-10-26",
+    "archive": "data/conversions/swimswam/lcm-to-scy-2026-10-26.json (53 captures) + README.md (fitted model)",
+    "model": "SCY = truncate((LCM - turn) / divisor) to 0.01 s; reproduces all 51 individual outputs. Divisor 1.11 for free/fly/breast/IM; 1.09361 back (range 1.0936095-1.0936130); 0.8925 for 400->500 and 800->1000; 1.02 for 1500->1650. Turns per 50: free 0.8, fly 0.7, breast 1.0, back 2.5; 200 IM 3.2, 400 IM 6.4; distance 0.",
+    "relay": "800 free relay returns input unchanged: no conversion, absent",
+    "next": "executor: engine sourcing preset for LCM->SCY from data/conversions/swimswam (new id, tool-derived provenance kind, est. badge), results truncated to 0.01 s like the converter (R59 permits rounding; truncation lets a test replay all 51 captures exactly); SCM->SCY keeps NCAA Table A (R60); individual swims and relay splits (R60); estimated-cut tag kind that a real cut replaces (R61); table-d-user retired from use (R58)"
+  },
+  "zodMiniAndColorsDone": {
+    "commits": [
+      "56681df0",
+      "29c4484f"
+    ],
+    "review": "Codex read-only (Orca ctx_c006e6fad8de, released): claims 2-4 no findings; claim 1 parity: 56 adversarial inputs, no divergence",
+    "sizes": "sim-overlay.js 810,945 -> 76,698 bytes; sim-bridge.js 4,974 unchanged",
+    "minifyNote": "esbuild minify would roughly halve the overlay again; not enabled"
+  },
+  "awayMode": {
+    "since": "2026-10-26 afternoon",
+    "user": "\"continue work, i will be away from computer. move ahead and build everything you can, keep tab on open items or questions you have for me and i will let you know answers when i return.\"",
+    "questionsForUser": [],
+    "resolvedNote": "Dark good/bad colors: answered by README R57 (system colors in dark), removed from questions 2026-10-26.",
+    "pausedAt": "2026-10-27 after the exhibitionCounts fix (lead-built, Codex no defect, advisor audit): budget tier critical (7d window). Resume: R70 best-fit roster design (architect), then R66 write-path design. Three open questions on P3.core-b await the user."
+  },
+  "p2Risk": {
+    "done": "2026-10-26",
+    "endpoint": "/api/swimmers/{id}/profile_fastest_times/",
+    "result": "200 JSON, no Cloudflare challenge, from the simulator tab (same origin). One best per event+course, cross-team (follows the swimmer). Details: 02-SIMULATOR-RECON.md, P2 risk section.",
+    "limit": "bests only; cannot answer best-within-window"
+  },
+  "lcmToScyDone": {
+    "commit": "8d188a27",
+    "review": "Codex ctx_0c99fe7da53e: one defect (fixed gender), fixed with red test; rest clean",
+    "gates": "lint ok; vitest 2577; npm test 65/0; golden clean",
+    "followUps": [
+      "CLOSED: docs/INVARIANTS.md #10 and #11 note the engine LCM truncation and the R61 estimated-achieved tag",
+      "CLOSED: storage validate.ts checks tool-derived archive path and sha against the archives the engine built-ins cite",
+      "pickers must hide built-ins with retired set (presets.ts latestBuiltins)",
+      "nothing in the extension calls the new conversion/cut functions yet (P4)"
+    ]
+  },
+  "p2Core": {
+    "commit": "92c438d6",
+    "parity": "exact on configs A-D (totals, entries, not-scored reasons)",
+    "review": "Codex ctx_9cf123b5b7f2: no findings (48 s, weak evidence); lead advisor audit: provenance cite fixed to the archived bundle (lodash orderBy, module 2877, stable)",
+    "interruptions": [
+      "2026-10-26 ~17:00 local: executor hit the 5h session limit (429) mid tie-policy task; tree left with 3 failing targeted tests (387 passed). After the reset the lead resumed it via SendMessage with the failing test names."
+    ]
+  },
+  "p2Ui": {
+    "commit": "d22375ee",
+    "bundleBytes": {
+      "dashboard": 1049925,
+      "overlay": 77483,
+      "bridge": 4974
+    },
+    "note": "Only the bridge has a size budget (tests/extensionBundleBoundaries.test.ts). The dashboard grew from 676,554 bytes because it now bundles the engine.",
+    "followUps": [
+      "dockedPanel reconnects only before the first pong. If an answered port later disconnects, activePort stays null and later snapshots are dropped silently.",
+      "sendSnapshot re-parses the full snapshot with zod on the page thread although the overlay already validated it; the dashboard parses it a third time."
+    ],
+    "codexWorker": "ctx_7ab57a4cdebf released 2026-10-26; child worktree p2-overlay-ui left in place"
+  },
+  "inFlight": {
+    "P3.core-b": {
+      "status": "DONE 2026-10-27 (commit follows this state edit): executor built with R75; lead gates green (vitest 2791, npm test 65, golden unchanged, harness 2/2, lint); Codex review ctx_6c0369ee804c found no defect (146 focused tests), released; advisor audit passed (D2 3.8 unions updated, exhibitionCounts not read logged as follow-up). NEXT: NSISC v4.",
+      "scope": "scoreMeet under eligibility roster: scoring roster = scorer tags (R65/R71; no auto marks before finals); missing roster for a team with entries -> named refusal; non-scorers per nonScorerPlacement (R41) with reason non_scorer; relay with a non-roster leg does not score (R37); exhibition-role tag -> exhibition (Rule 7-10-1); scoringTeamSize with diverWeight over -> violation, never trimmed; points_pool parity path unchanged.",
+      "next": "best-fit opponent roster (R70): design item (architect) before any build",
+      "scopeAdded": "R74 sent by SendMessage: exhibition-tagged entries and exhibition relays do not count toward entry caps (roster mode only).",
+      "openQuestionsAnswered": "README R76 (exhibition leg makes the relay exhibition), R77 (untagged leg scores, with a relay_leg off_scoring_roster warning), R78 (tagged scorer with no entry takes a full spot, with a scorer_without_entry warning). Built 2026-10-27, commit follows this state edit."
+    },
+    "R70 design": {
+      "status": "DONE 2026-10-27: spec in D2 section 3.14 (citations spot-checked at 775c02af; candidates exclude swimmers with no entry, so R78 holds). Three open questions for the user are listed there. NEXT: P3.core-c build (executor) per section 3.14; the engine part is valid under every answer to the open questions.",
+      "P3.core-c": "DONE 2026-10-27 (commit follows this state edit): executor built D2 3.14 (rosterSuggest.ts, 20 tests, mutations M1-M15 caught; M5 default mip_rel_gap caught only by the options-contract test, keep it). Lead gates green (vitest 2825, npm test 65, golden, mutation 413, harness 2/2). Codex found no defect. Advisor audit passed. Open: the three 3.14 questions for the user.",
+      "brief": "Target: a spec section in plans/2026-10-25/D2-ENGINE-API.md for a best-fit scoring roster for each untagged opponent team (README R70), editable by the user. Inputs to read: README R65, R70, R71, R75; packages/engine/src/model/results.ts (planRoster, scoreMeet, scoring_roster_missing, scoring_team_size, pointsOnlyRules); packages/engine/src/rules/builtins.ts (nsisc v4); the extension optimizer (apps/extension, optimizer.worker.js and highs.wasm). Decide: (1) the objective (maximize that team's points with the other teams' rosters fixed, or a joint fixed point) and why; (2) the constraints (scoringTeamSize with diverWeight, relay legs must be on the roster per R71, entry limits per R75); (3) the algorithm (ILP on HiGHS or a greedy with a proof of optimality bounds), determinism and tie-breaks; (4) how a suggested tag is marked apart from a coach tag (provenance), and how a user edit overrides it; (5) whether scoreMeet still throws scoring_roster_missing when only suggested tags exist; (6) acceptance tests. Constraints: read-only, no code, no git, never invent a competition value. Report: the spec text plus open questions for the user, under 1,200 words."
+    },
+    "codex-2026-10-27": {
+      "note": "User 2026-10-27: Claude 7d at 88%, use Codex through Orca. Three Codex workers in the current worktree, disjoint scopes. Lead reruns full gates, reviews each diff (different provider), commits one area at a time.",
+      "A P4 history adapter": "DONE c841d755. run_77761b41fd34 dispatch ctx_82bf3f41f36c: packages/swimcloud/src/browser new modules + tests/swimcloudHistory*.test.ts",
+      "B duplicate relay": "DONE 079e5494 (legacy grouping names carry the entry key). run_e4167b2f0d1b dispatch ctx_0a5aa2a31ca8: repro + fix in packages/engine/src/model/results.ts, tests/engineScoreMeetDuplicateRelay.test.ts",
+      "D D4 phases 1-2": "DONE 2026-10-27 (commit follows): cap raised to 10,000 bytes (R79, 280ee18e); bridge 5,643 bytes. writeSimulatorSettings(win, settings) returns a token; ack on matching read-back. Lead gates green (vitest 2837). D4 phase 3 slice 1 (page panel, parity line, compatibility errors) DONE 2026-10-27 by Codex worker E, commit follows. NEXT: phase 3 slice 2: cut tags (R69), scorer tags (R65), suggested rosters (R70, needs suggestScoringRosters wired to optimizerClient.solveLp), Apply button (R80).",
+      "F scorer tags": "DONE 2026-10-27 by Codex worker F (commit follows): page-panel tagging, TagRecords per meet, own team in settings.scorerOwnTeamsByMeet, first production DB open (dashboard side). Meet key = sorted team ids + start/end dates (the snapshot has no meet id); a new date window is a new meet. NEXT panel slices: suggested rosters (R70), Apply (R80), cut tags (R69).",
+      "G suggested rosters": "DONE 2026-10-27 by Codex worker G (commit follows): per-meet OmniSwim rule preset picker (settings store), tag scoring and suggestions use it (the simulator preset is points_pool and cannot hold a roster); parity keeps the simulator preset. Optimizer worker reads columns only on Optimal. Suggested tags never stored. Fixture A: all_entered, 0 HiGHS calls, about 65 ms. Conference-scale ILP time still unmeasured. NEXT panel slices: Apply (R80), cut tags (R69).",
+      "H cut tags": "DONE 2026-10-27 by Codex worker H (commit follows; lead fixed one lint complexity warning by extracting renderSuggestion). Engine exports resolveTeamDivision, divisionForEntryInSeason, programCompetedInSeason, programSponsorsGender (not the D1-defaulting helpers). Simulator adapter resolves divisions only when the date window is one season (dateToUse season); otherwise unknown with divisionSeasonNote. Production snapshots carry SCY swims only, so the est. path is covered by model fixtures but receives no LCM swims yet. NEXT panel slice: Apply (R80).",
+      "panelFollowUp": "dashboard/main.tsx posts the parity report to window.parent with targetOrigin *. The receiver checks source and origin, and the data is page-derived, but a specific target origin is better.",
+      "followUps": "A dispatch that throws midway leaves earlier settings written (reported as error, never as success). A page limit of unlimited is not writable (numbers only): it is refused visibly. maxRelaysPerTeam is the page entry limit, never the R67 scoring-relay cap.",
+      "gotcha": "Never tell Codex to use Bash here: bare bash resolves to WSL with no /bin/bash. Codex worker_done is rejected without a taskId; tell workers to report with --type status.",
+      "C R66 design": "DONE 38493204 (D4). run_0a69ea8e3142 dispatch ctx_76dd05411d15: plans/2026-10-25/D4-SIMULATOR-WRITE.md only"
+    },
+    "NSISC v4": {
+      "status": "DONE 2026-10-27 (commit follows this state edit): lead built it. Gates green (vitest 2792, npm test 65, golden unchanged, mutation 413, harness 2/2, lint, build). Codex review ctx_1808851982f4 found no defect (43 tests), released. Advisor audit passed; its three nits fixed (wording pinned to README lines, drift test for v4, frozen comment). Picker default moves v3 to v4. Saved refs to v3 still score with 8 and get the v4-available flag.",
+      "scope": "nsisc v4 = v3 with entries.maxTotalPerSwimmer 7 (README R73); exhibitionCounts stays true (R75); v2/v3 stay frozen at 8; picker offers v4."
+    },
+    "D4.apply": {
+      "status": "DONE 2026-10-27: Codex I (run_828e7a9bf424) built the R80 Apply button and simulatorSettingsFromRulePreset (exact or nothing). Lead reviewed the diff and ran full gates on this tree: vitest 2863, golden unchanged, harness 2/2, lint 0. Advisor audit skipped (Claude quota). Finding: no built-in preset maps fully today. NSISC v3/v4 refuse unlimited caps, relay cap != scorer cap, R67 exhibition; v1/v2/generic have pending rules.",
+      "next": "Ask the user: (a) allow a partial apply that writes mapped settings and lists skipped ones, or (b) write 0 for unlimited. simulatorCap (simulatorRules.ts:98) and recon 02-SIMULATOR-RECON.md:255 both record that the page stores 0 = unlimited, so (b) is exact for entry caps."
+    },
+    "2026-10-29 round": {
+      "J": "Codex run_da9d5ce0db6f ctx_1e5b5591c135: parity postMessage origin, dockedPanel reconnect, pickers hide retired built-ins (apps/extension/src)",
+      "K": "Cursor run_cb454d21a62d ctx_68371d15afd3: storage audit timer flake (tests/extensionStorageAudit.test.ts only)",
+      "L": "BUILT, UNCOMMITTED, NOT REVIEWED (Claude executor). Files: packages/engine/src/rules/rulePreset.ts (RelayEntryRules: entries.relaySwimmerOncePerEvent?, entries.nonScoringRelaysAllowed?, payload v3 only, absent=not checked), model/results.ts (violations relay_swimmer_repeated, relay_entries_over_limit; read all resolved relays; nothing trimmed), index.ts export, D2 3.8 unions + 9 item 23, tests/engineRelayEntryRules*.test.ts (25). Executor gates: lint clean, npm test 65, golden unchanged, mutation 413, vitest 2893 pass / 1 fail = extensionBuildFreshness (dist stale; rebuild after J settles). No built-in turns either rule on.",
+      "waiting": "user: Apply option (0=unlimited, partial apply, both); R70 questions",
+      "M": "DONE: scripts/bench/rosterSuggestTiming.ts (Claude worker). No real fixture reaches conference size; largest is simulator config-C (3 men teams, 110 swimmers). Real: all-target call 88-128 ms warm. Synthetic 10 teams (copies of config-C teams, times unchanged), men only: all-target call 656-741 ms, per-LP max 44 ms, LP ~250x425. Both genders likely >1 s total, sequential; runs in the optimizer worker, so latency not a main-thread block. Node timing, not browser.",
+      "status": "Resumed 2026-10-29 after reconnect.",
+      "userDecisions": [
+        "ANSWERED: nsisc v5 yes; archive rule book (already archived b905e878); Apply writes 0 for unlimited.",
+        "R70 questions asked again 2026-10-29."
+      ],
+      "committed": "a92b6bc0, 2471d341, 816cd9bd, 26b766ee, 1d61a7b8 (engine relay checks, nsisc v5, generic v2)",
+      "N": "DONE: 1daca28b planner core (parseSessionPreset, sessionLoad); suppression reason fixed in the next commit.",
+      "J4": "DONE: planner UI slice 1 committed (per-meet session preset + load preference, dashboard schedule editor, athlete outlook). Full gates: vitest 2924 (after the suppression fix), npm test 65, golden OK, mutation 413, harness 2/2, lint 0.",
+      "next": "F3 acceptance met at test level; live UI check in Chrome pending. Next candidates need the user: P4 fetches (LCM swims, wider window, roster season), cap-boundary tie rule, R70 questions.",
+      "J6": "DONE: page Meet schedule editor + relayRepeatsForSchedule. Gates: vitest 2928, npm test 65, golden OK, mutation 413, harness 2/2, lint 0."
+    },
+    "D5.A3": {
+      "status": "COMMITTED 2026-10-29 (commit follows this state edit). Lead gates green: lint, vitest 3010, npm test 65, golden unchanged, mutation 413, extension build, harness 2/2. Codex J12 review: no findings (82 focused tests). Advisor audit: guard, refusals, provenance checked.",
+      "files": [
+        "packages/engine/src/autobuilder/{evaluate,gate,index,lp,space,support,types,load}.ts",
+        "tests/engineAutoBuild.test.ts (one mode_not_built load case removed)",
+        "tests/engineAutoBuildLoad.test.ts"
+      ],
+      "blockedOnUser": "Config C cannot run with the shipped NSISC session preset: smallFieldSession for 1650 Free Men is pending, and Table C has no row for 100 IM Men (unscheduled_event). Which schedule should config C use? Executor did not guess.",
+      "knownDeviations": [
+        "refusal order: schedule/pending checks run after search space is built (D5 2.1 says before)",
+        "over-cap pruning off for split events when load is active",
+        "held swimmers are forced candidates and may exceed K"
+      ],
+      "fixedAlong": [
+        "gate.ts/space.ts read req.load instead of support.load (mode off threw model_mismatch)",
+        "index.ts literal NUL byte escaped"
+      ],
+      "next": "A4 after the budget reset; first item: fix the refusal order (D5 2.1).",
+      "acceptanceGap": "D5 12.3 config C timing with load on is UNMEASURED: blocked on the user schedule question (blockedOnUser)."
+    },
+    "D5.A4": {
+      "status": "COMMITTED 2026-10-29 (commit follows this state edit). Lead gates green: lint, vitest 3019, npm test 65, golden, mutation 413, build, harness 2/2, no bundle leak, rosterSuggestTiming runs. Codex J13: no findings (35 focused tests). Advisor audit passed.",
+      "next": "A5 (time limit and fallback, D5 12.5)",
+      "bench": {
+        "method": "npx tsx scripts/bench/autoBuildTiming.ts, wall time end to end, default limits, median of 3 (executor); lead single run in brackets",
+        "configC10teams": "5.3 s (5.8 s)",
+        "configCUnscaled3teams": "8.3 s, of which ~7.7 s HiGHS solve",
+        "synthetic20Event10teams": "2.4 s (2.4 s) — SYNTHETIC generated values; returns current_infeasible so it times the repair path, not improve",
+        "evalTime": "~0.4 s per run, down from 4-5 s"
+      },
+      "gap": "Not narrowed. Config C unscaled finds 1435; the relaxed-MIP bound varies with the wall clock (1714/1731/1786), so the gap is 279-351. Sweep: K10/Kmax12 -> 736 found; 2 refine rounds -> 1435; 30 s -> 1498 (over budget). Defaults unchanged (D5 6.4)."
+    },
+    "D5.A5": {
+      "status": "COMMITTED 2026-10-30 (commit follows this state edit). Lead gates green on the final tree: lint, vitest 3077, npm test 65, golden, mutation 413, build, harness 2/2 (now incl. solve-mip Optimal + time limit in Chromium), no autobuilder/ or osxHarness in dist, bridge 5643 B. Codex J14 (one medium finding, fixed by the evaluation cap) and J15 (cap: no findings). Advisor audit items done.",
+      "owns": [
+        "apps/extension/src/shared/optimizerProtocol.ts (additive)",
+        "apps/extension/src/worker/optimizer.ts",
+        "apps/extension/src/dashboard/optimizerClient.ts",
+        "packages/engine/src/autobuilder/localSearch.ts",
+        "tests"
+      ],
+      "next": "A6 margin and goal seek (D5 12.6)"
+    },
+    "D5.A6": {
+      "status": "COMMITTED 2026-10-30 (commit follows this state edit). Lead gates green: lint, vitest 3103, npm test 65, golden, mutation 413, build, harness 2/2, no leak. Codex J16: no findings. Advisor audit: fallback covered for all three modes (test 10); goal-seek+prefer subject renamed goal-seek-prefer; D5 amendment 4 records the rulings. Mutation 52 sites; G01-G03 killed by direct gate tests; G04, M26 equivalent.",
+      "next": "A7 robust (D5 12.7) on the D5 14.1 default"
+    },
+    "D5.A7": {
+      "status": "COMMITTED 2026-10-30 (commit follows this state edit). Lead gates green (vitest 3125, npm test 65, golden, mutation 413, build, harness 2/2, no leak). Codex J17 (HIGH: frozen free entry droppable, fixed by the held route) and J18 (no findings). Advisor audit: no-time entries dropped by max-own too (existing behaviour, user question A9). D5 amendment 5.",
+      "next": "A8 explanations (D5 12.8, section 9)",
+      "executorChoices": [
+        "undated or no-time swims excluded before taking the 5 most recent",
+        "SUPERSEDED by J17: a free swimmer's frozen current entry is held (x = z, D5 4.6 mechanism); the roster is not forced",
+        "binding false for robust_frozen_pairs",
+        "date tie by swimId ascending",
+        "frozen pair swims = count of eligible recent swims",
+        "pair with no usable normal seed not listed as frozen",
+        "robust_no_spread when no decision pair has a pin, subject robust",
+        "limits_invalid for robust settings, subjects objective.recentSwims/minSwims, 1<=min<=recent<=20"
+      ]
+    },
+    "D5.A8": {
+      "status": "COMMITTED 2026-10-31 (commit follows this state edit). Lead gates green (vitest 3162, npm test 65, golden, mutation 413, build, harness 2/2, no leak). Codex J19 (no findings) and J20 (two text mismatches; amendment 6 items 4 and 10 reworded, code right). binding: entry_cap | session_load | strict_diver_rule | load_penalty | search_limit | objective | teammates.",
+      "next": "A9 roster swaps (see a9BriefNotes)",
+      "bench": "lead run 2026-10-30, median of 3, explain on: config C 10 teams 5.6 s, synthetic 2.8 s (the executor's 7.0 s was machine load)",
+      "interruptions": [
+        "2026-10-31: executor hit the 5h limit (429, resets 9am CT) during the teammates/objective check; resumed by SendMessage after the reset"
+      ]
+    },
+    "D5.A9": {
+      "status": "FIXING 2026-10-31: Codex J21 — HIGH anchor id collision (evaluate.ts fixed id), MEDIUM no-gain removal of a scorer with a valueless entry. Executor re-briefed. Checks 2,4,5,6 clean. Lead gates were green before the fixes.",
+      "next": "Codex review (dispatch2.sh, against spec text) -> lead gates -> advisor audit -> commit; then U1 per amendment 7"
+    },
+    "U1": {
+      "status": "U1-a IN PROGRESS 2026-10-31: worker agent building autobuilder.worker + autobuilderProtocol + createAutoBuildClient per D5 amendment 7 (acceptance 1-7). U1-b (visible UI + harness test 8) after U1-a.",
+      "next": "cross-provider review (Codex if quota allows, else finisher/Cursor) -> gates -> commit"
+    }
+  },
+  "followUps": [
+    "tests/extensionStorageAudit.test.ts \"a migration that awaits a timer makes openOmniDb reject\" failed once under --maxWorkers=4 (2026-10-26), passed 3/3 alone and on the full rerun: timing flake under load.",
+    "Tie at the cap boundary: placeOrderCompare picks which teammate is removed by synthetic-id order. Team total is unchanged; per-swimmer points are arbitrary. Not decided in P3.core-b; decide where per-swimmer point totals first appear (P3.ui or AutoBuilder), D2 9.5.",
+    "P4: converted swims and estimated-cut tags must run checkProvenanceSources when they are first stored, or they bypass the tool-archive check.",
+    "Deferred to P4: pickers hide retired built-ins (no live picker shows one today). dockedPanel reconnect after an answered port drops: low severity (an iframe reload leaves an empty panel, not a wrong number).",
+    "NCAA Rule 5-5-1 (README R72): a preset honors it with entries.exhibitionCounts false (scoreMeet reads it since 2026-10-27). NSISC keeps true (R75).",
+    "NCAA Rule 5-7-1-g (README R72): in a timed-final relay a swimmer may swim on only one of the team relays. Add a lineup check.",
+    "Conference solve latency (bench 2026-10-29): about 0.7 s for 10 men teams, likely over 1 s with both genders. Show a computing state in the panel, or solve targets in parallel, if the browser measures slower.",
+    "relay_swimmer_repeated is filtered by relayRepeatsForSchedule only where a session preset is chosen; without one the panel shows it unfiltered with a note.",
+    "D5 15.1: results.ts:980 comment vs :1002 code disagree on who counts as a diver (rosterSuggest.ts:726 copies the code). User question D5 14.4.",
+    "D5 15.2: sessionLoad penaltyPoints sums every team (sessionLoad.ts:130-139). Never show it as the own team penalty.",
+    "D5 15.3: D2 3.11 still shows rules? optional; sessionLoad requires rules. Dead rules? branches at sessionLoad.ts:75-77, :93.",
+    "rosterSuggest.ts:163 accepts 5-decimal point tables (scale 10^5) while its message says more than 4 (D5 amendment 1 (e)). Not reproduced.",
+    {
+      "id": "A3-split-overcap-pruning",
+      "note": "Over-cap pruning is off for split events when load is active."
+    },
+    {
+      "id": "A3-held-exceed-K",
+      "note": "Held split-entry swimmers are forced candidates and may push a column past K."
+    },
+    {
+      "id": "A3-current-infeasible-load",
+      "note": "Respect mode: a session_load violation already in the current lineup returns current_infeasible (same path as entry_cap). Confirm with user under D5 14.3."
+    },
+    {
+      "id": "A4-bound-unchecked",
+      "note": "The relaxed-MIP upper bound is built from fast column values; only the first 2 columns per event are self-checked against scoreMeet. A fast-scorer undervaluation could lower the bound and give a false proven label. The incumbent is still re-scored by scoreMeet in gate.ts. The parity test is the only guard for the bound."
+    },
+    {
+      "id": "A3-A15-A20-survivors",
+      "note": "A3 mutation survivors A15 (lp.ts unit guard) and A20 (gate.ts session_load tripwire) argued unreachable/defensive, not proven."
+    },
+    {
+      "id": "mutation-runner-timeouts",
+      "note": "Mutation runners need a per-mutant timeout (a >= mutant loops localSearch forever) and must not run as orphaned background jobs (they corrupt each other's source)."
+    },
+    {
+      "id": "A5-cap-machine-speed",
+      "note": "LOCAL_SEARCH_MAX_EVALUATIONS 80000 is ~2 s on this machine; slower machines take longer with no clock. Production always passes a clock."
+    },
+    {
+      "id": "A6-closest-no-fallback",
+      "status": "closed 2026-10-31 (D5 amendment 11)",
+      "note": "closest skips the local-search fallback (its margin is a min over teams). A timeout with no incumbent returns unchanged/none_found_within_limits. A Derived min kind in localSearch.ts would fix it."
+    },
+    {
+      "id": "A6-goalseek-broken-current",
+      "note": "Goal seek over an infeasible current lineup returns target_unreachable when the relaxed MIP is infeasible, without saying the current lineup is infeasible. Settle with user question A3."
+    },
+    {
+      "id": "A6-goalseek-proof-fields",
+      "note": "U1: in goal seek, proof.bestFound is the positive change count and proof.upperBound holds a LOWER bound on changes. Do not label it upper bound in the UI."
+    },
+    {
+      "id": "A6-margin-relay-bound-loose",
+      "note": "Margin relay bounds are loose by design; optimal margin lineups often report gap rather than proven."
+    },
+    {
+      "id": "A7-fallback-useless-roster-add",
+      "note": "The local-search fallback can add a frozen-held free swimmer to the roster when joining adds no points (first strictly-better column). The MIP tie-break avoids it."
+    },
+    {
+      "id": "A7-H05-label",
+      "note": "H05: a free swimmer's frozen entry in a timed-final-split event gets both held labels; diagnostic only."
+    },
+    {
+      "id": "A8-explain-in-gate-reserve",
+      "note": "explain runs after the gate inside the 1 s gate reserve with no bound; 0.4 s on config C, but it grows with unusual entries x skipped events. Bound it for large meets."
+    },
+    {
+      "id": "U1-clone-determinism",
+      "note": "Architect saw a different autoBuild result from a structuredClone of the config C request (221 KB, 5.2 ms copy). Likely timing fields; unproven. U1 acceptance 1 must settle it."
+    },
+    {
+      "id": "A6-goalseek-proven-overstated",
+      "status": "closed 2026-10-30 (D5 amendment 9)",
+      "note": "Prune counts only droppable members with no current entry; boards excluded with a finite team size. Codex review docs/reference/A6FIX_CODEX_REVIEW.md."
+    },
+    {
+      "id": "U1a-harness-worker",
+      "note": "scripts/run-extension-harness.mjs:44 omits autobuilder.worker.js; fix in U1-b"
+    },
+    {
+      "id": "U1a-fixture-rowCounter",
+      "note": "tests/helpers/simulatorFixtures.ts module-level rowCounter gives different relay leg ids per build; tests must build config C once"
+    },
+    {
+      "id": "A9-gate-duplication",
+      "note": "gate.ts inline objective scoring duplicates objectiveOfBuilt; merge later"
+    },
+    {
+      "id": "P7-architect-findings",
+      "note": "dashboard ignores settings.theme (main.tsx:100); accent validator accepts any string (validate.ts:322); two meet keys (main.tsx:48 vs 109); snapshots record no tags; legacy CSV escaper misses \r. All in D6."
+    },
+    {
+      "id": "lp-baseline-texts-stale",
+      "status": "closed 2026-10-31: regenerated into tests/fixtures/lp-baseline/ (lpBaseline.sh check or update)",
+      "note": "The executor no-flag LP baseline texts changed for the numeric-cap fixtures (engineAutoBuild, Modes, Robust) after amendment 9. Regenerate before a later slice uses them as a regression check."
+    },
+    {
+      "id": "C1-review-checks",
+      "note": "C1: fix two eslint-disable-next-line complexity lines in packages/engine/src/report/index.ts (reason or split). Check the new ClassYearCode does not duplicate an existing class-year type (user question E1 open)."
+    },
+    {
+      "id": "U1b-robust-rescore",
+      "status": "closed 2026-10-31 (1d257e46)"
+    },
+    {
+      "id": "planner-no-change-subscription",
+      "note": "Session planner state has no change-bus subscription (only main.tsx:134 watches tags/settings). A later multi-store batch touching session presets will not refresh it across contexts. Add a subscriber in U-a or C2."
+    },
+    {
+      "id": "U-e-settings",
+      "note": "New slice U-e (D6 section 1, gap found by the Codex U-a review): Settings cut threshold, storage estimate, backup export and import; Presets view (still a placeholder)."
+    },
+    {
+      "id": "U-c-diff-times-from-display",
+      "note": "diffResults reads time changes from lineup.display; a record stripped of SwimCloud data shows no time changes. U-c must say so in the UI."
+    }
+  ],
+  "p3CoreA": {
+    "status": "DONE: Codex review accepted (ctx_5b81979038a5, released); advisor audit passed; lead gates green incl. harness 2/2; D2 section 9 records the deviations",
+    "scope": "scoreMeet scores over-cap removed-from-consideration under points_pool (drops placement_unsupported at results.ts:467): remove-and-move-up in the scoreMeet ranking step only; F17 proven by test (engine path never reaches relayScoring ?? 2). packages/engine/src/lib/** untouched; golden byte-identical; P2 parity A-D exact.",
+    "precedent": "packages/engine/src/lib/ncaaScoringRules.ts:1192 (re-run with the over-cap finisher removed); rankAsIfExhibitionAbsent individualScoring.ts:656",
+    "api": "NotScoredReason gains removed_over_event_cap. Removed row: {place:null, points:0, scored:false, notScoredReason:removed_over_event_cap}; sorts last. UI reads the reason, not place (no_time is also place null). placement_unsupported stays in ScoreMeetErrorCode but is no longer thrown.",
+    "openRelay": "Relays over scoringRelaysPerTeamPerEvent always hold their place (pinned by a test): the preset has no relay over-cap rule (D2 6). See Q-relay-overcap."
+  },
+  "toolArchiveValidation": {
+    "status": "DONE: Codex review accepted (ctx_1727615e5c3f, released), advisor audit passed, gates green",
+    "scope": "rulePresets, sessionPresets and lineups (builtUnder.rulePresetValues and sessionPresetValues) are the only stores with provenance today; all three run checkProvenanceSources"
+  },
+  "r68Recon": {
+    "done": "2026-10-27",
+    "doc": "plans/2026-10-25/02-SIMULATOR-RECON.md, section R68",
+    "everySwim": "/api/swimmers/{id}/times_by_event/?event=s|d|c|1: every swim, all teams; includes leadoff legs; no flying legs",
+    "flyingSplits": "/api/teams/{teamId}/simulator/ swimmers[].relaysplits (flystart true) and relayleadoffs: fastest per event in the window, per team. Verified 19.06 (row 159330889) via team 127.",
+    "next": "P4 history adapter (executor): teams from times_by_event team_id, then one team simulator request per team/gender/course/window; best split per event across teams with source row id"
+  },
+  "r67": {
+    "status": "DONE b690448e: Codex accepted, advisor audit passed, gates green (vitest 2742, npm test 65, golden, mutation 413, harness 2/2)",
+    "scope": "RulePreset payload v3: scorers.relayOverCap holds-place|exhibition. Over-limit relays chosen as today (overCapKeys by rank); exhibition removes them and re-ranks (core-a mechanism), reason exhibition. Built-ins: simulator holds-place (SIMULATOR_RULE_PROVENANCE); nsisc v1, v2 and generic v1 pending; new nsisc v3 = v2 + exhibition (README R67). Picker offers nsisc v3.",
+    "followUp": "R42 (a 3rd NSISC relay is an entry violation) is not modeled: no relay entry-limit violation exists yet.",
+    "api": "BREAKING (not additive): RulePreset payloadVersion 3 with scorers.relayOverCap: Setting<RelayOverCapRule> (holds-place|exhibition). migrateRulePresetV1 now returns RulePresetV2. requireComplete and pendingPaths throw unsupported_version on v1/v2 objects. New exports: RelayOverCapRule, RulePresetV2, migrateRulePresetV2, parseRulePresetV2. Effect: nsisc v1/v2, generic v1 and any stored v1/v2 preset or lineup snapshot cannot score until relayOverCap is set. nsisc v3 added (frozen = v2 body). place null reasons: no_time, removed_over_event_cap, exhibition. Storage accepts v3 payloads (tests/extensionStorageValidate.test.ts).",
+    "openFindings": [
+      "Open gap (it.fails marker in tests/engineRelayOverCap.test.ts): a 4th relay ranked past the point table takes no cap slot, so it is not removed; after removal it moves into the table, holds a place with 0 points and no reason, and the relay behind loses a place. Candidate fix in D2 section 9 item 8. Decide before commit or log.",
+      "README R67 lacks the user quote \"the relays that are entered that dont score can be tagged as exhibition\"; nsisc v3 provenance cites README line 91 with the existing wording. Add the quote, then repoint.",
+      "nsisc v3 cannot reach exhibition through scoreMeet until roster mode lands (P3.core-b).",
+      "R42 entry violation not modeled (D2 9 item 7).",
+      "toLegacyScoringSettings drops relayOverCap; only scoreMeet calls it."
+    ]
+  },
+  "questionsFile": "plans/2026-10-25/QUESTIONS_FOR_USER.md (all open user questions, numbered A1-E4, 2026-10-29)",
+  "codexJTerminal": "J15: term_d6e74d3f-fb0f-45ff-98e6-634f4e2edb0c (run_a2e09d4827fd). Old J run run_da9d5ce0db6f stopped.",
+  "a9BriefNotes": [
+    "A7: under propose-swaps a coach-tagged swimmer becomes free, so a frozen entry moves from frozenIn (x = 1) to held (x = z): test it survives",
+    "A6: goal-seek changeCount must count roster removes",
+    "A3: the decision set grows, so the load limit binds more swimmers",
+    "A8: section 9 has roster_add but no roster_remove explanation: rule or ask the user before the build"
+  ],
+  "u1Prereqs": [
+    "DONE: where autoBuild runs — architect decision, D5 amendment 7 (dedicated autobuilder.worker)",
+    "DONE: flaky protocol test fixed (e53edf6e)"
+  ]
+}

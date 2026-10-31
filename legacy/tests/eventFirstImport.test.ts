@@ -1,0 +1,568 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Event-first import: a per-event results page converted directly into rows.
+ *
+ * ## What this closes
+ *
+ * `swimCloudTeamMeetSwimsToSwimmerResults` made the per-team swims list the
+ * source of rows and used event pages only to look up which round a swim was.
+ * That inverted the reliable order, and once the crawler stopped fetching swims
+ * pages — it no longer needs them to discover events — `applySwimCloudRows`
+ * would have imported nothing at all from a complete capture.
+ *
+ * Three defects this file pins, all measured against the 51 stored event pages
+ * and 8 stored roster pages of meet 356467:
+ *
+ * 1. **Every relay was dropped.** A relay event's table has no Team column at
+ *    all — its header is one `<th colspan=2>Name</th>` — so `teamName` was
+ *    absent and all 71 relay rows were skipped as `'no-team-name'`. Relays
+ *    score double in every championship table this repo models.
+ * 2. **Relay team names.** The entry label is "Henderson State (A)". Using it
+ *    as the team would score the A and B relays as two different programs and
+ *    join neither to that team's individual swims.
+ * 3. **Class year was hardcoded `'unknown'`** on every row, though the capture
+ *    holds the rosters that state it.
+ */
+
+import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseMeetEventResultsHtml, parseTeamRosterHtml } from '../../packages/swimcloud/src/parser';
+import type {
+  SwimCloudMeetEventResultsParse,
+  SwimCloudRosterParse,
+} from '../../packages/swimcloud/src/parser';
+import {
+  buildSwimCloudClassYearIndex,
+  buildSwimCloudTeamNameIndex,
+  swimCloudEventResultsToSwimmerResults,
+} from '../packages/matrix/src/lib/swimCloudMeetImportBridge';
+import {
+  classifySkipSeverity,
+  skipReasonLabel,
+} from '../packages/matrix/src/lib/swimCloudImportDiagnostics';
+
+const CAPTURES = path.resolve(__dirname, '..', '..', 'data', 'swimcloud-captures');
+const PAGES = path.join(CAPTURES, 'pages');
+const MEET_CAPTURE = path.join(CAPTURES, 'captures', 'meet-356467.json');
+
+/**
+ * The page store is one global cache keyed by URL. Other crawls (a team crawl, say) add their own
+ * roster pages to it, so "every roster page in the folder" is not "meet 356467's rosters". Read
+ * only the URLs this meet's own capture record lists.
+ */
+function meetPageUrls(): Set<string> | undefined {
+  if (!fs.existsSync(MEET_CAPTURE)) return undefined;
+  const record = JSON.parse(fs.readFileSync(MEET_CAPTURE, 'utf-8')) as { pages?: { canonicalUrl?: string }[] };
+  return new Set((record.pages ?? []).map((p) => p.canonicalUrl ?? ''));
+}
+
+/**
+ * True when a stored page this meet's capture lists no longer holds the bytes the capture recorded.
+ * Another crawl of the same URL (a team crawl re-fetches `/team/{id}/roster/?gender=M`, the same URL
+ * this meet used) overwrites the one file the page store keeps per URL. The numbers below were
+ * measured on the original bytes. They cannot be reproduced from bytes that changed, so the suite
+ * skips instead of asserting against a different roster.
+ */
+function meetPagesDrifted(): boolean {
+  if (!fs.existsSync(MEET_CAPTURE) || !fs.existsSync(PAGES)) return false;
+  const record = JSON.parse(fs.readFileSync(MEET_CAPTURE, 'utf-8')) as {
+    pages?: { canonicalUrl?: string; sha256?: string; resourceKind?: string }[];
+  };
+  const stored = new Map<string, string | undefined>();
+  for (const name of fs.readdirSync(PAGES)) {
+    const j = JSON.parse(fs.readFileSync(path.join(PAGES, name), 'utf-8')) as { canonicalUrl?: string; sha256?: string };
+    if (j.canonicalUrl) stored.set(j.canonicalUrl, j.sha256);
+  }
+  return (record.pages ?? []).some(
+    (p) => (p.resourceKind === 'teamRoster' || p.resourceKind === 'meetEvent') && stored.get(p.canonicalUrl ?? '') !== p.sha256,
+  );
+}
+
+function storedPages(match: RegExp): { name: string; html: string; url: string }[] {
+  const listed = meetPageUrls();
+  if (!listed || !fs.existsSync(PAGES)) return [];
+  return fs
+    .readdirSync(PAGES)
+    .filter((n) => match.test(n))
+    .map((name) => {
+      const j = JSON.parse(fs.readFileSync(path.join(PAGES, name), 'utf-8')) as {
+        html?: string;
+        canonicalUrl?: string;
+        url?: string;
+      };
+      return { name, html: j.html ?? '', url: j.canonicalUrl ?? j.url ?? '' };
+    })
+    .filter((p) => p.html.length > 0 && listed.has(p.url));
+}
+
+const ctx = (url: string) =>
+  ({ sourceUrl: url, retrievedAt: '2026-09-22T00:00:00.000Z', track: 'browser-extension' }) as never;
+
+const EVENT_PAGES = storedPages(/_2f_event_2f_\d+_2f_/);
+const ROSTER_PAGES = storedPages(/_2f_roster_2f/);
+const HAVE_CAPTURE = EVENT_PAGES.length > 0 && ROSTER_PAGES.length > 0 && !meetPagesDrifted();
+
+function parsedRosters(): SwimCloudRosterParse[] {
+  const out: SwimCloudRosterParse[] = [];
+  for (const page of ROSTER_PAGES) {
+    const parsed = parseTeamRosterHtml(page.html, ctx(page.url));
+    if (parsed.ok) out.push(parsed.data);
+  }
+  return out;
+}
+
+function parsedEvents(): SwimCloudMeetEventResultsParse[] {
+  const out: SwimCloudMeetEventResultsParse[] = [];
+  for (const page of EVENT_PAGES) {
+    const parsed = parseMeetEventResultsHtml(page.html, ctx(page.url), {} as never);
+    if (parsed.ok) out.push(parsed.data);
+  }
+  return out;
+}
+
+describe.skipIf(!HAVE_CAPTURE)('event-first import against the real capture', () => {
+  const rosters = parsedRosters();
+  const events = parsedEvents();
+  const teamNames = buildSwimCloudTeamNameIndex(events);
+  const converted = events.map((parse) =>
+    swimCloudEventResultsToSwimmerResults(parse, { rosters, teamNames }),
+  );
+  const rows = converted.flatMap((c) => [...c.men, ...c.women]);
+  const skips = converted.flatMap((c) => c.skipped);
+
+  it('converts every row it should, skipping only the mixed events', () => {
+    // Updated 2026-09-22, when the full-field crawl took the capture from 51
+    // event pages to 57. The six new ones are four diving events and two mixed
+    // relays, and the mixed pair is the only thing that may be skipped: a
+    // mixed event scores to neither team, so excluding it is the right answer
+    // rather than a gap. Every other reason would be a row missing from a
+    // coach's scoreboard.
+    expect(new Set(skips.map((s) => s.reason))).toStrictEqual(new Set(['mixed-gender-event']));
+    expect(events).toHaveLength(EVENT_PAGES.length);
+    expect(rows.length).toBeGreaterThan(1000);
+  });
+
+  it('keeps all 71 relay entries, with their legs', () => {
+    // Was zero. Every one was skipped for having no team name, because a relay
+    // table has no Team column.
+    const relays = rows.filter((r) => r.isRelay === true);
+    expect(relays).toHaveLength(71);
+    for (const relay of relays) {
+      expect(relay.relayNames, `${relay.name} ${relay.event} should carry its legs`).toBeDefined();
+      expect((relay.relayNames ?? []).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('names a relay entry\'s team the way an individual row names it', () => {
+    // The guard against "Henderson State (A)" becoming a team. If a designator
+    // leaked in, the A and B relays would score as separate programs and
+    // neither would join that team's individual swims.
+    const relayTeams = new Set(rows.filter((r) => r.isRelay === true).map((r) => r.team));
+    const individualTeams = new Set(rows.filter((r) => r.isRelay !== true).map((r) => r.team));
+    expect([...relayTeams].sort()).toStrictEqual([
+      'Delta State',
+      'Henderson State',
+      'Ouachita Baptist',
+      'West Florida',
+    ]);
+    for (const team of relayTeams) {
+      expect(individualTeams.has(team), `${team} should also appear on individual rows`).toBe(true);
+    }
+    for (const team of relayTeams) expect(team).not.toMatch(/\([A-Z]\)\s*$/);
+  });
+
+  it('reads the winning relay verbatim: team, place, doubled score, four legs', () => {
+    // Pinned rather than counted. A positional bug in the leg pairing would
+    // attach the wrong squad to the wrong team, and 40 is the championship
+    // relay value for first place -- exactly 2x the individual 20, which is
+    // what Rule 7 prescribes and what this repo's tables encode.
+    const relay = rows.find(
+      (r) => r.isRelay === true && r.event === '200 Medley Relay' && r.rank === 1 && r.team === 'Henderson State',
+    );
+    expect(relay).toBeDefined();
+    expect(relay?.pdfPoints).toBe(40);
+    expect(relay?.roundSwam).toBe('Timed Finals');
+    expect((relay?.relayNames ?? []).map((l) => l.name)).toStrictEqual([
+      'Avery Henke',
+      'Oskar Cebula',
+      'Colin Candebat',
+      'Olivér Pózvai',
+    ]);
+  });
+
+  it('skips a relay rather than scoring it under its "(A)" entry label', () => {
+    // The mutation that proved this test was needed: adding "?? name" as a
+    // fallback for a relay's team passed every other test in this file,
+    // because the team-name index always resolves for this capture and the
+    // fallback never ran. Converting WITHOUT the index is the only way to
+    // reach that branch, so it is exercised here deliberately.
+    //
+    // Skipping is the right behaviour. "Henderson State (A)" as a team would
+    // score the A and B relays as two separate programs and join neither to
+    // that team's individual swims -- a wrong team total, which is worse than
+    // a visibly absent row.
+    const relayEvents = events.filter((parse) => parse.event.kind === 'relay');
+    expect(relayEvents.length).toBeGreaterThan(0);
+
+    const withoutIndex = relayEvents.map((parse) =>
+      swimCloudEventResultsToSwimmerResults(parse, { rosters }),
+    );
+    const rowsWithoutIndex = withoutIndex.flatMap((c) => [...c.men, ...c.women]);
+    const skipsWithoutIndex = withoutIndex.flatMap((c) => c.skipped);
+
+    expect(rowsWithoutIndex).toStrictEqual([]);
+    expect(skipsWithoutIndex).toHaveLength(71);
+    expect(new Set(skipsWithoutIndex.map((s) => s.reason))).toStrictEqual(new Set(['no-team-name']));
+    // The label is still reported as the skip's subject, so a coach can see
+    // which entry was dropped -- it is just never promoted to a team.
+    expect(skipsWithoutIndex.some((s) => /\([A-Z]\)$/.test(s.subject ?? ''))).toBe(true);
+  });
+
+  it('joins a class year onto all but eight individual rows', () => {
+    // Exactly eight individual rows lack a year, and that count is the
+    // invariant -- it is the number of roster entries that print no year. The
+    // totals moved from 1089/1081 to 1136/1128 when the full-field crawl added
+    // the four diving events, and every one of those 47 diving rows joined a
+    // year, so the gap stayed at eight.
+    const individual = rows.filter((r) => r.isRelay !== true);
+    const known = individual.filter((r) => r.classYear !== 'unknown');
+    expect(individual.length - known.length).toBe(8);
+    expect(individual).toHaveLength(1136);
+    expect(known).toHaveLength(1128);
+    for (const row of known) expect(row.classYear).toMatch(/^(?:FR|SO|JR|SR|GR)$/);
+  });
+
+  it('gives a relay row no class year at all, and says why', () => {
+    // A relay row names a team, not a person, so there is no swimmer id to
+    // join on. "Unknown because there is nobody to look up" is a different
+    // fact from "unknown because no roster was captured", and the gap names
+    // which.
+    const gaps = converted.reduce<Record<string, number>>((acc, c) => {
+      for (const [reason, count] of Object.entries(c.classYearGaps)) {
+        acc[reason] = (acc[reason] ?? 0) + count;
+      }
+      return acc;
+    }, {});
+    expect(gaps).toStrictEqual({ 'no-swimmer-id-to-join-on': 71, 'roster-prints-no-class-year': 8 });
+    for (const relay of rows.filter((r) => r.isRelay === true)) {
+      expect(relay.classYear).toBe('unknown');
+    }
+  });
+
+  it('builds the class-year index by swimmer id, not by name', () => {
+    const coverage = buildSwimCloudClassYearIndex(rosters);
+    expect(coverage.index.size).toBe(184);
+    // Every key is a SwimCloud swimmer id. A name key would mean the join had
+    // silently become a name match, which INVARIANTS item 6 forbids.
+    for (const key of coverage.index.keys()) expect(key).toMatch(/^\d+$/);
+    expect([...coverage.teamsWithRosters].sort()).toStrictEqual(['10002824', '412', '48', '58']);
+  });
+
+  it('carries the round on every row, so nothing imports as an unknown tier', () => {
+    // An unknown tier scores as a full final in packages/core, so a round-less
+    // row is a wrong score rather than a missing one.
+    for (const row of rows) {
+      expect(row.roundSwam, `${row.name} ${row.event}`).toBeDefined();
+      expect((row.roundSwam ?? '').length).toBeGreaterThan(0);
+    }
+  });
+
+describe('a post-meet time trial is marked as one', () => {
+  /**
+   * ## The bug
+   *
+   * `swimmerEntryLimits` already skips a row flagged `isTimeTrial`, and
+   * `utils.ts` already scores one at zero. Neither could act on a SwimCloud
+   * import, because nothing on this path ever set the flag.
+   *
+   * The existing mechanism is `isOutsideScoredProgram`, which reads an "Event
+   * N" prefix off the label. A SwimCloud label is "100 Breast" — no prefix — so
+   * `parseEventNumber` returned null and the check answered false for every
+   * row. Meet 356467 scores "Through Event 42" and runs 13 further events
+   * numbered 100 to 939, all of which were importing as ordinary scoring swims
+   * that also consumed a swimmer's entry allowance.
+   *
+   * The measured cost of that in the other direction is recorded in
+   * `swimmerEntryLimits.ts`: 13 athletes flagged over the NSISC seven-event cap
+   * and 8 of them not actually over it, because a time trial counted twice.
+   */
+  const marked = (max: number | undefined) =>
+    events.flatMap((parse) => {
+      const result = swimCloudEventResultsToSwimmerResults(parse, {
+        teamNames,
+        ...(max === undefined ? {} : { scoredEventNumberMax: max }),
+      });
+      return [...result.men, ...result.women];
+    });
+
+  it('marks the swims on events above the scored programme', () => {
+    const rows = marked(42);
+    const trials = rows.filter((r) => r.isTimeTrial === true);
+    expect(trials).toHaveLength(14);
+    // Every marked row belongs to an event the meet numbered above 42.
+    for (const row of trials) expect(row.event.length).toBeGreaterThan(0);
+  });
+
+  it('marks nothing when the workspace states no boundary', () => {
+    // The number is a property of the meet. With none stated, marking a row
+    // would invent the very fact the setting encodes — so absent means absent,
+    // not "assume 42".
+    expect(marked(undefined).filter((r) => r.isTimeTrial === true)).toStrictEqual([]);
+  });
+
+  it('leaves the programmed events alone', () => {
+    // The control. A boundary that marked everything would "fix" the entry
+    // limits by emptying the meet.
+    const rows = marked(42);
+    const scoring = rows.filter((r) => r.isTimeTrial !== true);
+    expect(scoring.length).toBe(rows.length - 14);
+    expect(scoring.length).toBeGreaterThan(1000);
+  });
+
+  it('moves the boundary with the setting rather than hardcoding 42', () => {
+    // The user's standing requirement is that this work for any division,
+    // team, scoring rule and format. A meet that scores through event 8 must
+    // mark far more; one that scores through 9999 must mark none.
+    expect(marked(8).filter((r) => r.isTimeTrial === true).length).toBeGreaterThan(14);
+    expect(marked(9999).filter((r) => r.isTimeTrial === true)).toStrictEqual([]);
+  });
+
+  it('reads the number the page prints, not the number in its URL', () => {
+    // The two are equal on all 51 captured pages, which is exactly why the URL
+    // is not used: an id that happens to match a printed number is not the
+    // same fact, and the day they diverge the URL would mis-classify silently.
+    for (const parse of events) {
+      const own = (parse.eventIndex ?? []).find((e) => e.eventRef === parse.eventRef);
+      expect(own, `event ${parse.eventRef} is absent from its own index`).toBeDefined();
+      expect(own?.printedNumber).toBe(parse.eventRef);
+    }
+  });
+});
+
+});
+
+describe('class-year gaps, one per reason', () => {
+  const roster = (athletes: unknown[], over: Record<string, unknown> = {}): SwimCloudRosterParse =>
+    ({
+      swimCloudTeamId: '58',
+      teamName: 'Henderson State',
+      gender: 'Men',
+      season: '2026-2027',
+      athletes,
+      rowCount: athletes.length,
+      ...over,
+    }) as SwimCloudRosterParse;
+
+  it('separates "no roster captured" from "not on the roster"', () => {
+    // The distinction a coach acts on: one means go and crawl a roster, the
+    // other means the roster exists and this swimmer is not on it.
+    const coverage = buildSwimCloudClassYearIndex([roster([{ swimCloudSwimmerId: '1', name: 'A', classYear: 'SR' }])]);
+    expect(coverage.teamsWithRosters).toStrictEqual(['58']);
+    expect(coverage.index.get('1')?.classYear).toBe('SR');
+    expect(coverage.index.has('2')).toBe(false);
+  });
+
+  it('records a roster that parsed and listed nobody', () => {
+    // UWF's men: a program that does not exist. The capture DID answer the
+    // question, and the answer was no -- which is not the same as never having
+    // asked, so the team is still recorded as covered.
+    const coverage = buildSwimCloudClassYearIndex([roster([])]);
+    expect(coverage.index.size).toBe(0);
+    expect(coverage.teamsWithRosters).toStrictEqual(['58']);
+    expect(coverage.rostersRead).toStrictEqual(['58:Men']);
+  });
+
+  it('skips a roster row with no swimmer id rather than keying it by name', () => {
+    const coverage = buildSwimCloudClassYearIndex([roster([{ name: 'No Link', classYear: 'JR' }])]);
+    expect(coverage.index.size).toBe(0);
+  });
+
+  it('lets the first roster win when a swimmer appears on two', () => {
+    const coverage = buildSwimCloudClassYearIndex([
+      roster([{ swimCloudSwimmerId: '9', name: 'Transfer', classYear: 'SO' }]),
+      roster([{ swimCloudSwimmerId: '9', name: 'Transfer', classYear: 'SR' }], { swimCloudTeamId: '48' }),
+    ]);
+    expect(coverage.index.get('9')?.classYear).toBe('SO');
+    expect(coverage.teamsWithRosters).toStrictEqual(['58', '48']);
+  });
+});
+
+describe('a mixed event is excluded, and said to be mixed', () => {
+  /**
+   * A per-event parse, hand-built.
+   *
+   * Events 403 ("50 Free Mixed") and 503 ("200 Fly Mixed") of meet 356467 are
+   * real and have never been fetched — they are two of the six the swims lists
+   * never named, so the archived capture has no page for either. The shape
+   * below is what `parseMeetEventResultsHtml` produces for one: a gender that
+   * maps to `unknown`, and the printed word kept beside it.
+   */
+  const parse = (genderLabel: string | undefined) =>
+    ({
+      swimCloudMeetId: '356467',
+      eventRef: '403',
+      meet: { swimCloudMeetId: '356467', name: 'New South Championships', format: 'unknown', ruleset: 'unknown', course: 'SCY' },
+      event: {
+        eventId: '356467:event:403',
+        swimCloudMeetId: '356467',
+        eventRef: '403',
+        label: '50 Free',
+        kind: 'individual',
+        course: 'SCY',
+        gender: 'unknown',
+        distance: 50,
+        stroke: 'Free',
+      },
+      gender: 'unknown',
+      ...(genderLabel === undefined ? {} : { genderLabel }),
+      rounds: [
+        {
+          round: 'Timed Finals',
+          pointsColumn: 'none',
+          rowCount: 1,
+          swims: [
+            {
+              swimKey: '356467:swim:1',
+              entry: {
+                entryId: '356467:swim:1:entry',
+                eventId: '356467:event:403',
+                athleteName: 'Avery Henke',
+                swimCloudSwimmerId: '1330318',
+                swimCloudTeamId: '58',
+                teamName: 'Henderson State',
+              },
+              result: { resultId: 'r', entryId: 'e', eventId: '356467:event:403', place: 1, finalTime: '23.10' },
+              exhibition: false,
+              relayLeadoff: false,
+              cutStandards: [],
+            },
+          ],
+        },
+      ],
+      rowCount: 1,
+    }) as unknown as SwimCloudMeetEventResultsParse;
+
+  it('reports a mixed event as mixed, not as an unreadable gender', () => {
+    // The two are opposites. Here the page stated its gender perfectly clearly
+    // and the answer was "both"; 'unknown-gender' means the page did not say.
+    // Reporting this one as "gender could not be determined" reads like a parse
+    // failure on a page that parsed fine, and sends a coach hunting a bug.
+    const result = swimCloudEventResultsToSwimmerResults(parse('Mixed'));
+    expect(result.men).toStrictEqual([]);
+    expect(result.women).toStrictEqual([]);
+    expect(result.skipped.map((s) => s.reason)).toStrictEqual(['mixed-gender-event']);
+  });
+
+  it('still reports a genuinely unreadable gender as unknown', () => {
+    // The control. Without it, the test above would pass just as well if every
+    // gender-less row were relabelled mixed.
+    expect(swimCloudEventResultsToSwimmerResults(parse(undefined)).skipped.map((s) => s.reason)).toStrictEqual([
+      'unknown-gender',
+    ]);
+    expect(swimCloudEventResultsToSwimmerResults(parse('Nonbinary')).skipped.map((s) => s.reason)).toStrictEqual([
+      'unknown-gender',
+    ]);
+  });
+
+  it('never scores a mixed event to either side of the meet', () => {
+    // SwimmerResult carries one gender per row, so a mixed relay put on both
+    // totals would award the same swim twice. Excluding it is the correct
+    // outcome, not a limitation.
+    for (const label of ['Mixed', 'mixed', ' Mixed ']) {
+      const result = swimCloudEventResultsToSwimmerResults(parse(label));
+      expect(result.men.length + result.women.length, label).toBe(0);
+    }
+  });
+
+  it('is classified as expected rather than as something to review', () => {
+    // Same standing as a relay leadoff: correctly excluded, always, with
+    // nothing for a coach to act on. It must not sit in the review list next
+    // to real data loss.
+    expect(classifySkipSeverity('mixed-gender-event')).toBe('structural');
+    expect(skipReasonLabel('mixed-gender-event')).toBe('Mixed event (scores to neither team)');
+    // And the contrast that makes that meaningful.
+    expect(classifySkipSeverity('unknown-gender')).toBe('review');
+  });
+});
+
+describe('the programme number comes from the badge, not the URL', () => {
+  /**
+   * A mutation swapping `entry.printedNumber` for `parse.eventRef` passed
+   * every other test in this file. It had to: the two are identical on all 51
+   * captured pages, so no amount of real data can tell the implementations
+   * apart. An inert mutation is not evidence of a guard.
+   *
+   * This case is synthetic for exactly that reason — it is the only way to
+   * separate them. The page is shaped like a real one, with the id and the
+   * printed number deliberately disagreeing: `/event/7/` printing programme
+   * number 700.
+   */
+  const parse = {
+    swimCloudMeetId: '999',
+    eventRef: '7',
+    meet: { swimCloudMeetId: '999', name: 'Divergent', format: 'unknown', ruleset: 'unknown', course: 'SCY' },
+    event: {
+      eventId: '999:event:7',
+      swimCloudMeetId: '999',
+      eventRef: '7',
+      label: '50 Free',
+      kind: 'individual',
+      course: 'SCY',
+      gender: 'Men',
+      distance: 50,
+      stroke: 'Free',
+    },
+    gender: 'Men',
+    genderLabel: 'Men',
+    eventIndex: [{ eventRef: '7', label: '50 Free Men', printedNumber: '700', status: 'Scored' }],
+    rounds: [
+      {
+        round: 'Timed Finals',
+        pointsColumn: 'none',
+        rowCount: 1,
+        swims: [
+          {
+            swimKey: '999:swim:1',
+            entry: {
+              entryId: '999:swim:1:entry',
+              eventId: '999:event:7',
+              athleteName: 'Test Swimmer',
+              swimCloudSwimmerId: '1',
+              swimCloudTeamId: '58',
+              teamName: 'Henderson State',
+            },
+            result: { resultId: 'r', entryId: 'e', eventId: '999:event:7', place: 1, finalTime: '20.00' },
+            exhibition: false,
+            relayLeadoff: false,
+            cutStandards: [],
+          },
+        ],
+      },
+    ],
+    rowCount: 1,
+  } as unknown as SwimCloudMeetEventResultsParse;
+
+  it('calls it a time trial because the badge says 700, not because the URL says 7', () => {
+    const rows = swimCloudEventResultsToSwimmerResults(parse, { scoredEventNumberMax: 42 });
+    expect(rows.men).toHaveLength(1);
+    // Reading the URL ref would see 7, which is inside the programme, and
+    // score this swim as an ordinary one.
+    expect(rows.men[0]?.isTimeTrial).toBe(true);
+  });
+
+  it('marks nothing when the page carries no index to read a number from', () => {
+    // Absent is absent. With no printed number anywhere, there is no fact to
+    // classify on, and the row stays an ordinary swim rather than being
+    // classified off the URL as a fallback.
+    const { eventIndex: _dropped, ...withoutIndex } = parse as unknown as Record<string, unknown>;
+    const rows = swimCloudEventResultsToSwimmerResults(
+      withoutIndex as unknown as SwimCloudMeetEventResultsParse,
+      { scoredEventNumberMax: 42 },
+    );
+    expect(rows.men).toHaveLength(1);
+    expect(rows.men[0]?.isTimeTrial).toBeUndefined();
+  });
+});
