@@ -21,6 +21,7 @@ import {
   applyAccent,
   bindTheme,
   clearAccent,
+  printTokenCss,
   tokenCss,
 } from '../apps/extension/src/shared/theme';
 import type { MediaQueryLike } from '../apps/extension/src/shared/theme';
@@ -265,6 +266,14 @@ describe('(e) light tokens equal recon Q15', () => {
   it('dashboard.css carries exactly the token blocks theme.ts generates for :root', () => {
     const css = readFileSync(path.join(extensionRoot, 'src', 'dashboard', 'dashboard.css'), 'utf8');
     expect(css).toContain(tokenCss(':root'));
+  });
+
+  it('print token CSS forces every light token for the default and dark theme selectors', () => {
+    const printCss = printTokenCss(':root');
+    expect(printCss).toContain(':root, :root[data-osx-theme="dark"]');
+    for (const name of TOKEN_NAMES) expect(printCss).toContain(`${name}: ${LIGHT_TOKENS[name]} !important;`);
+    const css = readFileSync(path.join(extensionRoot, 'src', 'dashboard', 'dashboard.css'), 'utf8');
+    expect(css).toContain(printCss);
   });
 
   it('the shadow stylesheet carries the token blocks for .osx-root, both themes', () => {

@@ -131,6 +131,12 @@ export function tokenCss(scope: string): string {
   );
 }
 
+/** Light token overrides for print, with enough priority to beat theme selectors and inline accents. */
+export function printTokenCss(scope = ':root'): string {
+  const tokens = TOKEN_NAMES.map((name) => `  ${name}: ${LIGHT_TOKENS[name]} !important;`).join('\n');
+  return `@media print {\n${scope}, ${scope}[${THEME_ATTRIBUTE}="dark"] {\n${tokens}\n}\n}\n`;
+}
+
 // ---- accent override -------------------------------------------------------------------------
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
