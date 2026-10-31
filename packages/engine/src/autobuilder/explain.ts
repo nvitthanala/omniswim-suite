@@ -26,12 +26,15 @@ import { sessionLoad } from '../planner/sessionLoad';
 import { Evaluator } from './evaluate';
 import { ownPenalty, scorerIds, violationsOf } from './load';
 import { ownPointsOf } from './gate';
+import { rosterSpots } from './roster';
 import { pairKey } from './space';
 import type { Problem } from './space';
 import { autoBuildFail } from './types';
 import type { AutoBuildExplanation, AutoBuildProof, AutoBuildProposal } from './types';
 
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+export { rosterSpots };
 
 /** Points are sums of table values, so a difference this small is zero. */
 const PENALTY_EPSILON = 1e-9;
@@ -70,31 +73,6 @@ export function seedIsEstimated(swims: readonly MeetSwim[], entry: IndividualEnt
   return atValue.every((s) => s.scy.kind === 'converted');
 }
 
-/**
- * The spots of one gender's scoring roster: whole numbers over the diver weight's denominator, not reduced. `scoreMeet` counts a swimmer with
- * any dive entry and no relay as a diver. With `strict`, the solver's rule (D5 4.4) counts a diver only when every entry of the swimmer is a dive.
- */
-export function rosterSpots(
-  lineup: Lineup,
-  scorers: readonly SwimmerId[],
-  weight: { readonly numerator: number; readonly denominator: number },
-  events: readonly MeetEvent[],
-  strict = false
-): { readonly numerator: number; readonly denominator: number } {
-  const diving = new Set(events.filter((e) => e.kind === 'diving').map((e) => `${e.gender}\u0000${e.eventKey}`));
-  const dives = new Set<SwimmerId>();
-  const relays = new Set<SwimmerId>();
-  const others = new Set<SwimmerId>();
-  for (const e of lineup.entries) {
-    if (e.kind === 'relay') for (const leg of e.legs) relays.add(leg.swimmerId);
-    else if (diving.has(`${e.gender}\u0000${e.eventKey}`)) dives.add(e.swimmerId);
-    else others.add(e.swimmerId);
-  }
-  const divers = scorers.filter((id) => dives.has(id) && !relays.has(id) && !(strict && others.has(id))).length;
-  const full = scorers.length - divers;
-  return { numerator: full * weight.denominator + divers * weight.numerator, denominator: weight.denominator };
-}
-
 /** The lineup without the swimmer: his individual entries, and every relay he swims (a swimmer belongs to one team, so no team test is needed). */
 const withoutSwimmer = (lineup: Lineup, swimmerId: SwimmerId): Lineup => ({
   ...lineup,
@@ -121,6 +99,28 @@ function nextBehind(
     .sort((a, b) => a.place - b.place || cmp(a.teamId, b.teamId) || cmp(a.key, b.key));
   const next = behind[0];
   return next === undefined ? null : { teamId: next.teamId, seed: next.seed };
+}
+
+/**
+ * The roster_remove explanations (slice A9), sorted by swimmer id. `spotsAfter` is the proposal's roster after the removal. `marginalPoints` is the
+ * own points of the proposal with the swimmer a scorer again (his entries stay in the lineup), less the proposal's own points: what keeping him adds.
+ */
+function rosterRemoveFacts(problem: Problem, proposal: AutoBuildProposal): AutoBuildExplanation[] {
+  const { req, support } = problem;
+  const own = req.ownTeamId;
+  const swimmerOf = new Map(req.model.swimmers.map((s) => [s.swimmerId, s]));
+  const out: AutoBuildExplanation[] = [];
+  for (const gone of [...proposal.rosterRemoves].sort((a, b) => cmp(a.swimmerId, b.swimmerId))) {
+    const scorers = proposal.tagsForScoring.filter((t) => t.teamId === own && t.role === 'scorer' && swimmerOf.get(t.swimmerId)?.gender === gone.gender).map((t) => t.swimmerId);
+    const kept = scoreMeet(req.model, proposal.lineup, [...proposal.tagsForScoring, { teamId: own, swimmerId: gone.swimmerId, role: 'scorer' as const }], req.rules, req.sourcing);
+    out.push({
+      kind: 'roster_remove',
+      swimmerId: gone.swimmerId,
+      spotsAfter: rosterSpots(proposal.lineup, scorers, support.weight, req.model.events),
+      marginalPoints: ownPointsOf(kept, own) - proposal.evaluation.ownPoints,
+    });
+  }
+  return out;
 }
 
 /** The roster_add explanations, sorted by swimmer id. */
@@ -219,13 +219,14 @@ export function explain(problem: Problem, proposal: AutoBuildProposal, context: 
   const valueOf = (lineup: Lineup): Map<string, Hundredths | null> => new Map(resolveLineup(model, lineup, index).resolved.map((r) => [r.key, r.value]));
   const proposalValues = valueOf(proposal.lineup);
 
-  const joined = new Set(proposal.rosterAdds.map((a) => a.swimmerId));
-  // The swimmers the solver owns: a decision swimmer (a built gender) who is tagged a scorer or joins. A scorer of a gender the request does
-  // not build stays as entered, and is not ranked here.
-  const owned = (id: SwimmerId): boolean => problem.decision.has(id) && (problem.roles.get(id) === 'scorer' || joined.has(id));
+  // The swimmers the solver owns: a decision swimmer (a built gender) on the proposal's roster. A scorer of a gender the request does not
+  // build stays as entered, and is not ranked here. A scorer the proposal removes (slice A9) is not on the roster: his entries are non-scorer entries.
+  const roster = new Set(proposal.tagsForScoring.filter((t) => t.teamId === own && t.role === 'scorer').map((t) => t.swimmerId));
+  const owned = (id: SwimmerId): boolean => problem.decision.has(id) && roster.has(id);
   const out: AutoBuildExplanation[] = [];
 
   out.push(...rosterAddFacts(problem, proposal));
+  out.push(...rosterRemoveFacts(problem, proposal));
 
   // unusual_event: individual entries only. One column evaluator over the request's lineup, with no load: the swimmer alone against every
   // fixed entry (the other teams and the own entries the build does not own).

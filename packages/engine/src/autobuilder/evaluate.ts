@@ -12,7 +12,7 @@ import { scoreMeet } from '../model/results';
 import type { ResultRow, Results } from '../model/results';
 import { entryKey } from '../model/lineup';
 import type { IndividualEntry, Lineup, LineupEntry, RelayEntry, ScorerTag } from '../model/lineup';
-import type { MeetEvent, MeetModel, MeetSwim, RelaySplit } from '../model/meet';
+import type { MeetEvent, MeetModel, MeetSwim, MeetSwimmer, RelaySplit } from '../model/meet';
 import type { Gender, SwimmerId, TeamId } from '../model/primitives';
 import type { ScorerRole } from '../model/lineup';
 import type { CompleteRulePreset } from '../rules/rulePreset';
@@ -28,6 +28,8 @@ import type { LoadRule } from './support';
 export const eventId = (eventKey: string, gender: Gender): string => `${gender}\u0000${eventKey}`;
 const memberKey = (members: readonly SwimmerId[]): string => members.join('\u0001');
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+/** The start of the id of the synthetic own scorer of a column that holds no scorer (slice A9). The evaluator extends it until no id of the request uses it. */
+const ANCHOR = '\u0000anchor';
 
 export interface ColumnEval {
   /** The own team's points in the event, as `scoreMeet` gives them (not scaled). */
@@ -48,7 +50,10 @@ export interface EvalBase {
   readonly own: TeamId;
   /** Every decision swimmer (pinned or free) of a built gender. Their entries are solver-owned. */
   readonly decision: ReadonlySet<SwimmerId>;
-  /** The decision swimmers the coach did not tag: a column member among them is tagged a scorer in the evaluation. */
+  /**
+   * The decision swimmers the coach did not tag: a column member among them is tagged a scorer in the evaluation. Slice A9 adds the swappable scorers
+   * (the coach's tag is free): the evaluator ignores the own scorer tag of each of them and tags him a scorer only as a column member.
+   */
   readonly free: ReadonlySet<SwimmerId>;
   /** The session-load rows, or `null` (D5 4.5). */
   readonly load: LoadRule | null;
@@ -98,6 +103,11 @@ export class Evaluator {
   readonly fallbacks = new Set<string>();
   private readonly fastScorer: FastScorer | null;
   private readonly roles = new Map<SwimmerId, ScorerRole>();
+  /** Slice A9: the own scorers the coach tagged who are free (swappable). Empty without `roster: 'propose-swaps'`. */
+  private readonly swappers = new Set<SwimmerId>();
+  private readonly genderOf = new Map<SwimmerId, Gender>();
+  /** The id of the synthetic own scorer: absent from the model's swimmers, swims, splits, tags and lineup entries, so it replaces nobody. */
+  private anchorId: SwimmerId = ANCHOR;
   private readonly checksLeft = new Map<string, number>();
   private readonly cache = new Map<string, ColumnEval>();
   private readonly entriesByEvent = new Map<string, readonly LineupEntry[]>();
@@ -127,7 +137,37 @@ export class Evaluator {
     for (const s of base.model.swims) this.swimById.set(s.swimId, s);
     for (const s of base.model.relaySplits) this.splitById.set(s.splitId, s);
     this.fastScorer = base.fast !== false && fastSupported(base.rules) ? new FastScorer(base.model, base.rules) : null;
-    for (const t of base.tags) this.roles.set(t.swimmerId, t.role);
+    for (const t of base.tags) {
+      if (t.teamId === base.own && t.role === 'scorer' && base.free.has(t.swimmerId)) this.swappers.add(t.swimmerId);
+      else this.roles.set(t.swimmerId, t.role);
+    }
+    if (this.swappers.size > 0) {
+      for (const s of base.model.swimmers) this.genderOf.set(s.swimmerId, s.gender);
+      const used = new Set<string>([
+        ...base.model.swimmers.map((s) => s.swimmerId),
+        ...base.model.swims.map((s) => s.swimmerId),
+        ...base.model.relaySplits.map((s) => s.swimmerId),
+        ...base.tags.map((t) => t.swimmerId),
+        ...base.lineup.entries.flatMap((e) => (e.kind === 'individual' ? [e.swimmerId] : e.legs.map((l) => l.swimmerId))),
+      ]);
+      while (used.has(this.anchorId)) this.anchorId += '\u0000';
+    }
+  }
+
+  /**
+   * What a column is scored with: the coach's tags, less the own scorer tag of each swappable scorer (the caller tags a member a scorer), and the model.
+   * `scoreMeet` throws for a side with entries and no scorer, and a column with no member and no other own scorer can hold the held entry of a swappable
+   * scorer (a non-scorer entry here). Such a column is scored with a synthetic own scorer who has no entry and no swim: the tag only lets the roster be
+   * planned, and no row changes. The synthetic swimmer is in the model of the scoring call only.
+   */
+  private setupFor(event: MeetEvent, model: MeetModel, members: readonly SwimmerId[]): { readonly model: MeetModel; readonly tags: readonly ScorerTag[] } {
+    if (this.swappers.size === 0) return { model, tags: this.base.tags };
+    const own = this.base.own;
+    const kept = this.base.tags.filter((t) => !(t.teamId === own && t.role === 'scorer' && this.swappers.has(t.swimmerId)));
+    const covered = members.length > 0 || kept.some((t) => t.teamId === own && t.role === 'scorer' && this.genderOf.get(t.swimmerId) === event.gender);
+    if (covered) return { model, tags: kept };
+    const anchor: MeetSwimmer = { swimmerId: this.anchorId, teamId: own, gender: event.gender, classYear: null, roster: 'member' };
+    return { model: { ...model, swimmers: [...model.swimmers, anchor] }, tags: [...kept, { teamId: own, swimmerId: this.anchorId, role: 'scorer' as const }] };
   }
 
   /** The fast rows of an event for a sub-lineup, or `null` when the reference has to score it. */
@@ -223,7 +263,8 @@ export class Evaluator {
       model = this.relayModel(event, lineup);
       const extra: ScorerTag[] = [...joining].sort(cmp).map((swimmerId) => ({ teamId: base.own, swimmerId, role: 'scorer' as const }));
       this.referenceCalls += 1;
-      referenceResults = scoreMeet(model, lineup, [...base.tags, ...extra], base.rules, base.sourcing);
+      const setup = this.setupFor(event, model, [...joining]);
+      referenceResults = scoreMeet(setup.model, lineup, [...setup.tags, ...extra], base.rules, base.sourcing);
       return referenceResults.events.find((e) => e.eventKey === event.eventKey && e.gender === event.gender)?.rows ?? [];
     });
     const evaluated: ColumnEval = {
@@ -276,7 +317,8 @@ export class Evaluator {
       model = this.individualModel(event, lineup);
       const extra: ScorerTag[] = members.filter((id) => base.free.has(id)).map((swimmerId) => ({ teamId: base.own, swimmerId, role: 'scorer' as const }));
       this.referenceCalls += 1;
-      results = scoreMeet(model, lineup, [...base.tags, ...extra], base.rules, base.sourcing);
+      const setup = this.setupFor(event, model, members);
+      results = scoreMeet(setup.model, lineup, [...setup.tags, ...extra], base.rules, base.sourcing);
       return results.events.find((e) => e.eventKey === event.eventKey && e.gender === event.gender)?.rows ?? [];
     });
     return { rows, model, results };

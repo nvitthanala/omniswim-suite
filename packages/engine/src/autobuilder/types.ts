@@ -91,6 +91,13 @@ export interface AutoBuildRequest {
    * the budget charges only the seconds that `MipSolution.seconds` reports, so evaluation time is not counted.
    */
   readonly clock?: () => number;
+  /**
+   * D5 12.9 (slice A9, R65), additive, optional. `'propose-swaps'`: every coach-tagged scorer of a built gender who is not on a fixed own relay
+   * (a `swappable` scorer) may leave the roster. He starts on it (`z = 1`), his removal counts as one change, and his entries stay in the
+   * lineup as non-scorer entries. The proposal lists the removals in `rosterRemoves`. The engine only proposes: Accept is the coach's.
+   * `'fixed'` or absent: a coach-tagged scorer stays on the roster (every earlier slice).
+   */
+  readonly roster?: 'fixed' | 'propose-swaps';
 }
 
 export interface AutoBuildEvaluation {
@@ -145,6 +152,17 @@ export type AutoBuildExplanation =
       readonly swimmerId: SwimmerId;
       readonly spotsAfter: { readonly numerator: number; readonly denominator: number };
       readonly marginalPoints: number;
+    }
+  /**
+   * Slice A9: a scorer the proposal takes off the roster. `spotsAfter` is the roster's spots after the removal (as `roster_add` counts them).
+   * `marginalPoints` is the own points of the proposal with the swimmer a scorer again (his entries stay in the lineup), less its own points
+   * without him: what keeping him would add, from two `scoreMeet` runs. Listed after every `roster_add`, by swimmer id.
+   */
+  | {
+      readonly kind: 'roster_remove';
+      readonly swimmerId: SwimmerId;
+      readonly spotsAfter: { readonly numerator: number; readonly denominator: number };
+      readonly marginalPoints: number;
     };
 
 export interface AutoBuildProposal {
@@ -152,12 +170,17 @@ export interface AutoBuildProposal {
   readonly lineup: Lineup;
   readonly rosterAdds: readonly { readonly teamId: TeamId; readonly gender: Gender; readonly swimmerId: SwimmerId }[];
   /**
-   * Input tags plus a role-'scorer' tag (no `source`) per add. Storing them is the coach's Accept, never automatic (R52).
+   * Slice A9: the coach-tagged scorers the proposal takes off the roster, sorted by swimmer id. Empty unless the request says
+   * `roster: 'propose-swaps'`. Their entries stay in `lineup` as non-scorer entries. Never applied without the coach.
+   */
+  readonly rosterRemoves: readonly { readonly teamId: TeamId; readonly gender: Gender; readonly swimmerId: SwimmerId }[];
+  /**
+   * Input tags (less the scorer tag of each remove) plus a role-'scorer' tag (no `source`) per add. Storing them is the coach's Accept, never automatic (R52).
    * Deviation (additive): sorted by team id, swimmer id and role, so the result does not depend on input order.
    */
   readonly tagsForScoring: readonly ScorerTag[];
   readonly entryChanges: readonly EntryChange[];
-  /** The section 4.9 count: roster adds plus entry changes. */
+  /** The section 4.9 count: roster adds, roster removes (slice A9) and entry changes. */
   readonly changeCount: number;
   readonly evaluation: AutoBuildEvaluation;
   /** Slice A8 (D5 9): empty from `gate`, filled by `autoBuild` for a proposal it returns. */

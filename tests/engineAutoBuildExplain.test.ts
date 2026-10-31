@@ -817,6 +817,7 @@ describe('autoBuild (D5, slice A8: explanations)', () => {
     const proposal: AutoBuildProposal = {
       lineup: lineup(...entries),
       rosterAdds: [],
+      rosterRemoves: [],
       tagsForScoring: fx.tags,
       entryChanges: [],
       changeCount: 0,
@@ -939,6 +940,7 @@ describe('autoBuild (D5, slice A8: explanations)', () => {
       const proposal: AutoBuildProposal = {
         lineup: lineup(...entries),
         rosterAdds: [],
+        rosterRemoves: [],
         tagsForScoring: fx.tags,
         entryChanges: [],
         changeCount: 0,

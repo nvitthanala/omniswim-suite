@@ -955,3 +955,43 @@ Test `cappedLegsDoNotCrowdQ`: the top 12 squads of an event all hold a swimmer w
 5. **Risks:** two HiGHS instances (memory; `loadMs` per new worker); a tab and
    a docked iframe can each run a build, so Apply goes through the storage
    layer's last-write rule; wall-clock results vary with CPU load.
+
+## Amendment 8 (lead rulings, 2026-10-30, slice A9)
+
+1. **Opt-in.** `AutoBuildRequest.roster?: 'fixed' | 'propose-swaps'`. Absent
+   or `'fixed'` keeps every earlier slice. Any other value is refused as
+   `limits_invalid` with subject `roster`. Under `'propose-swaps'`, a
+   coach-tagged scorer of a built gender who is not on a fixed own relay is
+   swappable: they start on the roster, and a removal counts as one change.
+2. **Output.** `AutoBuildProposal.rosterRemoves` is required (empty unless
+   swaps are on), sorted by swimmer id. `changeCount` is roster adds plus
+   roster removes plus entry changes. `tagsForScoring` drops the scorer tag
+   of each removed swimmer. A new explanation kind, `roster_remove
+   {swimmerId, spotsAfter, marginalPoints}`, follows every `roster_add`.
+   U1-b must handle it.
+3. **A removed scorer's entries stay** in the lineup as non-scorer entries.
+   A relay that loses them as a leg is rebuilt (R71). Held split entries
+   and frozen robust entries still hold in a flagged run.
+4. **An entryless swappable scorer** may stay on the roster, as today (R78
+   only warns). With no Z2 the solve is indifferent to their `z` while the
+   size row has slack, so the gate restores removals (item 5).
+5. **Gate, two phases.** First the raw solver assignment is built and
+   checked against `mipPoints` and the hard rules, as before. Then, except in
+   goal seek, the gate restores removals in swimmer-id order. It accepts a
+   restore when the strict team-size count (4.4) holds, the restore adds no
+   hard violation that the lineup without it lacks (session load under
+   `respect` and the entry caps are checked for swimmers on the roster), and
+   the mode's objective does not drop. Only the tag comes back. The entries
+   stay as built under the removal, so a relay rebuilt without the swimmer
+   stays rebuilt. Goal seek is excluded because it minimizes changes and its
+   change count must equal the solver's.
+6. **The final candidate is the proposal.** Its score drives the
+   evaluation, the explanations and the improved or unchanged call. The
+   proof re-bases `bestFound` and `gap` on it. `proven_optimal` holds only
+   when that score equals the bound. A score above the solver's bound means
+   the model and `scoreMeet` disagree, and throws `model_mismatch`.
+7. **The synthetic anchor swimmer** gets an id unused by any model swimmer,
+   swim, split, tag or lineup entry: `'\u0000anchor'`, extended with
+   `'\u0000'` until unused.
+8. **User question A10** (what Accept writes for a removal) stays open. U1
+   asks at Accept time, with "tag them non-scorer" preselected.

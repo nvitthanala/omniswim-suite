@@ -62,12 +62,14 @@ export interface Row {
  * They are listed in dependency order: a definition reads only `y` variables and earlier definitions.
  * - `sum`: `x` and `g`, equal to the weighted sum of the `y` terms (the equality rows of 4.1 and 4.5).
  * - `any`: `z`, 1 exactly when some `x` of the swimmer is above 0 (Z1 and Z2).
+ * - `stay`: the `z` of a swappable scorer (slice A9): 1 always. The local search never infers a removal from "no entries".
  * - `diver`: `d`, 1 exactly when the swimmer is on the roster, dives, and has no other entry (D1 to D3). A larger `d` only loosens T1.
  * - `excess`: `v`, the least value the row of 4.5 allows: the races above the maximum, or 0.
  */
 export type Derived =
   | { readonly kind: 'sum'; readonly name: string; readonly terms: readonly Term[] }
   | { readonly kind: 'any'; readonly name: string; readonly inputs: readonly string[] }
+  | { readonly kind: 'stay'; readonly name: string }
   | { readonly kind: 'diver'; readonly name: string; readonly z: string | null; readonly dives: readonly string[]; readonly others: readonly string[] }
   | { readonly kind: 'excess'; readonly name: string; readonly k0: number; readonly max: number; readonly terms: readonly Term[] };
 
@@ -142,10 +144,17 @@ export interface Selection {
   readonly chosen: ReadonlyMap<string, Column>;
   /** Free swimmers with z = 1. */
   readonly joined: ReadonlySet<SwimmerId>;
+  /** Swappable scorers with z = 0 (slice A9). Always empty without `roster: 'propose-swaps'`. */
+  readonly removed: ReadonlySet<SwimmerId>;
   /** Outside pairs with o = 1, per event id. */
   readonly outside: ReadonlyMap<string, readonly SwimmerId[]>;
   /** Relay events whose outside slot `oR` is above 0. */
   readonly relayOutside: ReadonlySet<string>;
+  /**
+   * Slice A9, set by the gate only: scorers whose removal the gate undid. They are on the roster again, and their entries stay as built under the
+   * removal (the solver's `x` for them is 0, which was no decision to drop an entry).
+   */
+  readonly restored?: ReadonlySet<SwimmerId>;
 }
 
 export interface LpBuild {
@@ -448,18 +457,35 @@ class Builder {
     return oR;
   }
 
-  /** Z1 and Z2 for the free swimmers that have a pair variable. */
+  /**
+   * Z1 and Z2 for the free swimmers that have a pair variable, and Z1 for the swappable scorers (slice A9, `z` starts at 1). A swappable scorer
+   * has no Z2: he may stay on the roster with no entry, as he does now (R78 only warns), so the current lineup stays in the space. Without Z2 the
+   * solve is indifferent to a swappable `z` while T1 has slack, so the gate restores a removal that buys nothing (`gate.ts`).
+   */
   private addRoster(): void {
-    for (const id of [...this.problem.freeSet].sort(cmp)) {
-      const vars = this.pairVars.get(id);
-      if (vars === undefined || vars.length === 0) continue; // nothing to add: the swimmer stays off the roster
+    const { swap } = this.problem;
+    for (const id of [...this.problem.freeSet, ...swap].sort(cmp)) {
+      const vars = this.pairVars.get(id) ?? [];
+      const swappable = swap.has(id);
+      if (!swappable && vars.length === 0) continue; // nothing to add: the swimmer stays off the roster
       const z = this.bin(`z${this.si(id)}`);
       this.zVar.set(id, z);
       for (const v of vars) this.row([[v.name, 1], [z, -v.ub]], '<=', 0);
       // Z3 (D5 4.6): a held split entry stays whatever `z` is, so `x = z`.
       for (const v of vars) if (v.kind === 'x' && this.problem.held.has(pairKey(id, v.event.eventKey))) this.row([[v.name, 1], [z, -1]], '=', 0);
+      if (swappable) {
+        this.derived.push({ kind: 'stay', name: z });
+        continue;
+      }
       this.row([[z, 1], ...vars.map((v) => [v.name, -1] as Term)], '<=', 0);
       this.derived.push({ kind: 'any', name: z, inputs: vars.map((v) => v.name) });
+    }
+    // A built side with a swappable scorer and no other scorer keeps one: with no scorer tag `scoreMeet` throws `scoring_roster_missing`.
+    for (const g of this.problem.genders) {
+      const side = (this.problem.pinned.get(g) ?? []).filter((id) => swap.has(id));
+      if (side.length === 0 || (this.problem.pinned.get(g) ?? []).some((id) => !swap.has(id))) continue;
+      const zs = [...side, ...(this.problem.free.get(g) ?? [])].sort(cmp).flatMap((id) => (this.zVar.has(id) ? [[this.zVar.get(id) as string, 1] as Term] : []));
+      this.row(zs, '>=', 1);
     }
   }
 
@@ -525,10 +551,10 @@ class Builder {
       const d = this.bin(`d${this.si(id)}`);
       this.dVar.set(id, d);
       const z = this.zVar.get(id);
-      if (this.problem.freeSet.has(id) && z !== undefined) this.row([[d, 1], [z, -1]], '<=', 0);
+      if (z !== undefined) this.row([[d, 1], [z, -1]], '<=', 0);
       this.row([[d, 1], ...dives.map((v) => [v.name, -1] as Term)], '<=', 0);
       for (const v of vars) if (v.event.kind !== 'diving') this.row([[d, 1], [v.name, 1]], '<=', 1);
-      const zOfRow = this.problem.freeSet.has(id) && z !== undefined ? z : null;
+      const zOfRow = z !== undefined ? z : null;
       this.derived.push({ kind: 'diver', name: d, z: zOfRow, dives: dives.map((v) => v.name), others: vars.filter((v) => v.event.kind !== 'diving').map((v) => v.name) });
     }
   }
@@ -545,11 +571,16 @@ class Builder {
         const z = this.zVar.get(id);
         if (z !== undefined) terms.push([z, weight.denominator]);
       }
+      // Slice A9: a swappable scorer is a spot only while `z = 1`; the other pinned scorers are the constant below.
+      for (const id of pinned) {
+        const z = this.problem.swap.has(id) ? this.zVar.get(id) : undefined;
+        if (z !== undefined) terms.push([z, weight.denominator]);
+      }
       for (const id of [...pinned, ...free]) {
         const d = this.dVar.get(id);
         if (d !== undefined) terms.push([d, -(weight.denominator - weight.numerator)]);
       }
-      const rhs = size * weight.denominator - weight.denominator * pinned.length;
+      const rhs = size * weight.denominator - weight.denominator * pinned.filter((id) => !this.problem.swap.has(id)).length;
       if (terms.length > 0 || rhs < 0) this.row(terms, '<=', rhs);
     }
   }
@@ -570,6 +601,11 @@ class Builder {
       if (this.problem.freeSet.has(id)) {
         const z = this.zVar.get(id);
         if (z !== undefined) terms.push([z, -(1 + nCurrent)]);
+      } else if (this.problem.swap.has(id)) {
+        // Slice A9: (1 - z) + sum over the current entries of (z - x) + the rest of x. A removed scorer's entries stay, so they cost nothing.
+        const z = this.zVar.get(id) as string;
+        terms.push([z, 1 - nCurrent]);
+        constant -= 1;
       } else {
         constant -= nCurrent;
       }
@@ -766,10 +802,16 @@ class Builder {
     }
     for (const vars of this.pairVars.values()) for (const v of vars) if (v.kind === 'w') readColumn(columns, v.name);
     const joined = new Set<SwimmerId>();
-    for (const [id, z] of this.zVar) if (readColumn(columns, z) === 1) joined.add(id);
+    const removed = new Set<SwimmerId>();
+    for (const [id, z] of this.zVar) {
+      const on = readColumn(columns, z) === 1;
+      if (this.problem.swap.has(id)) {
+        if (!on) removed.add(id);
+      } else if (on) joined.add(id);
+    }
     for (const d of this.dVar.values()) readColumn(columns, d); // fail on a missing or fractional indicator
     for (const name of this.loadVars) readColumn(columns, name);
-    return { chosen, joined, outside, relayOutside };
+    return { chosen, joined, removed, outside, relayOutside };
   }
 }
 

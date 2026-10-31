@@ -283,6 +283,8 @@ class Search {
         return d.terms.reduce((s, [name, k]) => s + k * v(name), 0);
       case 'any':
         return d.inputs.reduce((s, name) => s + v(name), 0) >= 1 ? 1 : 0;
+      case 'stay':
+        return 1; // a swappable scorer (slice A9) stays: the search never infers a removal from "no entries"
       case 'diver': {
         if (d.z !== null && v(d.z) !== 1) return 0;
         return d.dives.reduce((s, name) => s + v(name), 0) >= 1 && d.others.every((name) => v(name) === 0) ? 1 : 0;
@@ -403,6 +405,8 @@ function inputsOf(d: Derived): readonly string[] {
       return d.terms.map(([name]) => name);
     case 'any':
       return d.inputs;
+    case 'stay':
+      return [];
     case 'diver':
       return [...(d.z === null ? [] : [d.z]), ...d.dives, ...d.others];
   }

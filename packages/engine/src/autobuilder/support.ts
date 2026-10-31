@@ -158,6 +158,13 @@ export function checkLimits(limits: AutoBuildLimits): void {
   }
 }
 
+/** D5 12.9: the roster flag. A worker passes JSON, so the value is checked at run time. */
+export function checkRoster(roster: unknown): void {
+  if (roster !== undefined && roster !== 'fixed' && roster !== 'propose-swaps') {
+    autoBuildFail('limits_invalid', `roster must be 'fixed' or 'propose-swaps', not ${JSON.stringify(roster)}`, 'roster');
+  }
+}
+
 export function checkObjective(model: MeetModel, ownTeamId: TeamId, objective: AutoBuildObjective): void {
   const rival = objective.kind === 'margin' ? objective.rival : objective.kind === 'goal-seek' && objective.target.kind === 'margin' ? objective.target.rival : null;
   if (rival !== null && rival.kind === 'team' && (rival.teamId === ownTeamId || !model.teams.some((t) => t.teamId === rival.teamId))) {

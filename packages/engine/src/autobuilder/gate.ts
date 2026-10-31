@@ -18,6 +18,7 @@ import type { SessionLoadResult } from './load';
 import { freshRelays, squadKeyOfEntry } from './squads';
 import { metricOf } from './mode';
 import { pinLineup } from './robust';
+import { rosterSpots } from './roster';
 import { pairKey } from './space';
 import type { Problem, Space } from './space';
 import { autoBuildFail } from './types';
@@ -70,6 +71,9 @@ export function repairable(problem: Problem): Violation[] {
 }
 
 const isPinned = (problem: Problem, id: SwimmerId): boolean => problem.roles.get(id) === 'scorer';
+/** A decision swimmer on the proposal's roster: a pinned scorer the build keeps (slice A9: not a removed one), or a free swimmer who joins. */
+const onRoster = (problem: Problem, who: { readonly joined: ReadonlySet<SwimmerId>; readonly removed: ReadonlySet<SwimmerId> }, id: SwimmerId): boolean =>
+  (isPinned(problem, id) && !who.removed.has(id)) || who.joined.has(id);
 const genderOf = (problem: Problem, id: SwimmerId): Gender => (problem.req.model.swimmers.find((s) => s.swimmerId === id) as { gender: Gender }).gender;
 
 export interface Built {
@@ -79,6 +83,9 @@ export interface Built {
   readonly entryChanges: readonly EntryChange[];
   /** Free swimmers with z = 1. */
   readonly joined: ReadonlySet<SwimmerId>;
+  /** Swappable scorers with z = 0 (slice A9). */
+  readonly removed: ReadonlySet<SwimmerId>;
+  readonly rosterRemoves: AutoBuildProposal['rosterRemoves'];
 }
 
 const eventIdOf = (e: { readonly gender: Gender; readonly eventKey: string }): string => `${e.gender}\u0000${e.eventKey}`;
@@ -86,7 +93,8 @@ const eventIdOf = (e: { readonly gender: Gender; readonly eventKey: string }): s
 /** D5 8.1: copy the lineup, drop the solver-owned entries that are not chosen, keep the rest in place, append the new entries. */
 export function buildLineup(problem: Problem, space: Space, selection: Selection): Built {
   const { req } = problem;
-  const owned = (id: SwimmerId): boolean => isPinned(problem, id) || selection.joined.has(id);
+  // A scorer the gate restored keeps his entries as built under the removal, so for the entries he still counts as removed.
+  const owned = (id: SwimmerId): boolean => onRoster(problem, { joined: selection.joined, removed: new Set([...selection.removed, ...(selection.restored ?? [])]) }, id);
   const members = new Map<string, ReadonlySet<SwimmerId>>();
   for (const es of space.events) members.set(es.id, new Set(selection.chosen.get(es.id)?.members ?? []));
   const builtIds = new Set(space.events.map((es) => es.id));
@@ -150,15 +158,94 @@ export function buildLineup(problem: Problem, space: Space, selection: Selection
 
   const joined = [...selection.joined].sort(cmp);
   const rosterAdds = joined.map((swimmerId) => ({ teamId: req.ownTeamId, gender: genderOf(problem, swimmerId), swimmerId }));
-  const tags: ScorerTag[] = [...req.tags, ...joined.map((swimmerId) => ({ teamId: req.ownTeamId, swimmerId, role: 'scorer' as const }))];
+  const removed = [...selection.removed].sort(cmp);
+  const rosterRemoves = removed.map((swimmerId) => ({ teamId: req.ownTeamId, gender: genderOf(problem, swimmerId), swimmerId }));
+  // A removed scorer loses his tag (his entries stay in the lineup as non-scorer entries).
+  const kept = req.tags.filter((t) => !(t.teamId === req.ownTeamId && t.role === 'scorer' && selection.removed.has(t.swimmerId)));
+  const tags: ScorerTag[] = [...kept, ...joined.map((swimmerId) => ({ teamId: req.ownTeamId, swimmerId, role: 'scorer' as const }))];
   tags.sort((a, b) => cmp(a.teamId, b.teamId) || cmp(a.swimmerId, b.swimmerId) || cmp(a.role, b.role));
   return {
     lineup: { payloadVersion: 1, meetKey: req.lineup.meetKey, entries },
     rosterAdds,
+    rosterRemoves,
     tagsForScoring: tags,
     entryChanges: [...changes, ...added],
     joined: new Set(joined),
+    removed: new Set(removed),
   };
+}
+
+/** A built lineup, scored whole the way the gate scores it (D5 8.2): the results, the load, the own-only penalty, the robust copy and the metric. */
+interface Candidate {
+  readonly built: Built;
+  readonly results: Results;
+  readonly load: SessionLoadResult | null;
+  readonly penaltyPoints: number;
+  readonly robustResults: Results | null;
+  readonly value: number;
+  readonly rival: ReturnType<typeof metricOf>['rival'];
+  readonly violations: readonly Violation[];
+}
+
+function candidateOf(problem: Problem, built: Built): Candidate {
+  const { req } = problem;
+  const results = scoreMeet(req.model, built.lineup, built.tagsForScoring, req.rules, req.sourcing);
+  // D5 8.2: the load of the built lineup, and a penalty over the own swimmers on the roster only (never `sessionLoad`'s own total).
+  const rule = problem.support.load;
+  const load: SessionLoadResult | null = rule === null ? null : sessionLoad(req.model, built.lineup, results, rule.schedule, rule.preference, req.rules);
+  const penaltyPoints = ownPenalty(rule, load, scorerIds(built.tagsForScoring, req.ownTeamId));
+  // D5 5.4 and 8.2: robust mode ranks the lineup with the robust swims pinned on the entries of the swimmers the solver owns. The pinned copy is
+  // scored by `scoreMeet` for the objective only. Everything else (`results`, the load, the violations) is the lineup as built.
+  const robustResults =
+    problem.robust === null
+      ? null
+      : scoreMeet(req.model, pinLineup(built.lineup, req.ownTeamId, problem.robust.pins, (id) => onRoster(problem, built, id)), built.tagsForScoring, req.rules, req.sourcing);
+  const { value, rival } = metricOf(problem.mode, robustResults ?? results, req.ownTeamId);
+  return { built, results, load, penaltyPoints, robustResults, value, rival, violations: violationsOf(results, load, rule === null ? null : rule.schedule) };
+}
+
+/** The objective of a candidate in the gate's terms: the metric of the mode (robust seeds in robust mode) less the own-only penalty. */
+const objectiveOfCandidate = (c: Candidate): number => c.value - c.penaltyPoints;
+
+/**
+ * Slice A9. Without Z2 a swappable scorer's `z` is free while the team-size row has slack, so a result that skipped the tie-break (a time limit, an
+ * incumbent) can list a removal that buys nothing, or one that the solver could have undone for more points. The gate undoes a removal, in swimmer-id
+ * order, when (1) the strict team-size count (D5 4.4) still holds with him back, (2) the lineup with him a scorer again adds no blocking violation to the
+ * lineup without him (see `blockersOf`: a swimmer over a limit is a blocker on the roster and none off it), and (3) the objective that `scoreMeet` gives
+ * it is not lower. His entries stay as built under the removal (`Selection.restored`), so only his tag comes back. The caller has checked the solver's
+ * own assignment against the MIP first. A restore is post-processing: the lineup it gives may score above the solver's value (an incumbent of a
+ * time-limited solve). A goal seek is exempt: it minimizes changes, so the solver itself never removes without a reason, and the change count must
+ * match the MIP's.
+ */
+export function restoreIdleRemovals(problem: Problem, space: Space, selection: Selection): Selection {
+  if (selection.removed.size === 0 || problem.mode.target !== null) return selection;
+  const { req, support } = problem;
+  const own = req.ownTeamId;
+  let state = selection;
+  const first = candidateOf(problem, buildLineup(problem, space, state));
+  const lineup = first.built.lineup;
+  let baseline = objectiveOfCandidate(first);
+  let blocked = new Set(blockersOf(problem, first.built, first.violations).map((b) => b.key));
+  for (const g of problem.genders) {
+    const onTeam = (id: SwimmerId): boolean => genderOf(problem, id) === g;
+    const roster = new Set<SwimmerId>(req.tags.filter((t) => t.teamId === own && t.role === 'scorer' && onTeam(t.swimmerId) && !selection.removed.has(t.swimmerId)).map((t) => t.swimmerId));
+    for (const id of selection.joined) if (onTeam(id)) roster.add(id);
+    for (const id of [...selection.removed].filter(onTeam).sort(cmp)) {
+      const spots = rosterSpots(lineup, [...roster, id], support.weight, req.model.events, true);
+      if (support.size !== 'unlimited' && spots.numerator > support.size * support.weight.denominator) continue;
+      const back: Selection = { ...state, removed: new Set([...state.removed].filter((x) => x !== id)), restored: new Set([...(state.restored ?? []), id]) };
+      const next = candidateOf(problem, buildLineup(problem, space, back));
+      const blockers = blockersOf(problem, next.built, next.violations);
+      if (blockers.some((b) => !blocked.has(b.key))) continue;
+      const objective = objectiveOfCandidate(next);
+      if (objective < baseline - 1e-9) continue;
+      state = back;
+      baseline = objective;
+      blocked = new Set(blockers.map((b) => b.key));
+      roster.add(id);
+    }
+  }
+  return state;
 }
 
 /**
@@ -172,23 +259,42 @@ function checkPoints(points: number, scale: Scale, mip: number, what = 'the own 
   }
 }
 
+/** A hard violation the gate refuses (D5 8.3.3 and 8.3.4), with the failure it raises. `key` names the violation. */
+interface Blocker {
+  readonly key: string;
+  readonly message: string;
+  readonly subject: string | null;
+}
+
+/**
+ * The hard violations of a built lineup that the gate refuses, in order. The checks that name a swimmer are roster-aware: an entry-cap or session-load
+ * violation binds a decision swimmer on the roster of this built lineup (`onRoster`), not one who left it, though `sessionLoad` lists both.
+ */
+function blockersOf(problem: Problem, built: Built, violations: readonly Violation[]): Blocker[] {
+  const before = new Set(problem.currentViolations.map((v) => JSON.stringify(v)));
+  const respect = problem.support.load !== null && !problem.support.load.prefer;
+  const out: Blocker[] = [];
+  for (const v of violations) {
+    if (!isHard(v, respect, problem.decision)) continue;
+    const key = JSON.stringify(v);
+    if (v.kind === 'entry_cap' && problem.decision.has(v.swimmerId) && onRoster(problem, built, v.swimmerId)) {
+      out.push({ key, message: `swimmer "${v.swimmerId}" is over the ${v.which} entry cap in the built lineup (${v.count} of ${v.limit})`, subject: v.swimmerId });
+    } else if (v.kind === 'session_load' && problem.decision.has(v.swimmerId) && onRoster(problem, built, v.swimmerId)) {
+      out.push({ key, message: `swimmer "${v.swimmerId}" swims ${v.races} races in one session in the built lineup (limit ${v.limit})`, subject: v.swimmerId });
+    } else if (v.kind === 'scoring_team_size' && v.teamId === problem.req.ownTeamId && problem.genders.includes(v.gender)) {
+      out.push({ key, message: `the built ${v.gender} roster is over the scoring-team size`, subject: v.gender });
+    } else if (!before.has(key)) {
+      out.push({ key, message: `the built lineup adds a ${v.kind} violation that the current lineup lacks`, subject: v.kind });
+    }
+  }
+  return out;
+}
+
 /** D5 8.3.3 and 8.3.4. */
 function checkViolations(problem: Problem, built: Built, violations: readonly Violation[]): Violation[] {
   const before = new Set(problem.currentViolations.map((v) => JSON.stringify(v)));
-  const respect = problem.support.load !== null && !problem.support.load.prefer;
-  for (const v of violations) {
-    if (!isHard(v, respect, problem.decision)) continue;
-    if (v.kind === 'entry_cap' && problem.decision.has(v.swimmerId) && (isPinned(problem, v.swimmerId) || built.joined.has(v.swimmerId))) {
-      autoBuildFail('model_mismatch', `swimmer "${v.swimmerId}" is over the ${v.which} entry cap in the built lineup (${v.count} of ${v.limit})`, v.swimmerId);
-    }
-    if (v.kind === 'session_load' && problem.decision.has(v.swimmerId) && (isPinned(problem, v.swimmerId) || built.joined.has(v.swimmerId))) {
-      autoBuildFail('model_mismatch', `swimmer "${v.swimmerId}" swims ${v.races} races in one session in the built lineup (limit ${v.limit})`, v.swimmerId);
-    }
-    if (v.kind === 'scoring_team_size' && v.teamId === problem.req.ownTeamId && problem.genders.includes(v.gender)) {
-      autoBuildFail('model_mismatch', `the built ${v.gender} roster is over the scoring-team size`, v.gender);
-    }
-    if (!before.has(JSON.stringify(v))) autoBuildFail('model_mismatch', `the built lineup adds a ${v.kind} violation that the current lineup lacks`, v.kind);
-  }
+  const first = blockersOf(problem, built, violations)[0];
+  if (first !== undefined) autoBuildFail('model_mismatch', first.message, first.subject);
   return violations.filter((v) => isWarning(v, problem) && !before.has(JSON.stringify(v)));
 }
 
@@ -196,6 +302,10 @@ function checkViolations(problem: Problem, built: Built, violations: readonly Vi
  * Build, re-score and check. Throws `model_mismatch` on any difference. `mipPoints` is what the mode ranks (`LpBuild.pointsOf`):
  * the metric less the penalty, or in goal seek the negative change count. `valueScaled` is the metric (`LpBuild.valueOf`), which goal
  * seek checks as well, because its ranked quantity says nothing about the metric.
+ *
+ * Two phases. First the solver's own assignment is built and checked against `mipPoints` and the hard rules. Then (not in goal seek) the gate
+ * undoes the removals that `restoreIdleRemovals` accepts and scores the lineup it gives again. That candidate is the proposal: its score, not the
+ * solver's, is the evaluation. It is never below `mipPoints`.
  */
 export function gate(
   problem: Problem,
@@ -207,36 +317,37 @@ export function gate(
   valueScaled: number = mipPoints
 ): AutoBuildProposal {
   const { req } = problem;
-  const built = buildLineup(problem, space, selection);
-  const results = scoreMeet(req.model, built.lineup, built.tagsForScoring, req.rules, req.sourcing);
-  // D5 8.2: the load of the built lineup, and a penalty over the own swimmers on the roster only (never `sessionLoad`'s own total).
-  const rule = problem.support.load;
-  const load: SessionLoadResult | null = rule === null ? null : sessionLoad(req.model, built.lineup, results, rule.schedule, rule.preference, req.rules);
-  const penaltyPoints = ownPenalty(problem.support.load, load, scorerIds(built.tagsForScoring, req.ownTeamId));
-  const ownPoints = ownPointsOf(results, req.ownTeamId);
-  // D5 5.4 and 8.2: robust mode ranks the lineup with the robust swims pinned on the entries of the swimmers the solver owns. The pinned copy is
-  // scored by `scoreMeet` for the objective only. Everything else (`results`, `ownPoints`, the load, the violations) is the lineup as built.
-  const robustResults =
-    problem.robust === null
-      ? null
-      : scoreMeet(req.model, pinLineup(built.lineup, req.ownTeamId, problem.robust.pins, (id) => isPinned(problem, id) || built.joined.has(id)), built.tagsForScoring, req.rules, req.sourcing);
-  const { value, rival } = metricOf(problem.mode, robustResults ?? results, req.ownTeamId);
-  const changeCount = built.rosterAdds.length + built.entryChanges.length;
+  const raw = candidateOf(problem, buildLineup(problem, space, selection));
   const target = problem.mode.target;
   if (target === null) {
-    checkPoints(value - penaltyPoints, scale, mipPoints, 'the metric less the penalty');
+    checkPoints(raw.value - raw.penaltyPoints, scale, mipPoints, 'the metric less the penalty');
   } else {
     // Goal seek (D5 4.7): the metric equals the MIP's, it reaches the target, and the changes counted from the lineup are the ones
     // the MIP minimized (4.9). The metric carries no penalty.
-    checkPoints(value, scale, valueScaled, 'the metric');
-    if (Math.round(value * scale.D) < Math.ceil(target * scale.D - 1e-9)) autoBuildFail('model_mismatch', `the built lineup's metric ${value} is below the target ${target}`);
-    if (changeCount !== -mipPoints) autoBuildFail('model_mismatch', `the built lineup has ${changeCount} changes; the solver counted ${-mipPoints}`);
+    checkPoints(raw.value, scale, valueScaled, 'the metric');
+    if (Math.round(raw.value * scale.D) < Math.ceil(target * scale.D - 1e-9)) autoBuildFail('model_mismatch', `the built lineup's metric ${raw.value} is below the target ${target}`);
+    const rawChanges = raw.built.rosterAdds.length + raw.built.rosterRemoves.length + raw.built.entryChanges.length;
+    if (rawChanges !== -mipPoints) autoBuildFail('model_mismatch', `the built lineup has ${rawChanges} changes; the solver counted ${-mipPoints}`);
   }
-  const newWarnings = checkViolations(problem, built, violationsOf(results, load, rule === null ? null : rule.schedule));
-  const evaluation: AutoBuildEvaluation = { objective: target === null ? value - penaltyPoints : value, ownPoints, rival, robustOwnPoints: robustResults === null ? null : ownPointsOf(robustResults, req.ownTeamId), penaltyPoints, results, load };
+  checkViolations(problem, raw.built, raw.violations);
+  const restored = restoreIdleRemovals(problem, space, selection);
+  const final = restored === selection ? raw : candidateOf(problem, buildLineup(problem, space, restored));
+  const { built } = final;
+  const changeCount = built.rosterAdds.length + built.rosterRemoves.length + built.entryChanges.length;
+  const newWarnings = checkViolations(problem, built, final.violations);
+  const evaluation: AutoBuildEvaluation = {
+    objective: target === null ? final.value - final.penaltyPoints : final.value,
+    ownPoints: ownPointsOf(final.results, req.ownTeamId),
+    rival: final.rival,
+    robustOwnPoints: final.robustResults === null ? null : ownPointsOf(final.robustResults, req.ownTeamId),
+    penaltyPoints: final.penaltyPoints,
+    results: final.results,
+    load: final.load,
+  };
   return {
     lineup: built.lineup,
     rosterAdds: built.rosterAdds,
+    rosterRemoves: built.rosterRemoves,
     tagsForScoring: built.tagsForScoring,
     entryChanges: built.entryChanges,
     changeCount,
@@ -246,4 +357,3 @@ export function gate(
     method,
   };
 }
-

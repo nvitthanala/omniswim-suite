@@ -44,6 +44,11 @@ export interface Problem {
   readonly free: ReadonlyMap<Gender, readonly SwimmerId[]>;
   readonly decision: ReadonlySet<SwimmerId>;
   readonly freeSet: ReadonlySet<SwimmerId>;
+  /**
+   * Slice A9 (`roster: 'propose-swaps'`): the pinned scorers who may leave the roster. A subset of the pinned swimmers, empty without the flag.
+   * Each has a `z` variable with the current value 1; pinned in every other respect (his current entries are in the current column).
+   */
+  readonly swap: ReadonlySet<SwimmerId>;
   /** Own relay entries that stay fixed (an event with a leg off the decision set) per swimmer: the constant `k_R` of the entry-cap rows. */
   readonly relayEntries: ReadonlyMap<SwimmerId, number>;
   /** Current own individual entries of decision swimmers, key `swimmerId NUL eventKey`. */
@@ -98,6 +103,7 @@ export interface Deciders {
   readonly free: ReadonlyMap<Gender, readonly SwimmerId[]>;
   readonly decision: ReadonlySet<SwimmerId>;
   readonly freeSet: ReadonlySet<SwimmerId>;
+  readonly swap: ReadonlySet<SwimmerId>;
   readonly fixedRelayEvents: ReadonlySet<string>;
 }
 
@@ -140,11 +146,22 @@ export function classify(req: AutoBuildRequest): Deciders {
     }
   }
   const keep = (m: Map<Gender, SwimmerId[]>): Map<Gender, SwimmerId[]> => new Map([...m].map(([g, list]) => [g, list.filter((id) => decision.has(id))]));
-  return { genders, roles, pinned, free: keep(free), decision, freeSet, fixedRelayEvents };
+  // Slice A9: a pinned scorer on a relay of a fixed event stays (a relay leg must be a scorer, and that relay stays as entered).
+  const swap = new Set<SwimmerId>();
+  if (req.roster === 'propose-swaps') {
+    const fixedLegs = new Set(relays.filter((e) => fixedRelayEvents.has(eventId(e.eventKey, e.gender))).flatMap((e) => e.legs.map((l) => l.swimmerId)));
+    for (const list of pinned.values()) for (const id of list) if (!fixedLegs.has(id)) swap.add(id);
+  }
+  return { genders, roles, pinned, free: keep(free), decision, freeSet, swap, fixedRelayEvents };
 }
+
+/** With no size limit a removal never raises points, it only costs a change: nobody is swappable, and the run is the run without the flag. */
+const swappableOf = (who: Deciders, support: Support): ReadonlySet<SwimmerId> => (support.size === 'unlimited' ? new Set<SwimmerId>() : who.swap);
 
 export function buildProblem(req: AutoBuildRequest, support: Support, currentResults: Results): Problem {
   const who = classify(req);
+  const swap = swappableOf(who, support);
+  const solverOwned = new Set<SwimmerId>([...who.freeSet, ...swap]);
   const currentEntry = new Map<string, IndividualEntry>();
   for (const e of req.lineup.entries) {
     if (e.kind === 'individual' && e.teamId === req.ownTeamId && who.decision.has(e.swimmerId)) currentEntry.set(pairKey(e.swimmerId, e.eventKey), e);
@@ -159,7 +176,7 @@ export function buildProblem(req: AutoBuildRequest, support: Support, currentRes
   if (rule !== null) {
     for (const event of built) {
       if (event.kind === 'relay' || scheduledOf(rule.schedule, event.eventKey, event.gender)?.format.kind !== 'timed-final-split') continue;
-      for (const id of who.freeSet) {
+      for (const id of solverOwned) {
         if (currentEntry.has(pairKey(id, event.eventKey)) && req.model.swimmers.some((m) => m.swimmerId === id && m.gender === event.gender)) held.add(pairKey(id, event.eventKey));
       }
     }
@@ -178,7 +195,7 @@ export function buildProblem(req: AutoBuildRequest, support: Support, currentRes
   if (robust !== null) {
     const index = buildIndex(req.model);
     for (const [key, entry] of currentEntry) {
-      if (!who.freeSet.has(entry.swimmerId) || !robust.absent.has(key) || !builtIds.has(eventId(entry.eventKey, entry.gender))) continue;
+      if (!solverOwned.has(entry.swimmerId) || !robust.absent.has(key) || !builtIds.has(eventId(entry.eventKey, entry.gender))) continue;
       const lineup: Lineup = { payloadVersion: 1, meetKey: req.lineup.meetKey, entries: [entry] };
       // A pair with no usable normal seed is not frozen (it is not listed either), so its entry may go.
       if ((resolveLineup(req.model, lineup, index).resolved[0]?.value ?? null) === null) continue;
@@ -192,6 +209,7 @@ export function buildProblem(req: AutoBuildRequest, support: Support, currentRes
     support,
     mode: modeOf(req.objective, req.model, req.ownTeamId),
     ...who,
+    swap,
     relayEntries: ownRelayCounts(req, currentResults, support.exhibitionCounts, builtIds),
     currentEntry,
     built,
@@ -308,6 +326,8 @@ export class Space {
     const { req, support } = problem;
     this.sources = buildLegSources(req.model);
     this.index = buildIndex(req.model);
+    // Slice A9: a swappable scorer is a free swimmer to the evaluator: a scorer when he is a column member, and a non-scorer beside a column he is not in.
+    const swappable = problem.swap.size > 0;
     this.evaluator = new Evaluator({
       model: req.model,
       lineup: req.lineup,
@@ -316,7 +336,7 @@ export class Space {
       sourcing: req.sourcing,
       own: req.ownTeamId,
       decision: problem.decision,
-      free: problem.freeSet,
+      free: swappable ? new Set([...problem.freeSet, ...problem.swap]) : problem.freeSet,
       load: support.load,
       held: problem.held,
       ...(problem.robust === null ? {} : { pins: problem.robust.pins }),
@@ -351,7 +371,8 @@ export class Space {
       }
       const currentColumn = swimmers.filter((id) => pinned.has(id) && problem.currentEntry.has(pairKey(id, event.eventKey)));
       const forced = swimmers.filter((id) => problem.held.has(pairKey(id, event.eventKey)));
-      const frozenIn = currentColumn.filter((id) => problem.robust?.absent.has(pairKey(id, event.eventKey)) === true && pairs.get(id)?.value !== null);
+      // A swappable scorer's frozen entry is held (`x = z`), not fixed: he may leave the roster (slice A9).
+      const frozenIn = currentColumn.filter((id) => !problem.swap.has(id) && problem.robust?.absent.has(pairKey(id, event.eventKey)) === true && pairs.get(id)?.value !== null);
       const space = new EventSpace(event, eventId(event.eventKey, event.gender), pairs, currentColumn, k, forced, frozenIn);
       this.events.push(space);
     }

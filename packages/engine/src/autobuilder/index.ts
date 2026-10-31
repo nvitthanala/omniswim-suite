@@ -25,7 +25,7 @@ import { pinLineup } from './robust';
 import { buildProblem, classify, Space } from './space';
 import type { EventSpace, Problem } from './space';
 import type { Support } from './support';
-import { checkLimits, checkLoadSettings, checkObjective, checkOwnTags, checkRules, checkSchedule, checkTeams, loadRuleOf } from './support';
+import { checkLimits, checkLoadSettings, checkObjective, checkOwnTags, checkRoster, checkRules, checkSchedule, checkTeams, loadRuleOf } from './support';
 import { autoBuildFail } from './types';
 import type { AutoBuildEvaluation, AutoBuildProof, AutoBuildProposal, AutoBuildRequest, AutoBuildResult, AutoBuildRestriction, MipSolve } from './types';
 
@@ -152,13 +152,29 @@ function proofOf(
   };
 }
 
+/**
+ * Slice A9. The gate may put back a removed scorer (`restoreIdleRemovals`), and the lineup it gives can score above the solver's incumbent. The proof then
+ * reads the proposal's own score as the best found, so `bestFound` and `gap` are those of the lineup the coach sees, and `proven_optimal` is claimed
+ * only when that score equals the solver's bound. A score above the bound means the model and `scoreMeet` disagree: `model_mismatch`.
+ */
+function withProposalBest(problem: Problem, outcome: Extract<SolveOutcome, { kind: 'found' }>, proposal: AutoBuildProposal): Extract<SolveOutcome, { kind: 'found' }> {
+  if (problem.mode.target !== null) return outcome;
+  const { D, best, upper } = outcome.bound;
+  const x = proposal.evaluation.objective * D;
+  const scaled = Math.round(x);
+  if (Math.abs(x - scaled) >= 1e-6) autoBuildFail('model_mismatch', `the proposal's objective ${proposal.evaluation.objective} is not whole at scale ${D}`);
+  if (scaled <= best) return outcome;
+  if (upper !== null && scaled > upper) autoBuildFail('model_mismatch', `the proposal's objective ${scaled} is above the solver's bound ${upper} at scale ${D}`);
+  return { ...outcome, bound: { ...outcome.bound, best: scaled } };
+}
+
 /** The guard (D5 8.4) for a solve with a result. */
 function decide(problem: Problem, space: Space, outcome: Extract<SolveOutcome, { kind: 'found' }>, current: AutoBuildEvaluation, currentInSpace: boolean, records: readonly SolveRecord[], clock: (() => number) | undefined): AutoBuildResult {
   const t0 = clock?.();
   const proposal = gate(problem, space, outcome.selection, outcome.scale, outcome.bestScaled, outcome.method, outcome.valueScaled);
   const gateMs = clock !== undefined && t0 !== undefined ? clock() - t0 : null;
   const broken = repairable(problem);
-  const proof = proofOf(problem, space, outcome, current, records, gateMs, broken.length === 0 && !strictFits(problem));
+  const proof = proofOf(problem, space, withProposalBest(problem, outcome, proposal), current, records, gateMs, broken.length === 0 && !strictFits(problem));
   // D5 9: the explanations are read from the finished proposal, after the proof. They change neither, except `timings.explainMs`.
   const explained = (): { readonly proposal: AutoBuildProposal; readonly proof: AutoBuildProof } => {
     const t1 = clock?.();
@@ -231,6 +247,7 @@ export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise
   const support: Support = { ...rules, load: loadRuleOf(req.load) };
   checkObjective(req.model, req.ownTeamId, req.objective);
   checkLimits(req.limits);
+  checkRoster(req.roster);
   // D5 4.7 subtracts the load penalty in every mode "but goal seek", and the evaluation doc says goal seek is in mode units: the spec does
   // not say whether a goal-seek target counts the penalty. Refuse the combination until the lead decides.
   if (req.objective.kind === 'goal-seek' && req.load !== null && req.load.preference.mode === 'prefer') {
