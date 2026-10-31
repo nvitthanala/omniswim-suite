@@ -162,3 +162,12 @@ settings, not entries (D4).
 **F3. Chart library.** Recharts adds about 0.9 MB of JavaScript that loads
 on every simulator page view in the docked panel. Default: a lighter custom
 SVG chart with the same lines and both themes. Choose Recharts instead?
+
+## G. AutoBuilder panel (U1-b)
+
+**G1. What Accept does with the lineup.** The extension can write SwimCloud
+simulator settings, but not its entries (D4). Default: Accept saves your
+scorer tags and stores the proposed lineup in the extension, then lists each
+entry change ("add X to the 200 free") for you to make in SwimCloud. Other
+option: build entry writing into the simulator (new D4 work, with read-back
+checks like the settings write).
