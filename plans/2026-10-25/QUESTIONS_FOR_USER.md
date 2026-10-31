@@ -147,3 +147,18 @@ tagged scorer off the scoring roster. When you accept, should the app:
   as an untagged swimmer, or
 - (b) tag them "non-scorer", which keeps them off until you change it?
 Default until you answer: U1 asks at Accept time, with (b) preselected.
+
+## F. Dashboard (phase P7, plans/2026-10-25/D6-DASHBOARD.md)
+
+**F1. Rival default.** If you pick no rival, which team should the score
+chart highlight? Default: the team closest to yours on final points; on a
+tie, the team above yours.
+
+**F2. Restoring a snapshot.** Should restoring a saved snapshot write its
+lineup back into SwimCloud's simulator? Default: no. Snapshots are for
+viewing and comparing only, because the extension writes simulator
+settings, not entries (D4).
+
+**F3. Chart library.** Recharts adds about 0.9 MB of JavaScript that loads
+on every simulator page view in the docked panel. Default: a lighter custom
+SVG chart with the same lines and both themes. Choose Recharts instead?
