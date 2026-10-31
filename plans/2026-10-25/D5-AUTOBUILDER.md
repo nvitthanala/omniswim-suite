@@ -698,7 +698,7 @@ Order of preference for the final lineup: the proven relaxed solution, then the 
 Why each value changed:
 - **The order.** On config C (team 58, Men, 22 events, 42 own swimmers), `refineRounds: 0` returned `improved` (43 to 1214) in 2.3 s of wall time. The restricted-first order therefore secures a real lineup early, and the rest of the budget goes to the bound.
 - **One round.** One refinement round proved 1251, but only with a 30 s budget. Two rounds used up 19 s and returned nothing. So the default is one round, run only when it fits.
-- **`K_max` 10.** It caps a refined event at 1,024 columns, against 4,096 at 12. Growth to `K_max` 12 drove the roughly 5 s of evaluation.
+- **`K_max` 10.** It caps a refined event at 1,024 columns, against 4,096 at 12. Growth to `K_max` 12 drove the roughly 5 s of evaluation. (Since A4 the fast evaluator removed that cost. `K_max` 10 still holds because the solver cannot use the extra columns inside 10 s: a sweep with `K_max` 12 found 736 points against 1435, see the state file D5.A4 entry.)
 
 The F4 target of "a 10-team, 20-event meet under 10 s" stays. With these defaults, a positive gap within the limit is acceptable, and the result reports it.
 

@@ -199,7 +199,7 @@ function describeRun(r: Run): string {
   const p = res.proof;
   const cols = p.searchSpace.events.reduce((a, e) => a + e.columns, 0);
   const t = p.timings;
-  return `${f(r.ms)} ms  ${res.kind.padEnd(10)} own ${String(own).padStart(6)}  ${String(p.status).padEnd(14)} found ${String(p.bestFound)} bound ${String(p.upperBound)} gap ${String(p.gap)}  columns ${cols}  eval ${t.evaluateMs === null ? '-' : f(t.evaluateMs)} ms solve ${t.solveMs === null ? '-' : f(t.solveMs)} ms gate ${t.gateMs === null ? '-' : f(t.gateMs)} ms`;
+  return `${f(r.ms)} ms  ${res.kind.padEnd(10)} own ${String(own).padStart(6)}  ${String(p.status).padEnd(14)} found ${String(p.bestFound)} bound ${String(p.upperBound)} gap ${String(p.gap)}  columns ${cols}  eval ${t.evaluateMs === null ? '-' : f(t.evaluateMs)} ms solve ${t.solveMs === null ? '-' : f(t.solveMs)} ms gate ${t.gateMs === null ? '-' : f(t.gateMs)} ms explain ${t.explainMs === null ? '-' : f(t.explainMs)} ms`;
 }
 
 async function scenario(sc: Scenario, limits: AutoBuildLimits, label: string): Promise<number> {
