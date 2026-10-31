@@ -34,7 +34,7 @@ export function autoBuildStatusText(message: AutoBuildStatusMessage): string {
 }
 
 // The font is set on `.panel`, inside the closed root. A rule on the host (`:host`) loses to the page's own rules for that element, so the page's serif would reach the panel.
-const css = tokenCss('.panel') + `:host{all:initial;color:var(--osx-fg,CanvasText);font:14px/1.45 system-ui,sans-serif}*{box-sizing:border-box}.panel{font:14px/1.45 var(--osx-font,system-ui,sans-serif);border:1px solid var(--osx-border,GrayText);border-radius:8px;background:var(--osx-bg,Canvas);padding:12px;min-width:220px;max-width:300px;color:var(--osx-fg,CanvasText)}.head{display:flex;justify-content:space-between;align-items:center;gap:12px}h2{font-size:16px;margin:0}button,select{font:inherit;color:inherit;background:var(--osx-bg,Canvas);border:1px solid var(--osx-border,GrayText);border-radius:5px;padding:4px 8px;cursor:pointer}.body[hidden]{display:none}.error{color:var(--osx-bad,Mark)}p{margin:10px 0 0}.group{border-top:1px solid var(--osx-border,GrayText);margin-top:10px;padding-top:8px}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;margin:6px 0}.row label{min-width:0}.row select{max-width:140px}.warning{background:var(--osx-warn-bg);color:var(--osx-warn-fg);padding:2px 5px;border-radius:4px}.cut-row{display:grid;grid-template-columns:minmax(55px,1fr) 1fr 1fr;gap:5px;margin:6px 0;font-size:12px}.cut-head{font-weight:600}.cut-tag{overflow-wrap:anywhere}`;
+const css = tokenCss('.panel') + `:host{all:initial;color:var(--osx-fg,CanvasText);font:14px/1.45 system-ui,sans-serif}*{box-sizing:border-box}.panel{font:14px/1.45 var(--osx-font,system-ui,sans-serif);border:1px solid var(--osx-border,GrayText);border-radius:8px;background:var(--osx-bg,Canvas);padding:12px;min-width:220px;max-width:300px;color:var(--osx-fg,CanvasText)}.head{display:flex;justify-content:space-between;align-items:center;gap:12px}h2{font-size:16px;margin:0}button,select{font:inherit;color:inherit;background:var(--osx-bg,Canvas);border:1px solid var(--osx-border,GrayText);border-radius:5px;padding:4px 8px;cursor:pointer}.body[hidden]{display:none}.error{color:var(--osx-bad,Mark)}p{margin:10px 0 0}.group{border-top:1px solid var(--osx-border,GrayText);margin-top:10px;padding-top:8px}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;margin:6px 0}.row label{min-width:0}.row select{max-width:140px}.warning{background:var(--osx-warn-bg);color:var(--osx-warn-fg);padding:2px 5px;border-radius:4px}.cut-row{margin:6px 0;padding:6px 0 0;border-top:1px solid var(--osx-border,GrayText);font-size:12px}.cut-name{display:block;font-weight:600;font-size:13px;overflow-wrap:anywhere}.cut-line{margin:2px 0 0;overflow-wrap:anywhere}.cut-label{font-weight:600}.cut-badge{display:inline-block;margin-left:4px;padding:0 4px;border:1px solid var(--osx-border,GrayText);border-radius:4px;font-size:11px}.cut-note{display:block;opacity:.85}`;
 
 function appendRulePresetPicker(doc: Document, scorer: HTMLElement, state: ScorerTagStateMessage, send: (action: PanelUiActionMessage) => void, apply: (settings: SimulatorRuleSettings | null) => void, applyStatus: string): void {
   const label = doc.createElement('label'); label.textContent = 'OmniSwim scoring rules';
@@ -62,15 +62,23 @@ function appendRulePresetPicker(doc: Document, scorer: HTMLElement, state: Score
 }
 
 function renderCutTagRow(doc: Document, item: NonNullable<ScorerTagStateMessage['cutTags']>[number]): HTMLElement {
-  const row = doc.createElement('div'); row.className = 'cut-row';
-  const name = doc.createElement('span'); name.className = 'cut-tag'; name.textContent = item.swimmerName;
-  const real = doc.createElement('span'); real.className = 'cut-tag'; real.textContent = item.real;
-  const estimated = doc.createElement('span'); estimated.className = 'cut-tag'; estimated.textContent = item.estimated;
+  const row = doc.createElement('div'); row.className = 'cut-row'; row.dataset.osxCutRow = '';
+  const name = doc.createElement('strong'); name.className = 'cut-name'; name.textContent = item.swimmerName;
+  const real = cutLine(doc, 'Real SCY', item.real);
+  const estimated = cutLine(doc, 'Estimated LCM', item.estimated);
   if (item.estimatedIsEstimate) {
-    const badge = doc.createElement('span'); badge.textContent = ' est.'; estimated.append(badge);
-    const provenance = doc.createElement('small'); provenance.textContent = item.estimatedProvenance ?? 'Tool-derived provenance'; estimated.append(doc.createElement('br'), provenance);
+    const badge = doc.createElement('span'); badge.className = 'cut-badge'; badge.textContent = 'est.'; estimated.append(badge);
+    const provenance = doc.createElement('small'); provenance.className = 'cut-note'; provenance.textContent = item.estimatedProvenance ?? 'Tool-derived provenance'; estimated.append(provenance);
   }
   row.append(name, real, estimated); return row;
+}
+
+/** One labelled line of a cut-tag card: "Real SCY: <value>". The value wraps under the full panel width, not a third of it. */
+function cutLine(doc: Document, label: string, value: string): HTMLElement {
+  const line = doc.createElement('div'); line.className = 'cut-line';
+  const caption = doc.createElement('span'); caption.className = 'cut-label'; caption.textContent = `${label}: `;
+  const text = doc.createElement('span'); text.className = 'cut-tag'; text.textContent = value;
+  line.append(caption, text); return line;
 }
 
 type SuggestionResult = NonNullable<ScorerTagStateMessage['suggestions']>[number]['result'];
@@ -100,9 +108,6 @@ function renderCutTags(doc: Document, state: ScorerTagStateMessage | null, open:
     const teamHeading = doc.createElement('strong'); teamHeading.textContent = teamLabel(teamId, teamRows[0]?.teamName); group.append(teamHeading);
     for (const eventKey of [...new Set(teamRows.map(r => r.eventKey))]) {
       const heading = doc.createElement('p'); heading.textContent = eventKey; group.append(heading);
-      const header = doc.createElement('div'); header.className = 'cut-row cut-head';
-      for (const text of ['Swimmer', 'Real SCY', 'Estimated LCM']) { const cell = doc.createElement('span'); cell.textContent = text; header.append(cell); }
-      group.append(header);
       for (const item of teamRows.filter(r => r.eventKey === eventKey)) group.append(renderCutTagRow(doc, item));
     }
     details.append(group);
