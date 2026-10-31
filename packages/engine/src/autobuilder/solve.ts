@@ -336,13 +336,11 @@ class Sequence {
    * the best over these columns already). Seed: the verified incumbent, else the current state if it
    * satisfies every row; with neither, nothing runs. It returns a lineup only when the search beat both the seed and `best`: then the method is
    * `'local-search'`. It never raises the proof: `proofOf` caps the status below `proven_optimal` for this method.
-   * It does not run for `closest`: the `t` of its M rows is no function of the column choices, so the search has nothing to climb.
    */
   private fallback(best: Found | null, finalScale: Scale): Found | null {
     const last = this.records[this.records.length - 1];
     if (last === undefined || last.status !== 'Time limit reached') return best;
     if (best !== null && best.rank !== 1) return best;
-    if (this.space.problem.mode.metric === 'closest') return best;
     const allotment = Math.min(LOCAL_SEARCH_MAX_MS, this.timer.left());
     if (allotment < MIN_ALLOTMENT_MS) return best;
     // The clock starts before the LP is rebuilt: the rebuild is part of the allotment, so the stage ends within min(2 s, left).

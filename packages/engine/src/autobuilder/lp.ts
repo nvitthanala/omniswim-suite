@@ -65,13 +65,15 @@ export interface Row {
  * - `stay`: the `z` of a swappable scorer (slice A9): 1 always. The local search never infers a removal from "no entries".
  * - `diver`: `d`, 1 exactly when the swimmer is on the roster, dives, and has no other entry (D1 to D3). A larger `d` only loosens T1.
  * - `excess`: `v`, the least value the row of 4.5 allows: the races above the maximum, or 0.
+ * - `min`: the `t` of `closest` (D5 4.7): the greatest value its M rows allow, `min` over the lanes of `constant + sum(terms)`. The objective rewards `t`, so the greatest is the best.
  */
 export type Derived =
   | { readonly kind: 'sum'; readonly name: string; readonly terms: readonly Term[] }
   | { readonly kind: 'any'; readonly name: string; readonly inputs: readonly string[] }
   | { readonly kind: 'stay'; readonly name: string }
   | { readonly kind: 'diver'; readonly name: string; readonly z: string | null; readonly dives: readonly string[]; readonly others: readonly string[] }
-  | { readonly kind: 'excess'; readonly name: string; readonly k0: number; readonly max: number; readonly terms: readonly Term[] };
+  | { readonly kind: 'excess'; readonly name: string; readonly k0: number; readonly max: number; readonly terms: readonly Term[] }
+  | { readonly kind: 'min'; readonly name: string; readonly lanes: readonly { readonly constant: number; readonly terms: readonly Term[] }[] };
 
 /** The integer model behind an LP text: what the local search of D5 10 climbs over, and what it checks a solver incumbent against. */
 export interface LpModel {
@@ -173,8 +175,6 @@ export interface LpBuild {
   pointsOf(columns: Readonly<Record<string, number>>): number;
   /** The metric of the mode (own points, margin, closest margin), scaled and without any penalty: what a goal-seek target is compared with. */
   valueOf(columns: Readonly<Record<string, number>>): number;
-  /** False when the integer model has a variable that no column choice derives (the `t` of closest), so the local search cannot climb it. */
-  readonly searchable: boolean;
   select(columns: Readonly<Record<string, number>>): Selection;
 }
 
@@ -639,6 +639,8 @@ class Builder {
       this.row([[t, 1], ...lane.terms.map(([name, k]) => [name, -k] as Term), ...lane.relaxed.map(([name, k]) => [name, -k] as Term)], '<=', (fixed[i] as number) + shift);
     });
     this.objective.push([t, 1]);
+    // A restricted model derives `t` from the column choices. A relaxed one has outside terms that no column choice derives, and the local search refuses it.
+    if (!this.opts.relaxed) this.derived.push({ kind: 'min', name: t, lanes: this.lanes.map((lane, i) => ({ constant: (fixed[i] as number) + shift, terms: lane.terms })) });
     return shift;
   }
 
@@ -764,7 +766,6 @@ class Builder {
       cols: this.binaries.length + this.generals.length + 1,
       relaxed: this.opts.relaxed,
       model,
-      searchable: !closest,
       objectiveOf: (columns) => constant + sumTerms(objective, columns),
       // The least `v` of the solution: an incumbent may carry a larger `v`, and the gate re-scores the lineup itself.
       pointsOf: (columns) => {

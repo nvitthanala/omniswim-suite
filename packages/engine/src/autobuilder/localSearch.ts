@@ -291,6 +291,8 @@ class Search {
       }
       case 'excess':
         return Math.max(0, d.k0 + d.terms.reduce((s, [name, k]) => s + k * v(name), 0) - d.max);
+      case 'min':
+        return Math.min(...d.lanes.map((lane) => lane.constant + lane.terms.reduce((s, [name, k]) => s + k * v(name), 0)));
     }
   }
 
@@ -409,5 +411,7 @@ function inputsOf(d: Derived): readonly string[] {
       return [];
     case 'diver':
       return [...(d.z === null ? [] : [d.z]), ...d.dives, ...d.others];
+    case 'min':
+      return d.lanes.flatMap((lane) => lane.terms.map(([name]) => name));
   }
 }

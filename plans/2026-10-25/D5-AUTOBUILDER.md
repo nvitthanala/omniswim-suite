@@ -1048,3 +1048,22 @@ Test `cappedLegsDoNotCrowdQ`: the top 12 squads of an event all hold a swimmer w
 6. **Accept rule (for the wiring).** Outside goal seek, the re-scored
    proposal's objective must be strictly above the re-scored current's. In
    goal seek, `meetsTarget` must be true after the re-suggest.
+
+## Amendment 11 (lead rulings, 2026-10-31): `closest` gets the fallback
+
+This replaces amendment 4 item 2.
+
+1. **`closest` runs the local-search fallback.** A restricted build derives
+   its `t` from the column choices: `t` is the least, over the other teams,
+   of the lane constant (with its shift) plus the lane terms. That is the
+   greatest `t` the M rows allow, and the objective rewards `t`. The LP
+   model records this as the derived kind `min`.
+2. **Relaxed builds stay refused.** A relaxed lane has outside terms that no
+   column choice derives. The fallback never builds a relaxed model.
+3. **Proof.** Unchanged: a fallback result is re-scored by `scoreMeet` in the
+   gate, is checked against any recorded upper bound (`model_mismatch`),
+   and is never `proven_optimal`.
+4. **No other team.** `closest` with no team other than the own team is
+   still refused (`rival_invalid`, `support.ts`), so `t` always has a lane.
+5. **Internal API.** `LpBuild.searchable` is removed. `LpBuild` is internal
+   to the AutoBuilder; no public export changes.

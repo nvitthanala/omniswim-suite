@@ -728,6 +728,32 @@ describe('autoBuild (D5, slice A6: margin and goal seek)', () => {
     }
   }, 300_000);
 
+  it('10b closestFallbackBruteForce: with no solver result, the closest climb is a lineup scoreMeet confirms, never above the brute-force best, never proven', async () => {
+    let improved = 0;
+    let reached = 0;
+    for (const { key: seed, fx, units } of worlds()) {
+      const rows = bruteRows(seed, fx, units);
+      const best = bestOf(rows, { kind: 'closest' });
+      const result = await autoBuild(request(fx, { objective: objectiveFor({ kind: 'closest' }) }), TIMES_OUT);
+      const label = `seed ${seed}`;
+      expect(result.kind === 'improved' || result.kind === 'unchanged', label).toBe(true);
+      expect(result.proof.status, label).not.toBe('proven_optimal');
+      expect(objectiveOf(result), label).toBeLessThanOrEqual(best + 1e-9);
+      expect(objectiveOf(result), label).toBeGreaterThanOrEqual(result.current.objective);
+      if (result.kind !== 'improved') continue;
+      improved++;
+      if (Math.abs(objectiveOf(result) - best) < 1e-9) reached++;
+      expect(result.proposal.method, label).toBe('local-search');
+      const again = scoreMeet(fx.model, result.proposal.lineup, result.proposal.tagsForScoring, fx.rules, SOURCING);
+      expect(metricOfResults(again, { kind: 'closest' }), label).toBeCloseTo(result.proposal.evaluation.objective, 9);
+      expect(result.proposal.evaluation.objective, label).toBeGreaterThan(result.current.objective);
+    }
+    // Measured on these 14 seeded worlds: the climb improves every one and reaches the brute-force best on 10. A search that read only one rival's lane
+    // improves 11 and reaches 8, so these floors fail a climb that does not see the least lane.
+    expect(improved, 'the climb finds an improvement on every world').toBeGreaterThanOrEqual(14);
+    expect(reached, 'the climb reaches the brute-force best on most worlds').toBeGreaterThanOrEqual(10);
+  }, 300_000);
+
 it('3 goalSeekOneChange: the target is reached with 1 change where max-own uses 4, and changeCount is the entry changes plus the roster adds', async () => {
     const fx = steps(4);
     const own = await autoBuild(request(fx), nodeMipSolve());
@@ -1070,7 +1096,7 @@ it('9 marginUnderLoad: margin and closest under respect and prefer equal the bru
     }
   }, 300_000);
 
-  it('10 fallback: a margin search that times out climbs from the current lineup, a goal seek climbs from a verified incumbent, and closest has no climb', async () => {
+  it('10 fallback: a margin search that times out climbs from the current lineup, so does closest, and a goal seek climbs from a verified incumbent', async () => {
     // Margin: both solves time out with nothing. The local search starts at the current lineup and ends in the best event (BACK).
     const fx = trap();
     const margin = await autoBuild(request(fx, { objective: objectiveFor({ kind: 'margin', rival: 'R' }) }), TIMES_OUT);
@@ -1081,10 +1107,17 @@ it('9 marginUnderLoad: margin and closest under respect and prefer equal the bru
       expect(margin.proof.status).not.toBe('proven_optimal');
       expect(margin.proof.solves.at(-1)?.stage).toBe('local-search');
     }
-    // Closest: the integer model holds a `t` that no column choice derives, so no search runs.
+    // Closest: `t` follows from the column choices (the least of the lane values), so the search climbs here too. With one rival the closest margin is
+    // the margin over R, so the climb ends in the same lineup, and the status is never proven.
     const closest = await autoBuild(request(fx, { objective: objectiveFor({ kind: 'closest' }) }), TIMES_OUT);
-    expect(closest).toMatchObject({ kind: 'unchanged', reason: 'none_found_within_limits' });
-    expect(closest.proof.solves.every((s) => s.stage !== 'local-search')).toBe(true);
+    expect(closest.kind).toBe('improved');
+    if (closest.kind === 'improved' && margin.kind === 'improved') {
+      expect(closest.proposal.method).toBe('local-search');
+      expect(swimmerEvents(closest)).toEqual([BACK]);
+      expect(closest.proposal.evaluation.objective).toBe(margin.proposal.evaluation.objective);
+      expect(closest.proof.status).not.toBe('proven_optimal');
+      expect(closest.proof.solves.at(-1)?.stage).toBe('local-search');
+    }
     // Goal seek: the current lineup misses the target, so only a verified incumbent seeds the search. The incumbent here reaches
     // 80 with 4 changes; the target is 20, and the search removes entries until one is left.
     const four = steps(4);
