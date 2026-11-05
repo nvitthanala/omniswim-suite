@@ -20,7 +20,13 @@ function changeMode(current: LoadPreference, mode: LoadPreference['mode']): Load
     : { mode, maxRacesPerSession: base.maxRacesPerSession, diving: base.diving };
 }
 
-export function SessionPlannerEditor({ snapshot, repoForMeet }: { snapshot: SimSnapshot; repoForMeet: () => Promise<StorageRepo> }) {
+/**
+ * Reports a change another context made to the session presets, the settings (the per-meet schedule choice and load preference) or the meets.
+ * It returns its own stop. Same shape as `SettingsSubscribe`: the dashboard wires it from `watchChanges`.
+ */
+export type PlannerSubscribe = (listener: () => void) => () => void;
+
+export function SessionPlannerEditor({ snapshot, repoForMeet, subscribe }: { snapshot: SimSnapshot; repoForMeet: () => Promise<StorageRepo>; subscribe?: PlannerSubscribe }) {
   const meetKey = meetKeyForSnapshot(snapshot);
   const [choices, setChoices] = React.useState<Awaited<ReturnType<typeof listSessionPresetChoices>>>([]);
   const [ref, setRef] = React.useState<PresetRef>();
@@ -32,24 +38,50 @@ export function SessionPlannerEditor({ snapshot, repoForMeet }: { snapshot: SimS
     const result = rescoreSimulator(snapshot, { meetKey, snapshotId: 'planner-editor' });
     return result.kind === 'scored' || result.kind === 'preset_incomplete' ? result.adapted.model.events : [];
   }, [snapshot, meetKey]);
-  React.useEffect(() => {
-    let active = true;
-    void repoForMeet().then(async repo => {
+  // True from the first edit of the schedule until it is saved or another preset is chosen: a refresh must not replace what the coach is editing.
+  const presetDirty = React.useRef(false);
+  // The same fact for the screen: the "Discard changes" control shows while a draft is held.
+  const [hasDraft, setHasDraft] = React.useState(false);
+  const markDraft = (value: boolean): void => { presetDirty.current = value; setHasDraft(value); };
+  // Counts schedule edits. A save notes it when it starts: an edit made while the save was pending is newer than what the save wrote, and stays.
+  const editCount = React.useRef(0);
+  // Counts load-preference writes still in flight. Their result is already on screen, so a refresh must not put the older stored one back.
+  const preferenceWrites = React.useRef(0);
+  // Only the newest read may change the screen; a write the coach made here makes every read still in flight stale.
+  const readId = React.useRef(0);
+  const alive = React.useRef(false);
+  const load = React.useCallback(async () => {
+    if (!alive.current) return;
+    const id = ++readId.current;
+    try {
+      const repo = await repoForMeet();
       const [rows, selected, pref] = await Promise.all([listSessionPresetChoices(repo), readSessionPreset(repo, meetKey), readSessionLoadPreference(repo, meetKey)]);
-      if (!active) return;
-      setChoices(rows); setRef(selected.ref); setPreset(selected.preset); setPreference(pref);
-    }).catch(e => active && setError(e instanceof Error ? e.message : String(e)));
-    return () => { active = false; };
+      if (!alive.current || id !== readId.current) return;
+      setChoices(rows);
+      if (!presetDirty.current) { setRef(selected.ref); setPreset(selected.preset); }
+      if (preferenceWrites.current === 0) setPreference(pref);
+    } catch (e) { if (alive.current && id === readId.current) setError(e instanceof Error ? e.message : String(e)); }
   }, [meetKey, repoForMeet]);
+  React.useEffect(() => {
+    alive.current = true; markDraft(false);
+    void load();
+    return () => { alive.current = false; };
+  }, [load]);
+  React.useEffect(() => subscribe?.(() => { void load(); }), [load, subscribe]);
+  const editPreset = (change: Parameters<typeof setPreset>[0]) => { editCount.current += 1; markDraft(true); setPreset(change); };
+  const discardDraft = () => { markDraft(false); setError(''); setSaved(''); void load(); };
   const selectPreset = async (value: string) => {
     const choice = choices.find(c => refKey(c.ref) === value);
-    if (!choice) { setRef(undefined); setPreset(undefined); return; }
-    try { const repo = await repoForMeet(); await saveSessionPresetChoice(repo, meetKey, choice.ref); const selected = await readSessionPreset(repo, meetKey); setRef(selected.ref); setPreset(selected.preset); setError(''); setSaved('Session preset choice saved.'); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    if (!choice) { markDraft(false); setRef(undefined); setPreset(undefined); return; }
+    try {
+      const repo = await repoForMeet(); await saveSessionPresetChoice(repo, meetKey, choice.ref); const selected = await readSessionPreset(repo, meetKey);
+      if (!alive.current) return;
+      readId.current += 1; markDraft(false); setRef(selected.ref); setPreset(selected.preset); setError(''); setSaved('Session preset choice saved.');
+    } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : String(e)); }
   };
-  const updateEvent = (index: number, update: Partial<SessionPreset['events'][number]>) => setPreset(current => current && ({ ...current, events: current.events.map((event, i) => i === index ? { ...event, ...update } : event) }));
+  const updateEvent = (index: number, update: Partial<SessionPreset['events'][number]>) => editPreset(current => current && ({ ...current, events: current.events.map((event, i) => i === index ? { ...event, ...update } : event) }));
   const updateFormat = (index: number, format: EventFormat) => updateEvent(index, { format });
-  const moveEvent = (index: number, delta: -1 | 1) => setPreset(current => {
+  const moveEvent = (index: number, delta: -1 | 1) => editPreset(current => {
     if (!current) return current;
     const target = index + delta; if (target < 0 || target >= current.events.length) return current;
     const events = [...current.events]; [events[index], events[target]] = [events[target]!, events[index]!];
@@ -59,14 +91,24 @@ export function SessionPlannerEditor({ snapshot, repoForMeet }: { snapshot: SimS
     if (!preset || !ref) return;
     try {
       const validated = parseSessionPreset(preset);
+      const editsAtStart = editCount.current;
       const repo = await repoForMeet(); const next = await saveEditedSessionPreset(repo, meetKey, ref, validated);
-      const selected = await readSessionPreset(repo, meetKey); setRef(next); setPreset(selected.preset); setChoices(await listSessionPresetChoices(repo)); setError(''); setSaved('Schedule saved.');
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); setSaved(''); }
+      const selected = await readSessionPreset(repo, meetKey); const rows = await listSessionPresetChoices(repo);
+      if (!alive.current) return;
+      readId.current += 1; setRef(next); setChoices(rows); setError('');
+      if (editCount.current === editsAtStart) { markDraft(false); setPreset(selected.preset); setSaved('Schedule saved.'); }
+      else setSaved('Schedule saved. Changes you made while it saved are not saved yet.');
+    } catch (e) {
+      // The draft stays, so the coach can try again, and the message says it is not saved.
+      if (alive.current) { setError(`Schedule not saved: ${e instanceof Error ? e.message : String(e)}`); setSaved(''); }
+    }
   };
   const savePreference = async (next: LoadPreference) => {
     setPreference(next);
-    try { await saveSessionLoadPreference(await repoForMeet(), meetKey, next); setError(''); setSaved('Load preference saved.'); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    preferenceWrites.current += 1;
+    try { await saveSessionLoadPreference(await repoForMeet(), meetKey, next); if (alive.current) { setError(''); setSaved('Load preference saved.'); } }
+    catch (e) { if (alive.current) setError(e instanceof Error ? e.message : String(e)); }
+    finally { preferenceWrites.current -= 1; readId.current += 1; }
   };
   const sessionControls = (format: EventFormat, change: (f: EventFormat) => void) => {
     const keys = format.kind === 'timed-final' ? ['session'] : format.kind === 'prelims-finals' ? ['prelims', 'finals'] : ['slowHeats', 'fastHeat'];
@@ -78,13 +120,13 @@ export function SessionPlannerEditor({ snapshot, repoForMeet }: { snapshot: SimS
   };
   return <section className="osx-results osx-planner" data-testid="session-planner-editor"><h2>Meet schedule and athlete load</h2>
     <label>Session preset <select aria-label="Choose session preset" value={ref ? refKey(ref) : ''} onChange={e => void selectPreset(e.target.value)}><option value="">Choose a session preset</option>{choices.map(c => <option key={refKey(c.ref)} value={refKey(c.ref)}>{c.label}</option>)}</select></label>
-    {preset && <><ol>{preset.events.map((event, index) => <li key={`${event.eventKey}-${event.gender}-${index}`}><strong>{event.eventKey} ({event.gender})</strong> <button type="button" onClick={() => moveEvent(index, -1)} disabled={index === 0}>Move up</button> <button type="button" onClick={() => moveEvent(index, 1)} disabled={index === preset.events.length - 1}>Move down</button> <button type="button" onClick={() => setPreset(p => p && ({ ...p, events: p.events.filter((_, i) => i !== index) }))}>Remove event</button>
+    {preset && <><ol>{preset.events.map((event, index) => <li key={`${event.eventKey}-${event.gender}-${index}`}><strong>{event.eventKey} ({event.gender})</strong> <button type="button" onClick={() => moveEvent(index, -1)} disabled={index === 0}>Move up</button> <button type="button" onClick={() => moveEvent(index, 1)} disabled={index === preset.events.length - 1}>Move down</button> <button type="button" onClick={() => editPreset(p => p && ({ ...p, events: p.events.filter((_, i) => i !== index) }))}>Remove event</button>
       <label>Event <select aria-label={`Event ${index + 1}`} value={event.eventKey} onChange={e => updateEvent(index, { eventKey: e.target.value as typeof event.eventKey })}>{availableEvents.map(row => <option key={row.eventKey} value={row.eventKey}>{row.eventKey}</option>)}</select></label>
       <label>Gender <select value={event.gender} onChange={e => updateEvent(index, { gender: e.target.value as typeof event.gender })}><option>both</option><option>Men</option><option>Women</option></select></label>
       <label>Format <select aria-label={`Format ${index + 1}`} value={event.format.kind} onChange={e => { const day = 1; const f = e.target.value === 'timed-final' ? { kind: 'timed-final', session: { day, slot: 'morning' } } as EventFormat : e.target.value === 'prelims-finals' ? { kind: 'prelims-finals', prelims: { day, slot: 'morning' }, finals: { day, slot: 'evening' } } as EventFormat : { kind: 'timed-final-split', slowHeats: { day, slot: 'morning' }, fastHeat: { day, slot: 'evening' }, fastHeatSize: { state: 'pending', question: 'Set fast heat size.', blocks: ['sessionLoad'] }, smallFieldSession: { state: 'pending', question: 'Set small field session.', blocks: ['sessionLoad'] } } as EventFormat; updateFormat(index, f); }}>{['timed-final', 'prelims-finals', 'timed-final-split'].map(k => <option key={k} value={k}>{k}</option>)}</select></label>
       {sessionControls(event.format, f => updateFormat(index, f))}</li>)}</ol>
-      <label>Add event <select aria-label="Add event" defaultValue="" onChange={e => { const row = availableEvents.find(x => x.eventKey === e.target.value); if (row) setPreset(p => p && ({ ...p, events: [...p.events, { eventKey: row.eventKey, gender: row.gender, format: blankFormat() }] })); e.target.value = ''; }}><option value="">Choose an event</option>{availableEvents.map(row => <option key={`${row.eventKey}-${row.gender}`} value={row.eventKey}>{row.eventKey} ({row.gender})</option>)}</select></label>
-      <button type="button" onClick={() => void savePreset()}>Save schedule</button></>}
+      <label>Add event <select aria-label="Add event" defaultValue="" onChange={e => { const row = availableEvents.find(x => x.eventKey === e.target.value); if (row) editPreset(p => p && ({ ...p, events: [...p.events, { eventKey: row.eventKey, gender: row.gender, format: blankFormat() }] })); e.target.value = ''; }}><option value="">Choose an event</option>{availableEvents.map(row => <option key={`${row.eventKey}-${row.gender}`} value={row.eventKey}>{row.eventKey} ({row.gender})</option>)}</select></label>
+      <button type="button" onClick={() => void savePreset()}>Save schedule</button>{hasDraft && <> <button type="button" data-testid="planner-discard" onClick={discardDraft}>Discard changes</button></>}</>}
     <fieldset><legend>Load preference</legend><label>Mode <select value={preference.mode} onChange={e => void savePreference(changeMode(preference, e.target.value as LoadPreference['mode']))}> {['respect','prefer','off'].map(x => <option key={x}>{x}</option>)}</select></label>{preference.mode !== 'off' && <><label>Max races per session <input type="number" min="1" value={preference.maxRacesPerSession.state === 'set' ? preference.maxRacesPerSession.value : ''} onChange={e => void savePreference({ ...preference, maxRacesPerSession: userPreference(Number(e.target.value)) })} /></label><label>Diving <select value={preference.diving.state === 'set' ? preference.diving.value : ''} onChange={e => void savePreference({ ...preference, diving: userPreference(e.target.value as 'counts'|'excluded') })}><option value="">Pending</option><option value="counts">Counts</option><option value="excluded">Excluded</option></select></label>{preference.mode === 'prefer' && <label>Penalty per extra race <input type="number" min="0" value={preference.penaltyPointsPerExtraRace.state === 'set' ? preference.penaltyPointsPerExtraRace.value : ''} onChange={e => void savePreference({ ...preference, penaltyPointsPerExtraRace: userPreference(Number(e.target.value)) })} /></label>}</>}</fieldset>
     {error && <p role="alert" data-testid="planner-error">{error}</p>}{saved && <p aria-live="polite">{saved}</p>}
   </section>;

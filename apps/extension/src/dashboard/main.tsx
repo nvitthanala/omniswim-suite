@@ -28,6 +28,7 @@ import { suggestOpponentRosters, suggestedTags } from './suggestedRosters';
 import './dashboard.css';
 import { postDockedParityReport } from './parity';
 import { SessionPlannerEditor } from './sessionPlannerEditor';
+import type { PlannerSubscribe } from './sessionPlannerEditor';
 import { AutoBuilderPanel } from './autoBuilderPanel';
 import { DockedShell, HostShell } from './Shell';
 import type { ShellTab } from './Shell';
@@ -74,7 +75,7 @@ function DockedApp({ view }: { view: View }): React.ReactElement {
     { id: 'score', label: 'Score', render: () => <ScoreTab view={view} /> },
     { id: 'chart', label: 'Chart', render: ({ expanded, active }) => (scored ? <ChartTab view={scored} repoForMeet={repoForTags} expanded={expanded} active={active} /> : <WaitingNote view={view} />) },
     { id: 'build', label: 'Build', render: () => (scored ? <AutoBuilderPanel snapshot={scored.snapshot} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} undoStack={undoStackForDashboard} onStatus={postAutoBuildStatus} /> : <WaitingNote view={view} />) },
-    { id: 'plan', label: 'Plan', render: () => (scored ? <SessionPlannerEditor snapshot={scored.snapshot} repoForMeet={repoForTags} /> : <WaitingNote view={view} />) },
+    { id: 'plan', label: 'Plan', render: () => (scored ? <SessionPlannerEditor snapshot={scored.snapshot} repoForMeet={repoForTags} subscribe={subscribeToPlanner} /> : <WaitingNote view={view} />) },
     { id: 'save', label: 'Save', render: () => (scored ? <SaveTab view={scored} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} tabUrl={tabUrl} undo={async () => (await undoStackForDashboard()).undo()} undoStack={undoStackForDashboard} /> : <WaitingNote view={view} />) },
   ];
   return <DockedShell tabs={tabs} hostLabel="host: docked" onSize={postPanelSize} />;
@@ -130,6 +131,12 @@ const subscribeToSettings: SettingsSubscribe = (listener) => {
   settingsListeners.add(listener);
   return () => { settingsListeners.delete(listener); };
 };
+/** The Plan tab listens here for a change to the session presets, the settings or the meets that another context made, such as a backup import. */
+const plannerListeners = new Set<() => void>();
+const subscribeToPlanner: PlannerSubscribe = (listener) => {
+  plannerListeners.add(listener);
+  return () => { plannerListeners.delete(listener); };
+};
 const optimizer = createOptimizerClient();
 const solveForAutoBuilder = (lp: string, options: Readonly<Record<string, string | number | boolean>>): ReturnType<typeof optimizer.solveLp> => optimizer.solveLp(lp, options);
 /** The page panel shows one status line about a build (D5 amendment 7 item 3). */
@@ -178,6 +185,9 @@ const repoForTags = (): Promise<StorageRepo> => (tagRepo ??= openOmniDb().then(d
     if (change.stores === 'unknown' || change.stores.includes('settings')) {
       void applyStoredTheme();
       for (const listener of settingsListeners) listener();
+    }
+    if (change.stores === 'unknown' || change.stores.some(store => store === 'sessionPresets' || store === 'settings' || store === 'meets')) {
+      for (const listener of plannerListeners) listener();
     }
   }, { targets: [document, window] });
   return repo;
