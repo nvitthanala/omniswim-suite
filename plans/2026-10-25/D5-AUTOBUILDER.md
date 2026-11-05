@@ -1067,3 +1067,56 @@ This replaces amendment 4 item 2.
    still refused (`rival_invalid`, `support.ts`), so `t` always has a lane.
 5. **Internal API.** `LpBuild.searchable` is removed. `LpBuild` is internal
    to the AutoBuilder; no public export changes.
+
+## Amendment 12 (lead rulings, 2026-11-05): the explanations are bounded
+
+This closes follow-up `A8-explain-in-gate-reserve`. It adds to section 9.
+
+1. **The problem.** `explain` runs after the gate, inside the 1 s gate reserve
+   (`GATE_RESERVE_MS`). Its cost grows with the own swimmers' unusual entries
+   times their skipped events, and every one costs a whole-meet `scoreMeet`.
+   Nothing stopped it on a large meet.
+2. **The bound.** The work is counted in lineup entries scored. A `scoreMeet`
+   or `sessionLoad` of a lineup with n entries costs n. One column evaluation
+   costs 10. The charge comes before the work. `EXPLAIN_WORK_LIMIT` is 25,000.
+3. **Measured** (timing bench, Node, one machine, `scripts/bench/autoBuildTiming.ts`):
+   config C at 10 teams uses 9,087 entries scored in 17 `scoreMeet`s plus 129
+   evaluations (about 0.3 s). The 20-event synthetic field uses 13,483 in 20
+   plus 141 (about 0.45 s). That is about 0.03 ms per unit. 25,000 is 1.7
+   times the larger run, about 0.75 s: both bench runs stay complete, and the
+   worst case stays inside the reserve. The unit is work, not time, so the
+   result does not depend on the machine.
+4. **Time guard.** When the request holds a clock, `explain` also reads it
+   before each unit and stops `EXPLAIN_TIME_MARGIN_MS` (100 ms) before
+   `limits.timeLimitSeconds`. This covers a slow machine. Without a clock there
+   is no time guard. `explain` reads the clock once per unit, so
+   `proof.timings.explainMs` is a whole number of clock steps under a stepping
+   test clock (the A8 test no longer expects exactly one step).
+5. **Never silently cut.** An item is whole or absent. The items, in order, are
+   each `roster_add`, each `roster_remove`, and each owned swimmer's unusual
+   events. A swimmer in progress is dropped with all of his entries. So
+   `explanations` is always a prefix of the unbounded list.
+6. **The flag.** `AutoBuildProposal.explanationLimit?: ExplanationLimit`
+   (additive, optional) is present only when the list stopped early:
+   `{ reason: 'work_limit' | 'time_limit'; workUsed; workLimit: number | null;
+   omitted: { rosterAdds; rosterRemoves; swimmers } }`. `swimmers` counts the
+   swimmers with at least one unusual event left out. Absent means complete. A
+   host that shows explanations must say when the flag is present.
+7. **Nothing else changes.** The lineup, evaluation, proof and warnings are the
+   same with or without the bound. A result with no proposal runs no
+   explanation.
+8. **Internal API.** `explain` still returns the array. It takes the optional
+   context fields `workLimit`, `expired` and `onLimit`; with none of them it
+   never stops (a direct call). `autoBuild` passes all three.
+9. **Same slice: one objective formula.** `objectiveOfScored` in `gate.ts`
+   (the metric less the own-only penalty, the metric alone in goal seek) is the
+   one place that writes the objective. The evaluation, the restore step and the
+   gate's check against the MIP all read it. Behaviour is unchanged: the LP texts
+   are byte-identical (`tests/fixtures/lp-baseline/lpBaseline.sh check`).
+
+Review note (lead, 2026-11-05, Codex E1 review): the explain time guard
+checks the clock before each unit, so it can overrun by at most one unit.
+The slowest unit measured is one `scoreMeet` on config C, about 20 ms
+(0.3 s over 17 calls), well under the 100 ms margin. The goal-seek restore
+now uses the metric alone, like the MIP and the gate. Goal seek with
+`prefer` is refused, so its penalty is always 0 and no result changes.

@@ -15,6 +15,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { autoBuild, builtinRulePreset, entryKey, requireComplete, scoreMeet, sessionLoad } from '@omniswim/engine';
 import type {
   AutoBuildExplanation,
+  ExplanationLimit,
   AutoBuildLimits,
   AutoBuildProposal,
   AutoBuildRequest,
@@ -35,17 +36,26 @@ import type {
   ScorerTag,
   SessionPreset,
 } from '@omniswim/engine';
-import { explain, rankOrder, rosterSpots, seedIsEstimated } from '../packages/engine/src/autobuilder/explain';
+import { EXPLAIN_TIME_MARGIN_MS, EXPLAIN_WORK_LIMIT, explain, rankOrder, rosterSpots, seedIsEstimated } from '../packages/engine/src/autobuilder/explain';
+import type { ExplainContext } from '../packages/engine/src/autobuilder/explain';
 import { buildProblem } from '../packages/engine/src/autobuilder/space';
 import { checkRules, loadRuleOf } from '../packages/engine/src/autobuilder/support';
 import { nodeMipSolve } from './helpers/nodeMipSolve';
 import { set, TEST_PROVENANCE } from './engineTestPresets';
 
 // `explain` is switched off for one test, to prove that the explanations change nothing else in the result.
-const switchedOff = vi.hoisted(() => ({ off: false }));
+// A test can also change the context that `autoBuild` gives `explain` (the work limit, the time guard), and run code just before it starts.
+const switchedOff = vi.hoisted(() => ({ off: false, inject: null as Record<string, unknown> | null, before: null as (() => void) | null }));
 vi.mock('../packages/engine/src/autobuilder/explain', async (importOriginal) => {
   const real = await importOriginal<typeof import('../packages/engine/src/autobuilder/explain')>();
-  return { ...real, explain: (...args: Parameters<typeof real.explain>) => (switchedOff.off ? [] : real.explain(...args)) };
+  return {
+    ...real,
+    explain: (...args: Parameters<typeof real.explain>) => {
+      if (switchedOff.off) return [];
+      switchedOff.before?.();
+      return real.explain(args[0], args[1], switchedOff.inject === null ? args[2] : { ...args[2], ...switchedOff.inject });
+    },
+  };
 });
 
 const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
@@ -1080,14 +1090,197 @@ describe('autoBuild (D5, slice A8: explanations)', () => {
     expect(read('proven_optimal', (e, id) => !(id === 'S' && e.eventKey === E1))).toEqual([[E2, 'teammates'], [E1, 'search_limit']]);
   });
 
+  describe('D5 amendment 12: the explanations are bounded', () => {
+    const withInject = async <T,>(inject: Record<string, unknown> | null, body: () => Promise<T>, before: (() => void) | null = null): Promise<T> => {
+      switchedOff.inject = inject;
+      switchedOff.before = before;
+      try {
+        return await body();
+      } finally {
+        switchedOff.inject = null;
+        switchedOff.before = null;
+      }
+    };
+    const proposalOf = (r: AutoBuildResult): AutoBuildProposal => {
+      if (r.kind !== 'improved') throw new Error(`expected improved, got ${r.kind}`);
+      return r.proposal;
+    };
+
+    it('21 aCompleteRunHasNoLimitFlag: the bench-sized limit is above these runs, so every earlier fixture is explained whole', async () => {
+      const proposal = await built(world());
+      expect(proposal.explanations.length).toBeGreaterThan(0);
+      expect(proposal).not.toHaveProperty('explanationLimit');
+      expect(EXPLAIN_WORK_LIMIT).toBe(25_000);
+      expect(EXPLAIN_TIME_MARGIN_MS).toBe(100);
+    });
+
+    it('21e unitsAreEntriesScored: the column evaluator costs its lineup, and each evaluation costs ten units', async () => {
+      const fx = world();
+      const problem = buildProblem(request(fx), { ...checkRules(fx.rules), load: loadRuleOf(null) }, scoreMeet(fx.model, fx.lineup, fx.tags, fx.rules, SOURCING));
+      const proposal = await built(fx);
+      let limit: ExplanationLimit | undefined;
+      // Room for the evaluator (one unit per request entry) and two evaluations (ten each), not a third. S has three events to evaluate.
+      const room = fx.lineup.entries.length + 25;
+      explain(problem, proposal, { status: 'proven_optimal', candidate: () => true, workLimit: room, onLimit: (l) => { limit = l; } });
+      expect(limit).toMatchObject({ reason: 'work_limit', workLimit: room, workUsed: fx.lineup.entries.length + 20 });
+    });
+
+    it('21a workLimitSweep: at every limit the list is a prefix of the full list, every item is whole, the counts add up, and the limit is named', async () => {
+      // Two own swimmers with a roster add and several unusual entries, so the list has more than one kind of item.
+      const fx = world({ sE2: [{ time: 4100 }], maxInd: 1, extra: [{ id: 'U', team: 'A', swims: { [E1]: one(4800), [E2]: one(4900), [E3]: one(5000) } }], extraTags: [] });
+      const full = proposalOf(await run(request(fx)));
+      const all = full.explanations;
+      expect(all.length).toBeGreaterThan(1);
+      const adds = all.filter((x) => x.kind === 'roster_add').length;
+      const swimmers = new Set(all.filter((x) => x.kind === 'unusual_event').map((x) => (x as Unusual).swimmerId));
+      let sawLimit = 0;
+      let last = -1;
+      for (const limit of [0, 1, 10, 50, 100, 200, 300, 400, 600, 800, 1200, 2000, 5000, 100000]) {
+        const got = proposalOf(await withInject({ workLimit: limit }, () => run(request(fx))));
+        expect(got.explanations, `limit ${limit}`).toEqual(all.slice(0, got.explanations.length));
+        expect(got.explanations.length, `limit ${limit}: never fewer than a smaller limit`).toBeGreaterThanOrEqual(last);
+        last = got.explanations.length;
+        const cut = got.explanationLimit;
+        if (got.explanations.length === all.length) {
+          expect(cut, `limit ${limit}`).toBeUndefined();
+          continue;
+        }
+        sawLimit += 1;
+        expect(cut, `limit ${limit}`).toMatchObject({ reason: 'work_limit', workLimit: limit });
+        expect((cut as NonNullable<typeof cut>).workUsed, `limit ${limit}`).toBeLessThanOrEqual(limit);
+        const done = got.explanations.filter((x) => x.kind === 'roster_add').length;
+        expect(done + (cut as NonNullable<typeof cut>).omitted.rosterAdds, `limit ${limit}`).toBe(adds);
+        const doneSwimmers = new Set(got.explanations.filter((x) => x.kind === 'unusual_event').map((x) => (x as Unusual).swimmerId));
+        // A swimmer counts as omitted when any of his entries is missing, so the explained swimmers plus the omitted ones cover the full list.
+        expect(doneSwimmers.size + (cut as NonNullable<typeof cut>).omitted.swimmers, `limit ${limit}`).toBeGreaterThanOrEqual(swimmers.size);
+        expect((cut as NonNullable<typeof cut>).omitted.rosterAdds + (cut as NonNullable<typeof cut>).omitted.rosterRemoves + (cut as NonNullable<typeof cut>).omitted.swimmers).toBeGreaterThan(0);
+      }
+      expect(sawLimit, 'the sweep hit the limit at least twice').toBeGreaterThanOrEqual(2);
+      // The limit changes nothing but the explanations and their flag: same lineup, evaluation and proof.
+      const tiny = proposalOf(await withInject({ workLimit: 0 }, () => run(request(fx))));
+      expect({ ...tiny, explanations: [], explanationLimit: undefined }).toEqual({ ...full, explanations: [], explanationLimit: undefined });
+      expect(tiny.explanations).toEqual([]);
+    }, 120_000);
+
+    it('21b timeGuardThroughAutoBuild: with a request clock, explain stops EXPLAIN_TIME_MARGIN_MS before the time limit, and says time_limit', async () => {
+      const fx = world();
+      const limitMs = LIMITS.timeLimitSeconds * 1000;
+      let now = 0;
+      const run1 = (jumpTo: number | null): Promise<AutoBuildResult> => withInject(null, () => run(request(fx, { clock: () => now })), jumpTo === null ? null : () => { now = jumpTo; });
+      // The clock reaches the margin before explain starts: nothing is explained, and the cause is the time.
+      const late = proposalOf(await run1(limitMs - EXPLAIN_TIME_MARGIN_MS));
+      expect(late.explanations).toEqual([]);
+      expect(late.explanationLimit).toMatchObject({ reason: 'time_limit', workUsed: 0, workLimit: EXPLAIN_WORK_LIMIT });
+      expect((late.explanationLimit as NonNullable<typeof late.explanationLimit>).omitted.rosterAdds + (late.explanationLimit as NonNullable<typeof late.explanationLimit>).omitted.swimmers).toBeGreaterThan(0);
+      // One millisecond earlier there is still time: the list is whole.
+      now = 0;
+      const early = proposalOf(await run1(limitMs - EXPLAIN_TIME_MARGIN_MS - 1));
+      expect(early.explanationLimit).toBeUndefined();
+      expect(early.explanations.length).toBeGreaterThan(0);
+      // Without a clock there is no time guard.
+      const noClock = proposalOf(await run(request(fx)));
+      expect(noClock.explanationLimit).toBeUndefined();
+    });
+
+    /**
+     * A large synthetic meet, all generated here (no competition value): seven rival teams of ten and 20 own scorers, five events. Each own swimmer is entered
+     * in his two slowest events, so every entry is unusual and lists three skipped events. That is about 5 scoreMeets of 380 entries per swimmer.
+     */
+    function large(): { readonly fx: Fx; readonly proposal: AutoBuildProposal } {
+      const events = [E1, E2, E3, E4, E5];
+      const specs: Spec[] = [];
+      const own = Array.from({ length: 20 }, (_, i) => `a${String(i).padStart(2, '0')}`);
+      own.forEach((id, i) => specs.push({ id, team: 'A', swims: Object.fromEntries(events.map((e, k) => [e, one(k < 3 ? 4000 + ((i * 7 + k * 13) % 40) * 20 : 5200 + ((i * 3 + k) % 20) * 10)])) }));
+      const rivals: LineupEntry[] = [];
+      for (const [t, team] of ['B', 'C', 'D', 'E', 'F', 'G', 'H'].entries()) {
+        for (let j = 0; j < 10; j += 1) {
+          const id = `${team.toLowerCase()}${j}`;
+          specs.push({ id, team, swims: Object.fromEntries(events.map((e, k) => [e, one(4200 + ((j * 11 + k * 5 + t * 3) % 60) * 15)])) });
+          for (const e of events) rivals.push(ind(team, id, e));
+        }
+      }
+      const base: Fx = {
+        model: buildModel(specs, events),
+        lineup: lineup(...rivals),
+        tags: [...tags('A', own), ...['B', 'C', 'D', 'E', 'F', 'G', 'H'].flatMap((team) => tags(team, Array.from({ length: 10 }, (_, j) => `${team.toLowerCase()}${j}`)))],
+        rules: rulesOf({ cap: 20, maxInd: 2 }),
+      };
+      const entries = [...rivals, ...own.flatMap((id) => [ind('A', id, E4), ind('A', id, E5)])];
+      const results = scoreMeet(base.model, lineup(...entries), base.tags, base.rules, SOURCING);
+      const proposal: AutoBuildProposal = {
+        lineup: lineup(...entries),
+        rosterAdds: [],
+        rosterRemoves: [],
+        tagsForScoring: base.tags,
+        entryChanges: [],
+        changeCount: 0,
+        evaluation: { objective: ownTotal(results), ownPoints: ownTotal(results), rival: null, robustOwnPoints: null, penaltyPoints: 0, results, load: null },
+        explanations: [],
+        newWarnings: [],
+        method: 'mip',
+      };
+      return { fx: base, proposal };
+    }
+
+    it('21c largeSyntheticCase: the work stops at the limit, the cut list is a whole-swimmer prefix of the full one, and the omitted swimmers are counted', () => {
+      const { fx, proposal } = large();
+      const req = request(fx);
+      const problem = buildProblem(req, { ...checkRules(fx.rules), load: loadRuleOf(null) }, scoreMeet(fx.model, fx.lineup, fx.tags, fx.rules, SOURCING));
+      const ctx: ExplainContext = { status: 'proven_optimal', candidate: () => true };
+      const full = explain(problem, proposal, ctx);
+      const fullSwimmers = [...new Set(unusual(full).map((x) => x.swimmerId))];
+      expect(fullSwimmers).toHaveLength(20);
+      // The unbounded work is well above the limit, so the limit is what ends the bounded run.
+      let limit: ExplanationLimit | undefined;
+      const cut = explain(problem, proposal, { ...ctx, workLimit: EXPLAIN_WORK_LIMIT, onLimit: (l) => { limit = l; } });
+      expect(limit, 'the large case is cut by the real limit').toBeDefined();
+      const hit = limit as ExplanationLimit;
+      expect(hit.reason).toBe('work_limit');
+      expect(hit.workLimit).toBe(EXPLAIN_WORK_LIMIT);
+      expect(hit.workUsed).toBeLessThanOrEqual(EXPLAIN_WORK_LIMIT);
+      expect(hit.workUsed, 'the limit was nearly used').toBeGreaterThan(EXPLAIN_WORK_LIMIT * 0.8);
+      expect(cut.length).toBeLessThan(full.length);
+      expect(cut).toEqual(full.slice(0, cut.length));
+      const doneSwimmers = [...new Set(unusual(cut).map((x) => x.swimmerId))];
+      expect(doneSwimmers).toEqual(fullSwimmers.slice(0, doneSwimmers.length));
+      // Every explained swimmer has all of his entries; the rest are counted.
+      for (const id of doneSwimmers) expect(unusual(cut).filter((x) => x.swimmerId === id)).toEqual(unusual(full).filter((x) => x.swimmerId === id));
+      expect(hit.omitted).toEqual({ rosterAdds: 0, rosterRemoves: 0, swimmers: fullSwimmers.length - doneSwimmers.length });
+      expect(hit.omitted.swimmers).toBeGreaterThan(0);
+    }, 120_000);
+
+    it('21d timeGuardInExplain: a clock that passes the limit stops explain before the next unit of work, and no work starts after it', () => {
+      const { fx, proposal } = large();
+      const req = request(fx);
+      const problem = buildProblem(req, { ...checkRules(fx.rules), load: loadRuleOf(null) }, scoreMeet(fx.model, fx.lineup, fx.tags, fx.rules, SOURCING));
+      let now = 0;
+      let reads = 0;
+      const expired = (): boolean => {
+        reads += 1;
+        now += 10;
+        return now >= 600;
+      };
+      let limit: ExplanationLimit | undefined;
+      const out = explain(problem, proposal, { status: 'proven_optimal', candidate: () => true, expired, onLimit: (l) => { limit = l; } });
+      expect(limit).toMatchObject({ reason: 'time_limit', workLimit: null });
+      // The guard is read before every unit and the run stops at the first read that says expired: 60 reads in all, 59 units started.
+      expect(reads).toBe(60);
+      expect(now).toBe(600);
+      expect(out.length).toBeGreaterThan(0);
+      expect(out.length).toBeLessThan(unusual(explain(problem, proposal, { status: 'proven_optimal', candidate: () => true })).length);
+    }, 120_000);
+  });
+
   it('20 explainMs: theexplanation time is a number with a request clock and null without one', async () => {
     const fx = world();
     const without = await autoBuild(request(fx), nodeMipSolve());
     expect(without.kind === 'improved' && without.proof.timings.explainMs).toBeNull();
     let now = 0;
     const stepping = await autoBuild(request(fx, { clock: () => (now += 1) }), nodeMipSolve());
-    // The clock moves one step per read and explain reads it twice, so the span is one step.
-    expect(stepping.kind === 'improved' && stepping.proof.timings.explainMs).toBe(1);
+    // The clock moves one step per read. Explain reads it at its start and end (D5 amendment 12: and once before each unit of work, for the time guard),
+    // so the span is a whole number of steps, at least one.
+    const span = stepping.kind === 'improved' ? (stepping.proof.timings.explainMs as number) : -1;
+    expect(Number.isInteger(span) && span >= 1).toBe(true);
     const real = await autoBuild(request(fx, { clock: () => performance.now() }), nodeMipSolve());
     expect(real.kind === 'improved' && (real.proof.timings.explainMs as number) >= 0).toBe(true);
   });

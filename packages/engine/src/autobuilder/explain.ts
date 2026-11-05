@@ -30,7 +30,7 @@ import { rosterSpots } from './roster';
 import { pairKey } from './space';
 import type { Problem } from './space';
 import { autoBuildFail } from './types';
-import type { AutoBuildExplanation, AutoBuildProof, AutoBuildProposal } from './types';
+import type { AutoBuildExplanation, AutoBuildProof, AutoBuildProposal, ExplanationLimit } from './types';
 
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -38,6 +38,41 @@ export { rosterSpots };
 
 /** Points are sums of table values, so a difference this small is zero. */
 const PENALTY_EPSILON = 1e-9;
+
+/**
+ * D5 amendment 12: the explanations run inside the gate reserve (1 s), so their work is bounded. The unit is one lineup entry scored: a `scoreMeet` or
+ * `sessionLoad` of a lineup of n entries costs n, and one column evaluation costs `EVALUATE_UNITS`. Measured on the timing bench (Node, one machine):
+ * config C at 10 teams uses 9,087 entries scored in 17 scoreMeets plus 129 evaluations (about 0.3 s), the 20-event synthetic field 13,483 in 20 plus 141
+ * (about 0.45 s): about 0.03 ms per unit. 25,000 units is 1.7 times the larger of the two, about 0.75 s, so both runs stay complete and the worst case
+ * stays inside the reserve. A slower machine is covered by the time guard (`ExplainContext.expired`), which stops earlier and says so.
+ */
+export const EXPLAIN_WORK_LIMIT = 25_000;
+/** The explanations stop this long before the time limit, so one more `scoreMeet` on a large meet still ends inside it. */
+export const EXPLAIN_TIME_MARGIN_MS = 100;
+/** One column evaluation (the swimmer alone in an event) measured about 0.3 ms, ten times a unit. */
+const EVALUATE_UNITS = 10;
+
+/** Thrown by `Budget.charge` to unwind an item that cannot finish. Never leaves `explain`. */
+class ExplainStop extends Error {
+  constructor(readonly reason: ExplanationLimit['reason']) {
+    super(reason);
+  }
+}
+
+/** The work the explanations may still do. `charge` runs before the work it pays for. */
+class Budget {
+  used = 0;
+  constructor(
+    private readonly limit: number,
+    private readonly expired: (() => boolean) | undefined
+  ) {}
+
+  charge(units: number): void {
+    if (this.used + units > this.limit) throw new ExplainStop('work_limit');
+    if (this.expired?.() === true) throw new ExplainStop('time_limit');
+    this.used += units;
+  }
+}
 
 type Unusual = Extract<AutoBuildExplanation, { kind: 'unusual_event' }>;
 type Skipped = Unusual['skipped'][number];
@@ -102,46 +137,40 @@ function nextBehind(
 }
 
 /**
- * The roster_remove explanations (slice A9), sorted by swimmer id. `spotsAfter` is the proposal's roster after the removal. `marginalPoints` is the
+ * The roster_remove explanation of one removed scorer (slice A9). `spotsAfter` is the proposal's roster after the removal. `marginalPoints` is the
  * own points of the proposal with the swimmer a scorer again (his entries stay in the lineup), less the proposal's own points: what keeping him adds.
  */
-function rosterRemoveFacts(problem: Problem, proposal: AutoBuildProposal): AutoBuildExplanation[] {
+function rosterRemoveFact(problem: Problem, proposal: AutoBuildProposal, gone: AutoBuildProposal['rosterRemoves'][number], budget: Budget): AutoBuildExplanation {
   const { req, support } = problem;
   const own = req.ownTeamId;
   const swimmerOf = new Map(req.model.swimmers.map((s) => [s.swimmerId, s]));
-  const out: AutoBuildExplanation[] = [];
-  for (const gone of [...proposal.rosterRemoves].sort((a, b) => cmp(a.swimmerId, b.swimmerId))) {
-    const scorers = proposal.tagsForScoring.filter((t) => t.teamId === own && t.role === 'scorer' && swimmerOf.get(t.swimmerId)?.gender === gone.gender).map((t) => t.swimmerId);
-    const kept = scoreMeet(req.model, proposal.lineup, [...proposal.tagsForScoring, { teamId: own, swimmerId: gone.swimmerId, role: 'scorer' as const }], req.rules, req.sourcing);
-    out.push({
-      kind: 'roster_remove',
-      swimmerId: gone.swimmerId,
-      spotsAfter: rosterSpots(proposal.lineup, scorers, support.weight, req.model.events),
-      marginalPoints: ownPointsOf(kept, own) - proposal.evaluation.ownPoints,
-    });
-  }
-  return out;
+  const scorers = proposal.tagsForScoring.filter((t) => t.teamId === own && t.role === 'scorer' && swimmerOf.get(t.swimmerId)?.gender === gone.gender).map((t) => t.swimmerId);
+  budget.charge(proposal.lineup.entries.length);
+  const kept = scoreMeet(req.model, proposal.lineup, [...proposal.tagsForScoring, { teamId: own, swimmerId: gone.swimmerId, role: 'scorer' as const }], req.rules, req.sourcing);
+  return {
+    kind: 'roster_remove',
+    swimmerId: gone.swimmerId,
+    spotsAfter: rosterSpots(proposal.lineup, scorers, support.weight, req.model.events),
+    marginalPoints: ownPointsOf(kept, own) - proposal.evaluation.ownPoints,
+  };
 }
 
-/** The roster_add explanations, sorted by swimmer id. */
-function rosterAddFacts(problem: Problem, proposal: AutoBuildProposal): AutoBuildExplanation[] {
+/** The roster_add explanation of one added swimmer. */
+function rosterAddFact(problem: Problem, proposal: AutoBuildProposal, add: AutoBuildProposal['rosterAdds'][number], budget: Budget): AutoBuildExplanation {
   const { req, support } = problem;
   const own = req.ownTeamId;
   const swimmerOf = new Map(req.model.swimmers.map((s) => [s.swimmerId, s]));
-  const out: AutoBuildExplanation[] = [];
-  for (const add of [...proposal.rosterAdds].sort((a, b) => cmp(a.swimmerId, b.swimmerId))) {
-    const scorers = proposal.tagsForScoring
-      .filter((t) => t.teamId === own && t.role === 'scorer' && swimmerOf.get(t.swimmerId)?.gender === add.gender)
-      .map((t) => t.swimmerId);
-    const without = scoreMeet(req.model, withoutSwimmer(proposal.lineup, add.swimmerId), proposal.tagsForScoring, req.rules, req.sourcing);
-    out.push({
-      kind: 'roster_add',
-      swimmerId: add.swimmerId,
-      spotsAfter: rosterSpots(proposal.lineup, scorers, support.weight, req.model.events),
-      marginalPoints: proposal.evaluation.ownPoints - ownPointsOf(without, own),
-    });
-  }
-  return out;
+  const scorers = proposal.tagsForScoring
+    .filter((t) => t.teamId === own && t.role === 'scorer' && swimmerOf.get(t.swimmerId)?.gender === add.gender)
+    .map((t) => t.swimmerId);
+  budget.charge(proposal.lineup.entries.length);
+  const without = scoreMeet(req.model, withoutSwimmer(proposal.lineup, add.swimmerId), proposal.tagsForScoring, req.rules, req.sourcing);
+  return {
+    kind: 'roster_add',
+    swimmerId: add.swimmerId,
+    spotsAfter: rosterSpots(proposal.lineup, scorers, support.weight, req.model.events),
+    marginalPoints: proposal.evaluation.ownPoints - ownPointsOf(without, own),
+  };
 }
 
 /**
@@ -160,7 +189,8 @@ function bindingOf(
   entry: IndividualEntry,
   added: { readonly points: number; readonly results: Results },
   event: MeetEvent,
-  context: ExplainContext
+  context: ExplainContext,
+  budget: Budget
 ): Skipped['binding'] {
   const { req } = problem;
   const rule = problem.support.load;
@@ -175,6 +205,7 @@ function bindingOf(
   const overSize = (entries: readonly LineupEntry[]): boolean =>
     size !== 'unlimited' && rosterSpots({ ...proposal.lineup, entries }, scorers, weight, req.model.events, true).numerator > size * weight.denominator;
   if (after.violations.some((v) => v.kind === 'entry_cap' && v.swimmerId === swimmerId && isNew(v, before))) return 'entry_cap';
+  if (rule !== null) budget.charge(proposal.lineup.entries.length + 1);
   const load = rule === null ? null : sessionLoad(req.model, { ...proposal.lineup, entries: [...proposal.lineup.entries, entry] }, after, rule.schedule, rule.preference, req.rules);
   if (rule !== null && !rule.prefer) {
     const base = violationsOf(proposal.evaluation.results, proposal.evaluation.load, rule.schedule);
@@ -199,12 +230,29 @@ function bindingOf(
 export interface ExplainContext {
   readonly status: AutoBuildProof['status'];
   readonly candidate: (event: MeetEvent, swimmerId: SwimmerId) => boolean;
+  /** D5 amendment 12: the work limit, in units of lineup entries scored (`EXPLAIN_WORK_LIMIT`). Absent means no limit. */
+  readonly workLimit?: number;
+  /** D5 amendment 12: true when the time limit is near. Read before each unit of work. Absent means no time guard. */
+  readonly expired?: () => boolean;
+  /** D5 amendment 12: called once, when a limit stopped `explain`, with what it did not explain. Never called for a complete run. */
+  readonly onLimit?: (limit: ExplanationLimit) => void;
 }
 
+/**
+ * Explanations, in order: the `roster_add` of each add (by swimmer id), the `roster_remove` of each remove, then the `unusual_event`s of each owned
+ * swimmer (by swimmer id, each swimmer's entries in entry-key order).
+ *
+ * D5 amendment 12: the work is bounded. Each `scoreMeet`, `sessionLoad` and column evaluation is charged to a budget before it runs, in units of
+ * lineup entries scored (`EXPLAIN_WORK_LIMIT`), and `context.expired` (the request's clock against the time limit) is read at the same points. When the
+ * next charge would pass the limit, or the time is up, `explain` stops and tells `context.onLimit` which kind of limit it hit and how many roster adds,
+ * roster removes and swimmers it did not explain. An item is whole or absent: a swimmer in progress is dropped with all of his entries, so the list is
+ * a prefix of the unbounded list and no entry is half explained. With no `workLimit` and no `expired` it never stops (a direct call in a test).
+ */
 export function explain(problem: Problem, proposal: AutoBuildProposal, context: ExplainContext): readonly AutoBuildExplanation[] {
   const { req } = problem;
   const own = req.ownTeamId;
   const { model } = req;
+  const budget = new Budget(context.workLimit ?? Number.POSITIVE_INFINITY, context.expired);
   const results = proposal.evaluation.results;
   const index = buildIndex(model);
   const swimmerOf = new Map(model.swimmers.map((s) => [s.swimmerId, s]));
@@ -223,25 +271,28 @@ export function explain(problem: Problem, proposal: AutoBuildProposal, context: 
   // build stays as entered, and is not ranked here. A scorer the proposal removes (slice A9) is not on the roster: his entries are non-scorer entries.
   const roster = new Set(proposal.tagsForScoring.filter((t) => t.teamId === own && t.role === 'scorer').map((t) => t.swimmerId));
   const owned = (id: SwimmerId): boolean => problem.decision.has(id) && roster.has(id);
-  const out: AutoBuildExplanation[] = [];
-
-  out.push(...rosterAddFacts(problem, proposal));
-  out.push(...rosterRemoveFacts(problem, proposal));
 
   // unusual_event: individual entries only. One column evaluator over the request's lineup, with no load: the swimmer alone against every
-  // fixed entry (the other teams and the own entries the build does not own).
-  const evaluator = new Evaluator({
-    model,
-    lineup: req.lineup,
-    tags: req.tags,
-    rules: req.rules,
-    sourcing: req.sourcing,
-    own,
-    decision: problem.decision,
-    free: problem.freeSet,
-    load: null,
-    held: new Set<string>(),
-  });
+  // fixed entry (the other teams and the own entries the build does not own). Built at the first swimmer, and charged then.
+  let evaluator: Evaluator | undefined;
+  const evaluatorOf = (): Evaluator => {
+    if (evaluator === undefined) {
+      budget.charge(req.lineup.entries.length);
+      evaluator = new Evaluator({
+        model,
+        lineup: req.lineup,
+        tags: req.tags,
+        rules: req.rules,
+        sourcing: req.sourcing,
+        own,
+        decision: problem.decision,
+        free: problem.freeSet,
+        load: null,
+        held: new Set<string>(),
+      });
+    }
+    return evaluator;
+  };
   const individuals = new Map<SwimmerId, IndividualEntry[]>();
   for (const e of proposal.lineup.entries) {
     if (e.kind !== 'individual' || e.teamId !== own) continue;
@@ -251,11 +302,11 @@ export function explain(problem: Problem, proposal: AutoBuildProposal, context: 
   }
   const marginalCache = new Map<string, { readonly points: number; readonly results: Results }>();
 
-  for (const swimmerId of [...individuals.keys()].sort(cmp)) {
-    if (!owned(swimmerId)) continue;
+  /** The unusual events of one swimmer. */
+  const swimmerFacts = (swimmerId: SwimmerId): AutoBuildExplanation[] => {
+    const facts: AutoBuildExplanation[] = [];
     const entries = individuals.get(swimmerId) as IndividualEntry[];
-    const swimmer = swimmerOf.get(swimmerId);
-    if (swimmer === undefined) continue;
+    const swimmer = swimmerOf.get(swimmerId) as NonNullable<ReturnType<typeof swimmerOf.get>>;
     const entered = new Map(entries.map((e) => [`${e.gender}\u0000${e.eventKey}`, e]));
     // The ranking: every built individual event of the swimmer's gender where the swimmer has a usable seed and a place alone.
     const candidates = problem.built.filter((e) => e.kind !== 'relay' && e.gender === swimmer.gender);
@@ -268,7 +319,9 @@ export function explain(problem: Problem, proposal: AutoBuildProposal, context: 
     const ranking: RankedEvent[] = [];
     for (const event of candidates) {
       if ((seeds.get(entryKey(fresh(event))) ?? null) === null) continue;
-      const alone = evaluator.evaluate(event, [swimmerId]);
+      const column = evaluatorOf();
+      budget.charge(EVALUATE_UNITS);
+      const alone = column.evaluate(event, [swimmerId]);
       const row = alone.rows.find((r) => r.entryKey === entryKey(fresh(event)));
       if (row === undefined || row.place === null) continue;
       ranking.push({ event, place: row.place, points: row.points });
@@ -280,6 +333,7 @@ export function explain(problem: Problem, proposal: AutoBuildProposal, context: 
       const k = `${swimmerId}\u0000${event.gender}\u0000${event.eventKey}`;
       const known = marginalCache.get(k);
       if (known) return known;
+      budget.charge(proposal.lineup.entries.length + 1);
       const added = scoreMeet(model, { ...proposal.lineup, entries: [...proposal.lineup.entries, fresh(event)] }, proposal.tagsForScoring, req.rules, req.sourcing);
       const value = { points: ownPointsOf(added, own) - proposal.evaluation.ownPoints, results: added };
       marginalCache.set(k, value);
@@ -297,12 +351,13 @@ export function explain(problem: Problem, proposal: AutoBuildProposal, context: 
       const seed: Hundredths = seedOrNull === null || seedOrNull === undefined ? autoBuildFail('model_mismatch', `${entryKey(entry)} placed in the proposal but has no seed`) : seedOrNull;
       const field = rowsOf(results, entry.eventKey, entry.gender).filter((r) => r.teamId !== own && r.place !== null) as (ResultRow & { readonly place: number })[];
       const next = nextBehind(field, mine.place, proposalValues);
+      budget.charge(proposal.lineup.entries.length);
       const without = scoreMeet(model, { ...proposal.lineup, entries: proposal.lineup.entries.filter((e: LineupEntry) => entryKey(e) !== entryKey(entry)) }, proposal.tagsForScoring, req.rules, req.sourcing);
       const skipped: Skipped[] = ranking
         .slice(0, rank)
         .filter((r) => !entered.has(`${r.event.gender}\u0000${r.event.eventKey}`))
-        .map((r) => ({ eventKey: r.event.eventKey, placeAlone: r.place, marginalPoints: marginalOfAdding(r.event).points, binding: bindingOf(problem, proposal, swimmerId, swimmer.gender, fresh(r.event), marginalOfAdding(r.event), r.event, context) }));
-      out.push({
+        .map((r) => ({ eventKey: r.event.eventKey, placeAlone: r.place, marginalPoints: marginalOfAdding(r.event).points, binding: bindingOf(problem, proposal, swimmerId, swimmer.gender, fresh(r.event), marginalOfAdding(r.event), r.event, context, budget) }));
+      facts.push({
         kind: 'unusual_event',
         entryKey: entryKey(entry),
         swimmerId,
@@ -317,6 +372,34 @@ export function explain(problem: Problem, proposal: AutoBuildProposal, context: 
         marginalPoints: proposal.evaluation.ownPoints - ownPointsOf(without, own),
         skipped,
       });
+    }
+    return facts;
+  };
+
+  interface Item {
+    readonly kind: 'rosterAdds' | 'rosterRemoves' | 'swimmers';
+    readonly run: () => AutoBuildExplanation[];
+  }
+  const items: Item[] = [
+    ...[...proposal.rosterAdds].sort((a, b) => cmp(a.swimmerId, b.swimmerId)).map((add): Item => ({ kind: 'rosterAdds', run: () => [rosterAddFact(problem, proposal, add, budget)] })),
+    ...[...proposal.rosterRemoves].sort((a, b) => cmp(a.swimmerId, b.swimmerId)).map((gone): Item => ({ kind: 'rosterRemoves', run: () => [rosterRemoveFact(problem, proposal, gone, budget)] })),
+    ...[...individuals.keys()].sort(cmp).filter((id) => owned(id) && swimmerOf.get(id) !== undefined).map((id): Item => ({ kind: 'swimmers', run: () => swimmerFacts(id) })),
+  ];
+  const out: AutoBuildExplanation[] = [];
+  for (let i = 0; i < items.length; i += 1) {
+    try {
+      out.push(...(items[i] as Item).run());
+    } catch (stop) {
+      if (!(stop instanceof ExplainStop)) throw stop;
+      const rest = items.slice(i);
+      const count = (kind: Item['kind']): number => rest.filter((item) => item.kind === kind).length;
+      context.onLimit?.({
+        reason: stop.reason,
+        workUsed: budget.used,
+        workLimit: context.workLimit ?? null,
+        omitted: { rosterAdds: count('rosterAdds'), rosterRemoves: count('rosterRemoves'), swimmers: count('swimmers') },
+      });
+      break;
     }
   }
   return out;

@@ -13,7 +13,7 @@ import { scoreMeet } from '../model/results';
 import type { Results } from '../model/results';
 import type { Lineup, ScorerTag } from '../model/lineup';
 import type { Gender } from '../model/primitives';
-import { explain } from './explain';
+import { EXPLAIN_TIME_MARGIN_MS, EXPLAIN_WORK_LIMIT, explain } from './explain';
 import { evaluationOfScored, gate, repairable, scoreLineup } from './gate';
 import { scorerIds } from './load';
 import { makeScale } from './lp';
@@ -28,7 +28,7 @@ import type { EventSpace, Problem } from './space';
 import type { Support } from './support';
 import { checkLimits, checkLoadSettings, checkObjective, checkOwnTags, checkRoster, checkRules, checkSchedule, checkTeams, loadRuleOf } from './support';
 import { autoBuildFail } from './types';
-import type { AutoBuildEvaluation, AutoBuildProof, AutoBuildProposal, AutoBuildRequest, AutoBuildResult, AutoBuildRestriction, AutoBuildScore, MipSolve } from './types';
+import type { AutoBuildEvaluation, AutoBuildProof, AutoBuildProposal, AutoBuildRequest, AutoBuildResult, AutoBuildRestriction, AutoBuildScore, ExplanationLimit, MipSolve } from './types';
 
 export { AUTOBUILD_DEFAULT_LIMITS, AUTOBUILD_DEFAULT_ROBUST, AutoBuildError } from './types';
 export type {
@@ -44,6 +44,7 @@ export type {
   AutoBuildResult,
   AutoBuildScore,
   EntryChange,
+  ExplanationLimit,
   MipSolution,
   MipSolve,
   RivalRef,
@@ -163,7 +164,7 @@ function withProposalBest(problem: Problem, outcome: Extract<SolveOutcome, { kin
 }
 
 /** The guard (D5 8.4) for a solve with a result. */
-function decide(problem: Problem, space: Space, outcome: Extract<SolveOutcome, { kind: 'found' }>, current: AutoBuildEvaluation, currentInSpace: boolean, records: readonly SolveRecord[], clock: (() => number) | undefined): AutoBuildResult {
+function decide(problem: Problem, space: Space, outcome: Extract<SolveOutcome, { kind: 'found' }>, current: AutoBuildEvaluation, currentInSpace: boolean, records: readonly SolveRecord[], clock: (() => number) | undefined, deadline: number | null): AutoBuildResult {
   const t0 = clock?.();
   const proposal = gate(problem, space, outcome.selection, outcome.scale, outcome.bestScaled, outcome.method, outcome.valueScaled);
   const gateMs = clock !== undefined && t0 !== undefined ? clock() - t0 : null;
@@ -172,12 +173,17 @@ function decide(problem: Problem, space: Space, outcome: Extract<SolveOutcome, {
   // D5 9: the explanations are read from the finished proposal, after the proof. They change neither, except `timings.explainMs`.
   const explained = (): { readonly proposal: AutoBuildProposal; readonly proof: AutoBuildProof } => {
     const t1 = clock?.();
+    let explanationLimit: ExplanationLimit | undefined;
+    const stopAt = deadline === null ? null : deadline - EXPLAIN_TIME_MARGIN_MS;
     const explanations = explain(problem, proposal, {
       status: proof.status,
+      workLimit: EXPLAIN_WORK_LIMIT,
+      ...(clock === undefined || stopAt === null ? {} : { expired: () => clock() >= stopAt }),
+      onLimit: (limit) => { explanationLimit = limit; },
       candidate: (event, swimmerId) => space.events.find((es) => es.id === eventId(event.eventKey, event.gender))?.candidates.includes(swimmerId) === true,
     });
     const explainMs = clock !== undefined && t1 !== undefined ? clock() - t1 : null;
-    return { proposal: { ...proposal, explanations }, proof: { ...proof, timings: { ...proof.timings, explainMs } } };
+    return { proposal: { ...proposal, explanations, ...(explanationLimit === undefined ? {} : { explanationLimit }) }, proof: { ...proof, timings: { ...proof.timings, explainMs } } };
   };
   if (broken.length > 0) {
     const done = explained();
@@ -303,6 +309,6 @@ export async function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise
   }
   const outcome = await solveAutoBuild(space, req.limits, solve, req.clock, started, records);
   return outcome.kind === 'found'
-    ? decide(problem, space, outcome, current, currentInSpace, records, req.clock)
+    ? decide(problem, space, outcome, current, currentInSpace, records, req.clock, started === undefined ? null : started + req.limits.timeLimitSeconds * 1000)
     : undecided(problem, space, outcome, current, currentInSpace, records);
 }

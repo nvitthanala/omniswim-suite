@@ -168,6 +168,18 @@ export type AutoBuildExplanation =
       readonly marginalPoints: number;
     };
 
+/**
+ * D5 amendment 12: the explanations of a proposal stopped early. They are a prefix of the full list: every item present is whole, and `omitted` counts
+ * what is missing. `work_limit`: the work bound was reached (`workUsed` of `workLimit`, in lineup entries scored). `time_limit`: the request's time limit
+ * was near (`workLimit` is the bound that was in force, `null` when none was). A swimmer counts in `omitted.swimmers` when any of his unusual events was left out.
+ */
+export interface ExplanationLimit {
+  readonly reason: 'work_limit' | 'time_limit';
+  readonly workUsed: number;
+  readonly workLimit: number | null;
+  readonly omitted: { readonly rosterAdds: number; readonly rosterRemoves: number; readonly swimmers: number };
+}
+
 export interface AutoBuildProposal {
   /** The whole meet */
   readonly lineup: Lineup;
@@ -188,6 +200,11 @@ export interface AutoBuildProposal {
   readonly evaluation: AutoBuildEvaluation;
   /** Slice A8 (D5 9): empty from `gate`, filled by `autoBuild` for a proposal it returns. */
   readonly explanations: readonly AutoBuildExplanation[];
+  /**
+   * D5 amendment 12: present only when the explanations stopped early (see `ExplanationLimit`). Absent means they are complete. An empty `explanations`
+   * with no `explanationLimit` means there was nothing to explain.
+   */
+  readonly explanationLimit?: ExplanationLimit;
   /** Section 8.3 warnings absent from the current results */
   readonly newWarnings: readonly Violation[];
   readonly method: 'mip' | 'mip-incumbent' | 'local-search';

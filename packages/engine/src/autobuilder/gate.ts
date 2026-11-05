@@ -222,10 +222,16 @@ export function scoreLineup(
   return { results, load, penaltyPoints, robustResults, value, rival };
 }
 
-/** The evaluation of a scored lineup: the objective is the metric less the own-only penalty, but in goal seek the metric alone (D5 4.7). */
+/**
+ * The objective of a scored lineup, the one formula: the metric (robust seeds in robust mode) less the own-only penalty, but in goal seek the metric
+ * alone (D5 4.7). The evaluation, the restore step and the gate's check against the MIP all read it here.
+ */
+export const objectiveOfScored = (problem: Problem, s: Pick<Scored, 'value' | 'penaltyPoints'>): number => (problem.mode.target === null ? s.value - s.penaltyPoints : s.value);
+
+/** The evaluation of a scored lineup (D5 4.7). */
 export function evaluationOfScored(problem: Problem, s: Scored): AutoBuildEvaluation {
   return {
-    objective: problem.mode.target === null ? s.value - s.penaltyPoints : s.value,
+    objective: objectiveOfScored(problem, s),
     ownPoints: ownPointsOf(s.results, problem.req.ownTeamId),
     rival: s.rival,
     robustOwnPoints: s.robustResults === null ? null : ownPointsOf(s.robustResults, problem.req.ownTeamId),
@@ -240,9 +246,6 @@ function candidateOf(problem: Problem, built: Built): Candidate {
   const rule = problem.support.load;
   return { built, ...scored, violations: violationsOf(scored.results, scored.load, rule === null ? null : rule.schedule) };
 }
-
-/** The objective of a candidate in the gate's terms: the metric of the mode (robust seeds in robust mode) less the own-only penalty. */
-const objectiveOfCandidate = (c: Candidate): number => c.value - c.penaltyPoints;
 
 /**
  * Slice A9. Without Z2 a swappable scorer's `z` is free while the team-size row has slack, so a result that skipped the tie-break (a time limit, an
@@ -261,7 +264,7 @@ export function restoreIdleRemovals(problem: Problem, space: Space, selection: S
   let state = selection;
   const first = candidateOf(problem, buildLineup(problem, space, state));
   const lineup = first.built.lineup;
-  let baseline = objectiveOfCandidate(first);
+  let baseline = objectiveOfScored(problem, first);
   let blocked = new Set(blockersOf(problem, first.built, first.violations).map((b) => b.key));
   for (const g of problem.genders) {
     const onTeam = (id: SwimmerId): boolean => genderOf(problem, id) === g;
@@ -274,7 +277,7 @@ export function restoreIdleRemovals(problem: Problem, space: Space, selection: S
       const next = candidateOf(problem, buildLineup(problem, space, back));
       const blockers = blockersOf(problem, next.built, next.violations);
       if (blockers.some((b) => !blocked.has(b.key))) continue;
-      const objective = objectiveOfCandidate(next);
+      const objective = objectiveOfScored(problem, next);
       if (objective < baseline - 1e-9) continue;
       state = back;
       baseline = objective;
@@ -356,7 +359,7 @@ export function gate(
   const raw = candidateOf(problem, buildLineup(problem, space, selection));
   const target = problem.mode.target;
   if (target === null) {
-    checkPoints(raw.value - raw.penaltyPoints, scale, mipPoints, 'the metric less the penalty');
+    checkPoints(objectiveOfScored(problem, raw), scale, mipPoints, 'the metric less the penalty');
   } else {
     // Goal seek (D5 4.7): the metric equals the MIP's, it reaches the target, and the changes counted from the lineup are the ones
     // the MIP minimized (4.9). The metric carries no penalty.

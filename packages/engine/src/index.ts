@@ -114,6 +114,7 @@ export type {
   AutoBuildResult,
   AutoBuildScore,
   EntryChange,
+  ExplanationLimit,
   MipSolution,
   MipSolve,
   RivalRef,
