@@ -65,6 +65,18 @@ describe.skipIf(!pgUrl)(
       return { status: res.status, json: (await res.json().catch(() => null)) as any };
     }
     const ws = (id: string, name: string) => ({ id, name, menResults: [], womenResults: [], recruits: [], createdAt: 1 });
+    // pg-pool's end() resolves before each client's socket has closed. A FORCE drop at that moment
+    // terminates a backend whose client is still closing, and that client then emits an 'error'
+    // (57P01) that nothing listens for, which fails the run. Wait for the backends to leave first;
+    // FORCE stays as the fallback so a leaked connection still cannot block the drop.
+    async function dropWhenIdle(dbName: string): Promise<void> {
+      for (let i = 0; i < 50; i += 1) {
+        const r = await admin.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1 AND backend_type = 'client backend'", [dbName]);
+        if (r.rows[0].n === 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+    }
 
     beforeAll(async () => {
       admin = new pg.Pool({ connectionString: pgUrl });
@@ -244,6 +256,8 @@ describe.skipIf(!pgUrl)(
       const scopedUrl = new URL(pgUrl as string);
       scopedUrl.pathname = `/${dbName}`;
       const probe = new pg.Pool({ connectionString: scopedUrl.toString() });
+      // The FORCE drop may end a probe connection that is still closing; only that error is expected.
+      probe.on('error', (error: Error & { code?: string }) => { if (error.code !== '57P01') throw error; });
       const keyWidths = async () => {
         const out: number[] = [];
         for (const { table } of ID_KEYED_CHILD_TABLES) {
@@ -315,7 +329,7 @@ describe.skipIf(!pgUrl)(
         }
       } finally {
         await probe.end();
-        await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+        await dropWhenIdle(dbName);
       }
     });
 
@@ -365,6 +379,8 @@ describe.skipIf(!pgUrl)(
       const scopedUrl = new URL(pgUrl as string);
       scopedUrl.pathname = `/${dbName}`;
       const probe = new pg.Pool({ connectionString: scopedUrl.toString() });
+      // The FORCE drop may end a probe connection that is still closing; only that error is expected.
+      probe.on('error', (error: Error & { code?: string }) => { if (error.code !== '57P01') throw error; });
       try {
         const first = new PgWorkspaceService({ connectionString: scopedUrl.toString() });
         await first.init();
@@ -377,7 +393,7 @@ describe.skipIf(!pgUrl)(
         expect(stamp.rows[0].value).toBe(String(PG_SCHEMA_VERSION + 1));
       } finally {
         await probe.end();
-        await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+        await dropWhenIdle(dbName);
       }
     });
   }

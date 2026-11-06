@@ -653,3 +653,5 @@ bodies were not saved; only the counts and values below.
 **F1.1 depth:** the window is honored at 7 years (check 7), but for team 58
 the 7-year span adds one individual best and no relay over 3 years. F1.1
 stays last (U11 default). Pin the depth at 7 years, citing this section.
+
+**Season list, raw (2026-11-06):** one same-origin `fetch('/api/seasonchoices/')` from the simulator tab: 200, `application/json`, no `cf-mitigated`. A bare array of 10 rows `{seasonId: number, label: "2026-2027", startDate: "2026-09-01", endDate: "2027-08-31", isCurrent: true}`; exactly one row is current. This matches `parseSeasonChoices` (date-only strings, numeric id).
