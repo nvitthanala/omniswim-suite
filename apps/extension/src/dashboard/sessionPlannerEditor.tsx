@@ -45,27 +45,34 @@ export function SessionPlannerEditor({ snapshot, repoForMeet, subscribe }: { sna
   const markDraft = (value: boolean): void => { presetDirty.current = value; setHasDraft(value); };
   // Counts schedule edits. A save notes it when it starts: an edit made while the save was pending is newer than what the save wrote, and stays.
   const editCount = React.useRef(0);
-  // Counts load-preference writes still in flight. Their result is already on screen, so a refresh must not put the older stored one back.
-  const preferenceWrites = React.useRef(0);
   // Only the newest read may change the screen; a write the coach made here makes every read still in flight stale.
   const readId = React.useRef(0);
-  const alive = React.useRef(false);
+  // One token per meet shown, `null` after unmount. An action notes the token before its first await and changes the screen only while that
+  // token is still current, so an action started on one meet cannot set state after the view switched to another. Its storage write still lands.
+  // The token also holds the count of load-preference writes still in flight for its meet: their result is already on screen, so a refresh must
+  // not put the older stored one back, and a write for another meet must not hold back this meet's preference.
+  const view = React.useRef<{ preferenceWrites: number } | null>(null);
   const load = React.useCallback(async () => {
-    if (!alive.current) return;
+    const token = view.current;
+    if (token === null) return;
     const id = ++readId.current;
     try {
       const repo = await repoForMeet();
       const [rows, selected, pref] = await Promise.all([listSessionPresetChoices(repo), readSessionPreset(repo, meetKey), readSessionLoadPreference(repo, meetKey)]);
-      if (!alive.current || id !== readId.current) return;
+      if (view.current !== token || id !== readId.current) return;
       setChoices(rows);
       if (!presetDirty.current) { setRef(selected.ref); setPreset(selected.preset); }
-      if (preferenceWrites.current === 0) setPreference(pref);
-    } catch (e) { if (alive.current && id === readId.current) setError(e instanceof Error ? e.message : String(e)); }
+      if (token.preferenceWrites === 0) setPreference(pref);
+    } catch (e) { if (view.current === token && id === readId.current) setError(e instanceof Error ? e.message : String(e)); }
   }, [meetKey, repoForMeet]);
+  // The token changes in a layout effect, before the browser paints the new meet: a click on meet B's controls never carries meet A's token.
+  React.useLayoutEffect(() => {
+    view.current = { preferenceWrites: 0 };
+    return () => { view.current = null; };
+  }, [load]);
   React.useEffect(() => {
-    alive.current = true; markDraft(false);
+    markDraft(false); setError(''); setSaved('');
     void load();
-    return () => { alive.current = false; };
   }, [load]);
   React.useEffect(() => subscribe?.(() => { void load(); }), [load, subscribe]);
   const editPreset = (change: Parameters<typeof setPreset>[0]) => { editCount.current += 1; markDraft(true); setPreset(change); };
@@ -73,11 +80,12 @@ export function SessionPlannerEditor({ snapshot, repoForMeet, subscribe }: { sna
   const selectPreset = async (value: string) => {
     const choice = choices.find(c => refKey(c.ref) === value);
     if (!choice) { markDraft(false); setRef(undefined); setPreset(undefined); return; }
+    const token = view.current;
     try {
       const repo = await repoForMeet(); await saveSessionPresetChoice(repo, meetKey, choice.ref); const selected = await readSessionPreset(repo, meetKey);
-      if (!alive.current) return;
+      if (view.current !== token) return;
       readId.current += 1; markDraft(false); setRef(selected.ref); setPreset(selected.preset); setError(''); setSaved('Session preset choice saved.');
-    } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { if (view.current === token) setError(e instanceof Error ? e.message : String(e)); }
   };
   const updateEvent = (index: number, update: Partial<SessionPreset['events'][number]>) => editPreset(current => current && ({ ...current, events: current.events.map((event, i) => i === index ? { ...event, ...update } : event) }));
   const updateFormat = (index: number, format: EventFormat) => updateEvent(index, { format });
@@ -89,26 +97,29 @@ export function SessionPlannerEditor({ snapshot, repoForMeet, subscribe }: { sna
   });
   const savePreset = async () => {
     if (!preset || !ref) return;
+    const token = view.current;
     try {
       const validated = parseSessionPreset(preset);
       const editsAtStart = editCount.current;
       const repo = await repoForMeet(); const next = await saveEditedSessionPreset(repo, meetKey, ref, validated);
       const selected = await readSessionPreset(repo, meetKey); const rows = await listSessionPresetChoices(repo);
-      if (!alive.current) return;
+      if (view.current !== token) return;
       readId.current += 1; setRef(next); setChoices(rows); setError('');
       if (editCount.current === editsAtStart) { markDraft(false); setPreset(selected.preset); setSaved('Schedule saved.'); }
       else setSaved('Schedule saved. Changes you made while it saved are not saved yet.');
     } catch (e) {
       // The draft stays, so the coach can try again, and the message says it is not saved.
-      if (alive.current) { setError(`Schedule not saved: ${e instanceof Error ? e.message : String(e)}`); setSaved(''); }
+      if (view.current === token) { setError(`Schedule not saved: ${e instanceof Error ? e.message : String(e)}`); setSaved(''); }
     }
   };
   const savePreference = async (next: LoadPreference) => {
+    const token = view.current;
+    if (token === null) return;
     setPreference(next);
-    preferenceWrites.current += 1;
-    try { await saveSessionLoadPreference(await repoForMeet(), meetKey, next); if (alive.current) { setError(''); setSaved('Load preference saved.'); } }
-    catch (e) { if (alive.current) setError(e instanceof Error ? e.message : String(e)); }
-    finally { preferenceWrites.current -= 1; readId.current += 1; }
+    token.preferenceWrites += 1;
+    try { await saveSessionLoadPreference(await repoForMeet(), meetKey, next); if (view.current === token) { setError(''); setSaved('Load preference saved.'); } }
+    catch (e) { if (view.current === token) setError(e instanceof Error ? e.message : String(e)); }
+    finally { token.preferenceWrites -= 1; if (view.current === token) readId.current += 1; }
   };
   const sessionControls = (format: EventFormat, change: (f: EventFormat) => void) => {
     const keys = format.kind === 'timed-final' ? ['session'] : format.kind === 'prelims-finals' ? ['prelims', 'finals'] : ['slowHeats', 'fastHeat'];

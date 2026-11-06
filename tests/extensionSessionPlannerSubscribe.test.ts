@@ -16,7 +16,7 @@ import { BUILTIN_SESSION_PRESETS } from '@omniswim/engine';
 import { SessionPlannerEditor } from '../apps/extension/src/dashboard/sessionPlannerEditor';
 import type { PlannerSubscribe } from '../apps/extension/src/dashboard/sessionPlannerEditor';
 import { meetKeyForSnapshot } from '../apps/extension/src/dashboard/meetKey';
-import { createMemoryChangeBus, createStorageRepo, openOmniDb, saveEditedSessionPreset, saveSessionLoadPreference, saveSessionPresetChoice, watchChanges } from '../apps/extension/src/storage';
+import { createMemoryChangeBus, createStorageRepo, openOmniDb, readSessionLoadPreference, readSessionPreset, saveEditedSessionPreset, saveSessionLoadPreference, saveSessionPresetChoice, watchChanges } from '../apps/extension/src/storage';
 import type { StorageRepo } from '../apps/extension/src/storage';
 import { configCWorld } from './helpers/autoBuilderFixtures';
 import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
@@ -221,6 +221,47 @@ describe('session planner draft and writes', () => {
     expect(plannerError()).toBeNull();
     expect(host!.textContent).toContain('Schedule saved.');
     expect(host!.querySelector('[data-testid="planner-discard"]')).toBeNull();
+    s.db.close();
+  });
+
+  // Either order: meet A's actions finish while B's read is in flight (a stale read bump would drop it), or B's read finishes while A's
+  // preference write is in flight (a count shared across meets would hold back B's preference).
+  it.each(['meet A first', 'meet B first'] as const)('a save started on one meet does not change the view after it switched to another meet (%s)', async (order) => {
+    const s = await setup();
+    // The same root re-renders with a new date window: a new meet, the same component (main.tsx mounts it without a key).
+    const snapshotB = { ...world.snapshot, settings: { ...world.snapshot.settings, startDate: '2001-01-01' } };
+    const meetB = meetKeyForSnapshot(snapshotB);
+    expect(meetB).not.toBe(s.meetKey);
+    await saveSessionPresetChoice(s.mine, s.meetKey, builtin);
+    await saveSessionLoadPreference(s.mine, meetB, { mode: 'off' });
+    let release: () => void = () => undefined;
+    let gate: Promise<void> = Promise.resolve();
+    const repoForMeet = async (): Promise<StorageRepo> => { await gate; return s.mine; };
+    // No change bus here: a notice from meet A's writes would start a fresh read for meet B and hide a stale result.
+    const quiet: PlannerSubscribe = () => () => undefined;
+    await mount(repoForMeet, quiet);
+    expect(presetSelect().value).toBe(JSON.stringify(builtin));
+    expect(modeSelect().value).toBe('respect');
+
+    // On meet A: a schedule save and a load-preference write, both held.
+    await act(async () => button('Remove event')!.click());
+    gate = new Promise<void>((resolve) => { release = resolve; });
+    await act(async () => button('Save schedule')!.click());
+    await changeValue(modeSelect(), 'prefer');
+    // The view switches to meet B while both are pending. B's own read waits on a second gate.
+    const releaseA = release;
+    gate = new Promise<void>((resolve) => { release = resolve; });
+    await act(async () => root?.render(React.createElement(SessionPlannerEditor, { snapshot: snapshotB, repoForMeet, subscribe: quiet })));
+    const releaseB = release;
+    for (const open of order === 'meet A first' ? [releaseA, releaseB] : [releaseB, releaseA]) { open(); await settle(); }
+
+    expect(presetSelect().value, "meet B has no schedule choice; A's saved copy is not shown").toBe('');
+    expect(eventCount()).toBe(0);
+    expect(modeSelect().value, "meet B's own stored preference").toBe('off');
+    expect(host!.textContent).not.toContain('saved');
+    // Both writes for meet A still landed.
+    expect((await readSessionPreset(s.mine, s.meetKey)).ref).not.toStrictEqual(builtin);
+    expect((await readSessionLoadPreference(s.mine, s.meetKey)).mode).toBe('prefer');
     s.db.close();
   });
 
