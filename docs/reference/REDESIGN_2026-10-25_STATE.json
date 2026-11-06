@@ -2,14 +2,14 @@
   "initiative": "chrome-extension-redesign-2026-10-25",
   "plan": "plans/2026-10-25/01-REDESIGN-PLAN.md",
   "restartHandoff": {
-    "writtenAt": "2026-11-05 (before a Claude Code restart to install an update)",
+    "writtenAt": "2026-11-05 evening (after the user answers R83-R98)",
     "readFirst": "This block is the current picture. Older blocks below are history; where they disagree, this block and git log win.",
-    "head": "498ee8e8 \"Refresh the session planner from the change bus\" is the last code commit, pushed to origin nvitthanala/extension-redesign (draft PR #8). Two handoff commits follow it: e3c7e281 (this state file, questions, INVARIANTS.md) and c42a4f2b (scripts/orca/dispatch-codex.sh). Tree clean except untracked omniswim-suite/data/ (never commit it).",
+    "head": "fd9412d0 is the last code commit on nvitthanala/extension-redesign (draft PR #8): 3f623254 explanation-limit panel, da77b25d planner meet token, fd9412d0 NSISC results source. A docs commit follows it (recon, decisions, questions, routing, this file). Tree clean except untracked omniswim-suite/data/ (never commit it).",
     "gatesAtHead": {
-      "status": "all green at 498ee8e8, run by the lead before the commit",
+      "status": "all green at fd9412d0, run by the lead before the commits",
       "buildExtension": "npm run build:extension",
       "lint": "npm run lint",
-      "vitest": "SKIP_BUDGET_ENV=local npx vitest run --maxWorkers=4 -> 204 files, 3441 tests",
+      "vitest": "SKIP_BUDGET_ENV=local npx vitest run --maxWorkers=4 -> 204 files, 3448 tests",
       "npmTest": "npm test -> 65",
       "golden": "npx tsx tests/coreReviewGoldenHarness.ts && git diff --exit-code docs/reference/golden-after-F1.json",
       "mutation": "npx vitest run tests/mutation -> 413",
@@ -19,37 +19,26 @@
     },
     "phases": {
       "P0-P3": "done (P3 open items are user questions B1-B3, C1)",
-      "P4": "partial; blocked on user fetch approvals D1-D5",
+      "P4": "unblocked by R84-R88 (fetch approvals); not built yet",
       "P5": "done at test level; live UI check needs the user (E4)",
-      "P6": "done (AutoBuilder engine A1-A9, worker, panel, mode scorer, closest fallback 48807c97, E1 b10c2ce2). Live Chrome check needs the user",
-      "P7": "done (C1, C2, U-a 35b17900, U-b, U-c 5fed3047, U-d, U-e bb07e676, F ab97f3d6, F2 68a5e77d, S1 e90887b5, F3 498ee8e8). Only the user-run Excel check (I4) is left",
+      "P6": "done; explanation-limit line 3f623254. Live Chrome check (E4/R89) waits on the user loading apps/extension/dist unpacked",
+      "P7": "done; planner meet token da77b25d. Only the user-run Excel check (I4) is left",
       "P8": "pending (opponent prediction, SwimCloud-wide hints); not designed yet",
       "P9": "pending (share-ready)"
     },
-    "nextUnblocked": [
-      {
-        "id": "explanation-limit-ui",
-        "scope": "dashboard (worker or Codex)",
-        "what": "The AutoBuilder panel shows proposal.explanationLimit (D5 amendment 12): a line such as \"Explanations are incomplete\" with the reason and the omitted count. The engine already returns it (b10c2ce2)."
-      },
-      {
-        "id": "planner-meet-token",
-        "scope": "apps/extension/src/dashboard/sessionPlannerEditor.tsx (worker)",
-        "what": "Replace the single alive flag with a per-meet token so an action started on one meet cannot set state after the view switches to another meet."
-      }
-    ],
+    "nextUnblocked": [],
     "thenDesignNext": "P8 opponent prediction needs a design pass (architect) before any build. Ask the user before starting it.",
     "blockedOnUser": {
       "file": "plans/2026-10-25/QUESTIONS_FOR_USER.md",
-      "count": 34,
-      "ids": "A1-A10, B1-B3, C1, D1-D5, E1-E4, F1-F4, G1-G2, I1-I4",
-      "mostImportant": "I4 Excel check (only the user can run it); D1-D5 SwimCloud fetch approvals (block P4); E4 approval to open the simulator in the user's Chrome for a read-only live check",
-      "builtToDefault": "Every question names the default the build uses now. G2 (undoable Accept) is built to its default in e90887b5."
+      "open": "I4 (Excel check), A4 (diver weight rule)",
+      "answered2026_11_05": "R83-R98 in plans/2026-10-25/README.md",
+      "onDefault": "B1-B3, C1, E1-E3, F1-F4, G1-G2, I1-I3",
+      "userInstruction": "2026-11-05: \"work with the answers ive given you build what you can based on those\""
     },
     "pendingUserRequest": {
       "asked": "2026-11-05",
       "text": "use the new subagents config that uses 99% less usage, apply it as best fit, if needed restart claude",
-      "status": "OPEN. Nothing matching was found on disk before the restart (checked ~/.claude/agents, .claude/agents and settings). The user restarted Claude Code to install an update (the Orca \"claude agents\" terminal showed \"Update installed - Restart to update\"). After the restart: check whether the update added a subagent or model setting (release notes, /config, /agents). If not, ask the user for the path, link or setting name. Do not invent a config. Do not change agent files until it is identified."
+      "status": "CLOSED 2026-11-05. Not a config: ClaudeDevs posts of 2026-11-04 (x.com/ClaudeDevs/status/2118063143167693011 and its reply) describe a built-in change in Claude Code v2.1.316+. Haiku 5.5 writes the 30-second status updates of background subagents from short notes (about 99% less per update; about 5% less usage per session). Subagents keep their own model. Installed: 2.1.318. Nothing to apply."
     },
     "agents": {
       "claude": "The previous session used executor ad2051c440db6ce85 (engine, storage) and worker a32c73e6b18c0d4a1 (dashboard, overlay). Both were idle. Agent ids belong to that session; a new session briefs fresh agents from this file instead of using SendMessage.",
@@ -73,7 +62,36 @@
     "reviewDisposition": {
       "E1": "docs/reference/E1_CODEX_REVIEW.md: (LOW) goal-seek restore now uses the metric alone, like the MIP and the gate; no result changes because goal seek with prefer is refused, so its penalty is 0. (MEDIUM) the explain time guard can overrun by one unit; the slowest unit measured is about 20 ms, under the 100 ms margin. Both answered in the D5 amendment 12 review note (D5-AUTOBUILDER.md, after item 9). Nothing open.",
       "F3": "docs/reference/F3_CODEX_REVIEW.md: all three findings fixed in 498ee8e8 before the commit: an edit counter keeps edits made during a save (sessionPlannerEditor.tsx:94-99), a failed save keeps the draft and offers Discard changes, and every async handler checks alive. Nothing open except planner-meet-token (nextUnblocked)."
-    }
+    },
+    "session20261105b": {
+      "by": "lead (Claude Opus 5.5), inline, no subagents (the subagent config request is still open)",
+      "done": {
+        "explanation-limit-ui": "explanationLimitText in apps/extension/src/dashboard/autoBuilderResult.ts; the Why block of autoBuilderPanel.tsx shows it (data-testid ab-explanation-limit). An empty list with a limit no longer says there was nothing to explain. A null workLimit prints no limit number. Tests: tests/extensionAutoBuilderPanel.test.ts \"explanations that stopped early\" (4); mutants killed: helper returns null (3 fail), nothing-to-explain gate removed (1 fails).",
+        "planner-meet-token": "sessionPlannerEditor.tsx: a token object per meet shown (null after unmount) replaces alive. Every handler notes it before its first await. The token owns the in-flight load-preference count, and savePreference bumps readId only while its token is current. The meet switch also clears the saved and error lines. Tests: tests/extensionSessionPlannerSubscribe.test.ts meet-switch test, both orders, no-op subscribe. Fails on the HEAD editor; mutants killed: unguarded readId bump (A first), count shared across meets (B first). Checked: repoForTags (main.tsx:180) is module-level, so a parent re-render does not mint a new token."
+      },
+      "gates": "all green on the uncommitted tree: build 0, lint 0, vitest 204 files 3447 tests, npm test 65, golden identical, mutation 413, harness 2 passed, lpBaseline 5 identical, bundle leak only autobuilder.worker.js",
+      "status": "COMMITTED and pushed: 3f623254, da77b25d, fd9412d0 plus the docs commit. Review: architect under the R83 exception.",
+      "next": "P4: architect drafts plans/2026-10-25/D7-DATA-SOURCING.md; check its citations; one Chrome visit for the recon gaps (roster gender split, swimmer id join, 2026-27 relay comparison, fixtures, 7-year depth); then executor one feature at a time (F1.1a, F1.2, F1.3, F1.1), each diff reviewed by the architect (R83) until the user signs Cursor in.",
+      "followUps": [
+        {
+          "id": "planner-switch-window",
+          "what": "Older than this change, narrow. After a meet switch, meet A ref and preset stay on screen until meet B read lands, and Save schedule shows in that window. A click there saves A schedule under meet B key. If B read fails, the window stays open. Fix idea: clear ref and preset on a meet change, or disable Save until the token first load lands. Architect review 2026-11-05: if meet B read fails, the window never closes (meet A ref, preset and preference stay; a save writes them under meet B)."
+        }
+      ],
+      "docsSwept": "D5 follow-up A8-explain-in-gate-reserve closed by amendment 12 (b10c2ce2); D6 undo-accept-expect-absent closed by S1 (e90887b5). CHANGELOG.md has no redesign entries since 2026-10-25, so none added.",
+      "codexBrief": "scratchpad/codex-review-brief.md (session 7426d5d0); dispatch with scripts/orca/dispatch-codex.sh on a copy, only after the user approves",
+      "review": "docs/reference/EXPLAIN_LIMIT_PLANNER_TOKEN_ARCHITECT_REVIEW.md (architect, R83 exception). MEDIUM fixed by wording (Not checked for unusual events); LOW layout-effect token fixed; LOW failed-read folded into planner-switch-window.",
+      "cursor": "%LOCALAPPDATA%/cursor-agent/cursor-agent.cmd added (runs newest versions/*/node.exe index.js, no PowerShell). Orca worker-start --agent cursor now launches Cursor Agent, but its terminal asks for a browser sign-in (cursor-agent status in Git Bash says logged in). Needs the user. Cursor updates may replace or ignore the file.",
+      "p4Recon": "plans/2026-10-25/02-SIMULATOR-RECON.md section \"P4 recon, 2026-11-05\": no 3-year clamp at 2022-23 depth (7-year depth unproven); class year on /team/{id}/roster/ (Class column, season_id select; id join unverified; Cloudflare managed challenge on the document); splits already in page data; LCM = eventcourse=L. E4 blocked: extension not loaded in Chrome.",
+      "r94": "data/relay-programs/sources/manifest.json nsisc-swim-dive-2025-26-final-results; Table C order confirmed; no 100 IM (question A11); 1650 small-field session still pending."
+    },
+    "workOrder2026_11_05": [
+      "review+commit explanation-limit-ui and planner-meet-token (R83: Cursor if fixable, else architect)",
+      "fix Cursor under Orca (user request)",
+      "R94: archive 2026 NSISC results PDF, settle config C 100 IM and small-field 1650",
+      "R89: live Chrome check incl. Apply",
+      "P4: R84-R88 fetches and their pipeline"
+    ]
   },
   "decisions": "plans/2026-10-25/README.md#decisions-user-2026-10-25",
   "created": "2026-10-25",

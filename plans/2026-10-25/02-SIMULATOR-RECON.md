@@ -561,3 +561,70 @@ One team request covers every swimmer on that team, so a roster costs
 one request per team, not one per swimmer. Limits: the endpoint gives
 only the fastest split per event in the window, not every split, and not
 the meet or date of that split. The row id is the link back.
+
+## P4 recon, 2026-11-05 (user decisions R84 to R89)
+
+Route: Claude in Chrome, one new tab, the user's own sign-in, human pace.
+Pages: the simulator for teams 48, 58 and 412 (men, SCY), and one roster
+page (team 58). No form submit. No Cloudflare challenge was shown (the
+invisible check ran on the roster page). The tab was closed. Raw
+responses stayed in the page; nothing was saved or committed.
+
+**S2: no 3-year clamp found at a 3-to-4-year depth (R85).**
+- One UI click on Season 2022-2023 sent exactly one request per team:
+  `start_date=2022-09-01&end_date=2023-08-31`. All three returned 200.
+- That window lies wholly before today minus 3 years (2023-11-05). A
+  3-year clamp would leave it empty.
+- Each team returned 5 relay rows with times that differ from the 2025-26
+  fixtures (`tests/fixtures/swimcloud/simulator/team-*.json`) in every
+  event. They are not all-time bests either: Delta State's 200 medley
+  relay is 88.60 in 2022-23 and 88.12 in 2025-26. So the rows are real
+  2022-23 rows.
+- Individual rows: 0 for all three teams (24, 42 and 44 swimmers). This
+  fits recon item 6: the endpoint returns the current roster and only
+  their swims for this team. Current seniors started in fall 2023.
+- Consequence for F1.1: widening the window is free (one changed
+  parameter, already supported by Season mode back to 2017-18), but it
+  adds only older swims of current roster members for the same team. It
+  never adds a swimmer's swims for a previous team (transfers).
+- Not yet ruled out: that the server answers a too-old window with the
+  current season (2026-27) relays. The 2022-23 rows were compared only
+  with 2025-26. Compare them with 2026-27 on the next visit.
+- Not proven: depth beyond 2022-23. The 2019-09-01 request of 2026-10-25
+  returned 200, but no row in it was shown to predate 2022. The R85 order
+  (7 years, then 5, then 3) still applies: test the 7-year depth with a
+  team that has older relays before relying on it.
+- After a reload the page showed Season 2026-2027 again: the season
+  choice does not persist.
+
+**D5 settled: the class year is on the team roster page (R88).**
+- `https://www.swimcloud.com/team/{id}/roster/` is server-rendered HTML
+  (no JSON request behind it). Its one table has the headers Name,
+  Hometown, Class. A `season_id` select picks the season (30 = 2026-2027,
+  29 = 2025-2026, 28 = 2024-2025; blank = all seasons).
+- Team 58: 42 rows, the same count as the simulator's 42 men. Class
+  values: FR 8, SO 12, JR 12, SR 7, and 3 rows with "–". A "–" is
+  absent and must stay unknown, never derived from `gradcollege`.
+- Each name links to `/swimmer/{id}`. Unverified: that this id equals the
+  simulator's swimmer `id`. Check one swimmer on the next visit before
+  joining on it. Never join by name.
+- The roster document arrived through a POST: Cloudflare's managed
+  challenge round trip, passed silently in the user's tab. A background
+  `fetch()` of the roster HTML may receive a challenge page instead of
+  the table. The P4 fetcher must detect a challenge page or a 403 and
+  stop the whole run, as the posture requires.
+- Not yet checked: how the page separates men and women (no `gender=`
+  link was found on the default view).
+
+**D4: the splits are already in the page's own data.** Each simulator
+response holds `relaysplits[]` (flying, `flystart: true`) and
+`relayleadoffs[]` (recon item 5). F1.3's separate split window needs one
+extra request per team with the split window's dates (approved, R87).
+
+**D1: LCM swims come from the same endpoint** with `eventcourse=L`, one
+extra request per team (approved, R84). Not sent in this recon.
+
+**E4 (R89) not started:** the OmniSwim extension is not loaded in this
+Chrome (no injected element on the simulator page). The user must load
+`apps/extension/dist` unpacked first; changing Chrome's extension
+settings is the user's step.

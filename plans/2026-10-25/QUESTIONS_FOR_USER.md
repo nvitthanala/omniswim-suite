@@ -4,16 +4,37 @@ Updated 2026-11-05. Each question names the default the build uses now.
 Answer by number. Write "keep" to accept the default. Answers go to the
 README decision table as new R rows.
 
-**Status 2026-11-05:** 34 questions are open (A1-A10, B1-B3, C1, D1-D5,
-E1-E4, F1-F4, G1-G2, I1-I4). Phases P6 and P7 are built to these
-defaults. Three groups need you before work can move:
+**Status 2026-11-05 (evening):** the user answered D1-D5, E4 and A1-A3,
+A5-A10 (README rows R84-R98; R83 sets the review route while Codex is out
+of quota). The user then said to build on those answers. Every other
+question keeps the default the build uses now until the user changes it.
 
-- **I4:** the Excel check. Only you can run it.
-- **D1-D5:** approval for extra SwimCloud fetches. They block phase P4.
-- **E4:** may I open the SwimCloud simulator in your Chrome for a
-  read-only live check of the planner, AutoBuilder and dashboard?
+Still open, and they need the user:
 
-The rest change only a default. Answer them in any order.
+- **I4:** the Excel check. Not checked yet.
+- **A4:** the diver weight rule. The user will check the NSISC rule. The
+  AutoBuilder keeps its cautious count until then.
+- **A11 (new): the 100 IM in config C.** The 2026 NSISC results PDF
+  (archived, R94) shows NSISC swims no 100 IM. Config C copies SwimCloud's
+  simulator, which does. Today the AutoBuilder refuses config C under
+  session load ("event 100 IM is not in the session schedule"). For a meet
+  that swims it, you can add a 100 IM row with a session in the planner.
+  Should config C drop the 100 IM when load is on, or keep refusing?
+  Default: keep refusing.
+- **A6 (part 2, still open): the small-field 1650 session.** The results
+  PDF prints no session times, so it cannot answer this. Morning or
+  evening for a 1650 field of 8 or fewer?
+- **E4 needs one step from you:** load the extension in Chrome (Developer
+  mode, "Load unpacked", folder `apps/extension/dist`). Then I run the
+  live check (R89).
+- **Cursor needs one sign-in:** Orca now starts Cursor Agent, but its
+  terminal asks for a browser sign-in. Sign in once in an Orca Cursor
+  terminal, then Cursor can review Claude's work again (R83).
+
+Answered (do not ask again): A1 R90, A2 R91, A3 R92, A5 R93, A6 R94,
+A7 R95, A8 R96, A9 R97, A10 R98, D1 R84, D2 R85, D3 R86, D4 R87, D5 R88,
+E4 R89. On their defaults (ask only if a build needs a different answer):
+B1-B3, C1, E1-E3, F1-F4, G1-G2, I1-I3.
 
 ## A. AutoBuilder (plans/2026-10-25/D5-AUTOBUILDER.md section 14)
 
