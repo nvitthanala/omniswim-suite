@@ -16,7 +16,8 @@
       "harness": "npm run test:extension-harness -> 2 passed",
       "lpBaseline": "bash tests/fixtures/lp-baseline/lpBaseline.sh check -> 5 identical",
       "bundleLeak": "grep -l \"none_found_within_limits\\|restoreIdleRemovals\" apps/extension/dist/*.js lists only autobuilder.worker.js (do not grep for HiGHS: false hits)",
-      "bridgeBytes": 5784
+      "bridgeBytes": 5784,
+      "ci": "PR #8 CI green at 1008c45d (run 42188196275, 18m55s, every step success)"
     },
     "phases": {
       "P0-P3": "done (P3 open items are user questions B1-B3, C1)",
@@ -29,8 +30,9 @@
     },
     "nextUnblocked": [
       {
-        "id": "liveModel",
-        "what": "D7 section 8 step 4b, alone (touches Score, Build and Plan). Brief only after reading decision L; architect spec first if L does not fix the seam. Acceptance: simulator-current mode leaves golden and LP baselines unchanged; snapshotSave and the report read the same enriched model the results were scored from; rescoreSimulator untouched; F1.1a ruling 2 requirements."
+        "id": "F1.3b",
+        "what": "split window + flyover setting + builtUnder; architect spec first",
+        "mustInclude": "see p4.items.F1.3b.mustInclude"
       }
     ],
     "thenDesignNext": "P8 opponent prediction needs a design pass (architect) before any build. Ask the user before starting it.",
@@ -182,8 +184,11 @@
           "blockedBy": "F1.3a followUps 0 and 1",
           "mustInclude": [
             "rescore returns the sourcing it scored with; snapshotSave passes that same object; builtUnder records the sourcing (persisted schema change); rewrite extensionSnapshotSaveSourcing.test.ts to pin the same-object rule",
-            "one root export relayLegReadout(model, lineup, sourcing) -> per relay total + per leg {value, estimate}; no Index/Resolved export; not on ResultRow"
-          ]
+            "one root export relayLegReadout(model, lineup, sourcing) -> per relay total + per leg {value, estimate}; no Index/Resolved export; not on ResultRow",
+            "the live key includes sourcing once the flyover is user-set (else Accept misses a flyover change between Run and Accept)",
+            "builtUnder records the roster season as well as the sourcing, so the U14 refusals on Save, saving a lineup and Accept can be lifted; old records without the new fields still validate under DB_VERSION 2 (fixtures and FROZEN.json are frozen)"
+          ],
+          "next": "architect spec first (persisted builtUnder change)"
         },
         "F1.2": {
           "status": "pending"
@@ -207,10 +212,23 @@
           "isolatedGates": "2026-11-06 lead, slice alone (F1.1a files backed up and restored, sha256 identical): build 0, lint 0, vitest 210 files 3620 tests, npm test 65, mutation 413, golden unchanged, lpBaseline 5 identical, bundle leak only autobuilder.worker.js; harness: CI"
         },
         "liveModel": {
-          "status": "next",
+          "status": "done",
           "why": "F1.1a ruling 2",
           "blocks": "F1.3b",
-          "spec": "D7 section 8 step 4b; decision L (one builder serves autoBuilderRequest.ts:150, scorerTagScoring.ts:40/81, suggestedRosters.ts:16; the literals at scorerTagScoring.ts:88 and suggestedRosters.ts:31 go)"
+          "spec": "plans/2026-10-25/D7-LIVEMODEL-SPEC.md (architect 2026-11-06; lead accepted the planner veto point)",
+          "owner": "executor",
+          "userDefaults": "U14 refuse season-mode save; U15 per meet; U16 class years in simulator-current",
+          "report": "executor 2026-11-06: build OK, lint 0/0, vitest 217 files 3750 tests, npm test 65, mutation 413, harness 2, golden unchanged, lpBaseline 5 identical; T1-T10 killed. Executor ran git stash/pop once against the brief (lead verified: stash list empty, state and QUESTIONS files intact). Found: planner always pending under NSISC (pre-existing, [] tags); liveKey only in verifyProposal; currentLabel in key can refuse Accept spuriously; Score-note refresh relies on storage.onChanged reaching the writer (untested live).",
+          "review": "docs/reference/LIVEMODEL_ARCHITECT_REVIEW.md",
+          "followUps": [
+            "L2 a roster save republishes LP twice",
+            "L3 Rosters tab does not rerun on a settings change from another context",
+            "fake-bus test: the writing page receives its own storage change (live check candidate for D7 section 9)",
+            "test for the acceptBlock call after inputsChanged (guards the inputsChanged wait before putMany)",
+            "D7 section 9 live check 12: the writing page receives its own storage change"
+          ],
+          "commit": "the commit that carries this state change (Apply roster membership through one live model)",
+          "leadFixes": "planner passes tags only under roster eligibility (points_pool test, gate mutation killed); Accept second load reports not_loaded/error with their own messages"
         }
       },
       "review": "Each executor diff: architect review under R83 until the user signs Cursor in; note in docs/reference/<SLICE>_ARCHITECT_REVIEW.md",

@@ -18,6 +18,7 @@ import type { StorageRepo } from '../apps/extension/src/storage';
 import { configCWorld, RULE_REF, realSolveLp } from './helpers/autoBuilderFixtures';
 import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
 import { freshFactory, sequentialIds, steppingClock } from './helpers/extensionDb';
+import { repoLoader } from './helpers/liveFixtures';
 
 const team = (teamId: string, points: number, rank: number): Results['teams'][number] => ({ teamId: teamId as TeamId, points, rank });
 const resultsOf = (teams: Results['teams']): Results => ({ payloadVersion: 1, teams, events: [], violations: [], rosterUnknown: [] });
@@ -104,7 +105,7 @@ describe('one meet key formula', () => {
 describe('saving a snapshot', () => {
   let world: ConfigCWorld;
   const clock = (): string => '2026-10-31T14:05:09.000Z';
-  const deps = (newId: string, repo = (): StorageRepo => world.repo) => ({ repo: repo(), solveLp: realSolveLp, now: clock, newId: () => newId });
+  const deps = (newId: string, repo = (): StorageRepo => world.repo) => ({ repo: repo(), loadLive: repoLoader(repo()), solveLp: realSolveLp, now: clock, newId: () => newId });
   beforeAll(async () => { world = await configCWorld(); }, 120_000);
 
   it('builds a record whose lineup, results and facts pass the engine parsers, with the tags as the coach had them', async () => {

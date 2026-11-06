@@ -21,6 +21,8 @@ import { freshFactory, steppingClock } from './extensionDb';
 import { buildSnapshot } from './simulatorFixtures';
 import { withNumericSwimmerIds } from './numericSnapshot';
 import { nodeMipSolve } from './nodeMipSolve';
+import { readyLive, repoLoader } from './liveFixtures';
+import type { LiveLoader } from '../../apps/extension/src/dashboard/liveModel';
 
 export const RULE_REF: PresetRef = { kind: 'builtin', id: 'nsisc', version: 5 };
 
@@ -45,6 +47,8 @@ export interface ConfigCWorld {
   readonly ownTeamId: string;
   /** The three own swimmers tagged scorer. */
   readonly pinned: readonly string[];
+  /** The dashboard's live-model loader over this repo (no roster season, no current label). */
+  readonly loadLive: LiveLoader;
   readonly close: () => void;
 }
 
@@ -66,12 +70,12 @@ export async function configCWorld(): Promise<ConfigCWorld> {
   await saveScorerOwnTeam(repo, meetKey, toSwimCloudId(ownTeamId));
   await saveScorerRulePreset(repo, meetKey, RULE_REF);
   for (const swimmerId of pinned) await repo.put('tags', { meetKey, teamId: toSwimCloudId(ownTeamId), swimmerId: toSwimCloudId(swimmerId), role: 'scorer' }, 'new');
-  return { snapshot, repo, meetKey, ownTeamId, pinned, close: () => db.close() };
+  return { snapshot, repo, meetKey, ownTeamId, pinned, loadLive: repoLoader(repo), close: () => db.close() };
 }
 
 /** Run the AutoBuilder in Node on a world, with the request the panel would send. */
 export async function runWorld(world: ConfigCWorld, controls: AutoBuildControls = defaultControls()): Promise<TaggedResult> {
-  const prepared = await prepareRequest({ snapshot: world.snapshot, repo: world.repo, solveLp: realSolveLp, controls });
+  const prepared = await prepareRequest({ live: await readyLive(world.loadLive, world.snapshot), repo: world.repo, solveLp: realSolveLp, controls });
   if (prepared.kind !== 'ready') throw new Error(`the request is not ready: ${prepared.missing.join(' ')}`);
   const result: AutoBuildResult = await autoBuild({ ...prepared.request }, nodeMipSolve());
   return { result, request: prepared.request, inputs: prepared.inputs, controls, snapshotKey: snapshotKey(world.snapshot), loadMs: 0, wallMs: 0 };

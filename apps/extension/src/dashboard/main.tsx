@@ -13,15 +13,17 @@ import { swimmerLabel, teamLabel } from '../shared/names';
 import { installHarness } from './harness';
 import { listenForPanelPort, postPanelMessageSafely, readNonce } from './panelPort';
 import { bindTheme, createAccentSync } from '../shared/theme';
-import { AdapterError, rescoreSimulator, SIMULATOR_SOURCING } from '@omniswim/swimcloud/browser';
+import { SIMULATOR_SOURCING } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import type { ScorerTag } from '@omniswim/engine';
-import type { RulePreset, LoadPreference, SessionPreset } from '@omniswim/engine';
-import { sessionLoad, relayRepeatsForSchedule, requireComplete, scoreMeet } from '@omniswim/engine';
 import { createChromeChangeBus, createStorageRepo, createUndoStack, openOmniDb, readScorerOwnTeam, saveScorerOwnTeam, readScorerRulePreset, saveScorerRulePreset, listRulePresetChoices, resolveRulePreset, watchChanges, toSwimCloudId, readSessionPreset, readSessionLoadPreference, saveEditedSessionPreset } from '../storage';
 import type { StorageRepo } from '../storage';
 import type { UndoStack } from '../storage';
 import type { AutoBuildStatusMessage, PanelSize, ScorerTagActionMessage, ScorerTagStateMessage, ThemeStateMessage } from '../shared/panelProtocol';
+import { buildPlannerState, rosterErrorState } from './plannerState';
+import { currentLabelOf, loadLiveModel, rosterSeasonNote } from './liveModel';
+import type { LiveLoader, LiveOutcome } from './liveModel';
+import type { RulePreset } from '@omniswim/engine';
 import { panelCutTags, scoreScorerTags } from './scorerTagScoring';
 import { createOptimizerClient } from './optimizerClient';
 import { suggestOpponentRosters, suggestedTags } from './suggestedRosters';
@@ -32,7 +34,7 @@ import type { PlannerSubscribe } from './sessionPlannerEditor';
 import { AutoBuilderPanel } from './autoBuilderPanel';
 import { DockedShell, HostShell } from './Shell';
 import type { ShellTab } from './Shell';
-import { ChartTab, SaveTab, ScoreTab, WaitingNote } from './liveView';
+import { ChartTab, SaveTab, ScoreTab, viewOf, WaitingNote } from './liveView';
 import type { View } from './liveView';
 import { MeetsView, PresetsSlot, SettingsView } from './tabHost';
 import type { SettingsSubscribe } from './tabHost';
@@ -70,33 +72,35 @@ function TabHostApp(): React.ReactElement {
   return <HostShell tabs={tabs} hostLabel="host: tab" />;
 }
 
-function DockedApp({ view }: { view: View }): React.ReactElement {
+function DockedApp({ view, rosterNote }: { view: View; rosterNote: string | null }): React.ReactElement {
   const tabUrl = React.useMemo(() => chrome.runtime.getURL('dashboard.html?host=tab'), []);
   const scored = view.kind === 'scored' ? view : null;
   const tabs: readonly ShellTab[] = [
-    { id: 'score', label: 'Score', render: () => <ScoreTab view={view} /> },
+    { id: 'score', label: 'Score', render: () => <ScoreTab view={view} rosterNote={rosterNote} /> },
     { id: 'chart', label: 'Chart', render: ({ expanded, active }) => (scored ? <ChartTab view={scored} repoForMeet={repoForTags} expanded={expanded} active={active} /> : <WaitingNote view={view} />) },
-    { id: 'build', label: 'Build', render: () => (scored ? <AutoBuilderPanel snapshot={scored.snapshot} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} undoStack={undoStackForDashboard} onStatus={postAutoBuildStatus} /> : <WaitingNote view={view} />) },
+    { id: 'build', label: 'Build', render: () => (scored ? <AutoBuilderPanel snapshot={scored.snapshot} repoForMeet={repoForTags} loadLive={liveLoader} solveLp={solveForAutoBuilder} undoStack={undoStackForDashboard} onStatus={postAutoBuildStatus} /> : <WaitingNote view={view} />) },
     { id: 'plan', label: 'Plan', render: () => (scored ? <SessionPlannerEditor snapshot={scored.snapshot} repoForMeet={repoForTags} subscribe={subscribeToPlanner} /> : <WaitingNote view={view} />) },
     { id: 'rosters', label: 'Rosters', render: ({ active }) => (scored ? <RosterTab snapshot={scored.snapshot} flow={rosterFlow} repoForMeet={repoForTags} active={active} /> : <WaitingNote view={view} />) },
-    { id: 'save', label: 'Save', render: () => (scored ? <SaveTab view={scored} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} tabUrl={tabUrl} undo={async () => (await undoStackForDashboard()).undo()} undoStack={undoStackForDashboard} /> : <WaitingNote view={view} />) },
+    { id: 'save', label: 'Save', render: () => (scored ? <SaveTab view={scored} repoForMeet={repoForTags} loadLive={liveLoader} solveLp={solveForAutoBuilder} tabUrl={tabUrl} undo={async () => (await undoStackForDashboard()).undo()} undoStack={undoStackForDashboard} /> : <WaitingNote view={view} />) },
   ];
   return <DockedShell tabs={tabs} hostLabel="host: docked" onSize={postPanelSize} />;
 }
 
 export function App({ host }: { host: DashboardHost | null }) {
   const [view, setView] = React.useState<View>({ kind: 'empty' });
-  const score = React.useCallback((snapshot: SimSnapshot): void => {
-    try {
-      const result = rescoreSimulator(snapshot, { meetKey: 'swimcloud-simulator', snapshotId: 'live-snapshot' });
-      if (result.kind === 'not_loaded') setView(result);
-      else if (result.kind === 'preset_incomplete') setView(result);
-      else setView({ kind: 'scored', snapshot, results: result.results, parity: result.parity });
-    } catch (error) {
-      if (error instanceof AdapterError) setView({ kind: 'error', code: error.code, reason: error.message });
-      else setView({ kind: 'error', code: 'unexpected', reason: error instanceof Error ? error.message : String(error) });
-    }
-  }, []);
+  // Decision P: Score, Chart and parity read the raw snapshot (`viewOf` calls `rescoreSimulator`). The live model never reaches them.
+  const score = React.useCallback((snapshot: SimSnapshot): void => { setView(viewOf(snapshot)); }, []);
+  const [rosterNote, setRosterNote] = React.useState<string | null>(null);
+  const [liveTick, setLiveTick] = React.useState(0);
+  React.useEffect(() => subscribeToLive(() => setLiveTick((n) => n + 1)), []);
+  React.useEffect(() => {
+    if (view.kind !== 'scored') { setRosterNote(null); return undefined; }
+    let current = true;
+    void liveLoader(view.snapshot).then((out) => {
+      if (current) setRosterNote(out.kind === 'ready' ? rosterSeasonNote(out.live) : out.kind === 'error' ? `The roster season could not be applied: ${out.reason}` : null);
+    }).catch((cause: unknown) => { if (current) setRosterNote(`The roster season could not be read: ${cause instanceof Error ? cause.message : String(cause)}`); });
+    return () => { current = false; };
+  }, [view, liveTick]);
   React.useEffect(() => {
     const onSnapshot = (event: Event): void => score((event as CustomEvent<SimSnapshot>).detail);
     window.addEventListener('osx-snapshot', onSnapshot);
@@ -109,7 +113,7 @@ export function App({ host }: { host: DashboardHost | null }) {
     postDockedParityReport(window.parent, view.parity);
   }, [host, view]);
   if (host === 'tab') return <TabHostApp />;
-  if (host === 'docked') return <DockedApp view={view} />;
+  if (host === 'docked') return <DockedApp view={view} rosterNote={rosterNote} />;
   return <main className="osx-dashboard"><h1>OmniSwim</h1><p data-testid="host">host: unknown</p></main>;
 }
 
@@ -134,6 +138,28 @@ const rosterFlow = createRosterFlow({
   },
   newRunId: () => crypto.randomUUID(),
   repo: () => repoForTags(),
+});
+/** The one live-model loader (D7 decision L). Each operation calls it once and passes the result down. */
+const liveLoader: LiveLoader = async (snapshot) => loadLiveModel({ snapshot, repo: await repoForTags(), currentLabel: currentLabelOf(rosterFlow.seasons(), rosterFlow.save()), sourcing: SIMULATOR_SOURCING });
+/** The Score tab's roster note listens here. It fires when the roster season, a stored roster or a class year may have changed. */
+const liveListeners = new Set<() => void>();
+const subscribeToLive = (listener: () => void): (() => void) => {
+  liveListeners.add(listener);
+  return () => { liveListeners.delete(listener); };
+};
+// The live model needs the current season's label and the saved rosters. Publish only when the label changes or a roster save reaches 'saved':
+// a progress tick must not start LP solves.
+let lastLiveLabel = currentLabelOf(rosterFlow.seasons(), rosterFlow.save());
+let lastSavedRun: string | null = null;
+rosterFlow.subscribe(() => {
+  const label = currentLabelOf(rosterFlow.seasons(), rosterFlow.save());
+  const save = rosterFlow.save();
+  const savedRun = save.kind === 'saved' ? save.runId : null;
+  if (label === lastLiveLabel && (savedRun === null || savedRun === lastSavedRun)) return;
+  lastLiveLabel = label;
+  if (savedRun !== null) lastSavedRun = savedRun;
+  void publishTagState();
+  for (const listener of liveListeners) listener();
 });
 let sessionScheduleError: string | undefined;
 let tagRepo: Promise<StorageRepo> | undefined;
@@ -170,35 +196,18 @@ async function applyStoredTheme(): Promise<void> {
     // A failed read keeps the current theme. It is no reason to flash another one.
   }
 }
-function buildPlannerState(snapshot: SimSnapshot, meetKey: string, rules: RulePreset | undefined, schedule: SessionPreset | undefined, preference: LoadPreference): ScorerTagStateMessage['planner'] {
-  if (!rules) return { perSwimmer: [], violations: ['Choose the meet\'s OmniSwim rule preset before calculating session load.'] };
-  const rescored = rescoreSimulator(snapshot, { meetKey, snapshotId: 'live-snapshot' });
-  if (rescored.kind === 'not_loaded') return { perSwimmer: [], violations: ['Session load is pending because simulator results are not ready.'] };
-  try {
-    const completeRules = requireComplete(rules);
-    const results = scoreMeet(rescored.adapted.model, rescored.adapted.lineup, [], completeRules, SIMULATOR_SOURCING);
-    const repeated = results.violations.filter(v => v.kind === 'relay_swimmer_repeated');
-    const visibleRepeats = schedule ? relayRepeatsForSchedule(repeated, schedule) : repeated;
-    const repeatWarnings = visibleRepeats.map(v => `Relay rule violation: ${v.swimmerId} appears on multiple relays for ${v.eventKey} (${v.gender}).`);
-    const note = schedule ? [] : ['No schedule chosen; relay event formats are unknown, so relay repeat violations are unfiltered.'];
-    if (!schedule) return { perSwimmer: [], violations: [...repeatWarnings, ...note] };
-    const load = sessionLoad(rescored.adapted.model, rescored.adapted.lineup, results, schedule, preference, completeRules, SIMULATOR_SOURCING);
-    const loadWarnings = load.violations.map(v => v.kind === 'session_load' ? `Session load: swimmer ${String(v.swimmerId)} has ${v.races} races on day ${v.session.day} (${v.session.slot}); limit ${v.limit}.` : v.kind === 'pending_setting' ? `Pending setting: ${v.setting} for ${v.eventKey}.` : v.kind === 'unscheduled_event' ? `Unscheduled event: ${v.eventKey}.` : `Session load issue: ${v.kind}.`);
-    return { perSwimmer: load.perSwimmer.map(s => ({ swimmerId: String(s.swimmerId), sessions: s.sessions })), violations: [...repeatWarnings, ...loadWarnings] };
-  } catch (cause) {
-    return { perSwimmer: [], violations: [`Session load is pending: ${cause instanceof Error ? cause.message : String(cause)}`] };
-  }
-}
 const repoForTags = (): Promise<StorageRepo> => (tagRepo ??= openOmniDb().then(db => {
   const bus = createChromeChangeBus(chrome.storage as never);
   const repo = createStorageRepo(db, { bus });
   void watchChanges(db, bus, change => {
-    if (change.stores === 'unknown' || change.stores.includes('tags') || change.stores.includes('settings')) void publishTagState();
+    const liveStores = change.stores === 'unknown' || change.stores.some(store => store === 'rosters' || store === 'classYearOverrides');
+    if (change.stores === 'unknown' || change.stores.includes('tags') || change.stores.includes('settings') || liveStores) void publishTagState();
+    if (liveStores || change.stores.includes('settings')) for (const listener of liveListeners) listener();
     if (change.stores === 'unknown' || change.stores.includes('settings')) {
       void applyStoredTheme();
       for (const listener of settingsListeners) listener();
     }
-    if (change.stores === 'unknown' || change.stores.some(store => store === 'sessionPresets' || store === 'settings' || store === 'meets')) {
+    if (change.stores === 'unknown' || liveStores || change.stores.some(store => store === 'sessionPresets' || store === 'settings' || store === 'meets')) {
       for (const listener of plannerListeners) listener();
     }
   }, { targets: [document, window] });
@@ -206,6 +215,11 @@ const repoForTags = (): Promise<StorageRepo> => (tagRepo ??= openOmniDb().then(d
 }));
 let undoStackPromise: Promise<UndoStack> | undefined;
 const undoStackForDashboard = (): Promise<UndoStack> => (undoStackPromise ??= repoForTags().then(createUndoStack));
+/** The scorer-tag scoring on the live model, or a plain note when SwimCloud has not loaded the simulator results (never a silent empty). */
+function scoreOrNotLoaded(loaded: Exclude<LiveOutcome, { kind: 'error' }>, hasOwnTeam: boolean, tags: readonly ScorerTag[], preset: RulePreset | undefined): ReturnType<typeof scoreScorerTags> {
+  if (loaded.kind === 'ready') return scoreScorerTags(loaded.live, hasOwnTeam, tags, preset);
+  return { scored: false, warnings: [`SwimCloud has not loaded the simulator results yet (${loaded.missing.join(', ')} missing).`] };
+}
 async function publishTagState(error?: string): Promise<void> {
   if (!pendingSnapshot || !latestPanelPort) return;
   const snapshot = pendingSnapshot;
@@ -219,22 +233,29 @@ async function publishTagState(error?: string): Promise<void> {
     const choices = await listRulePresetChoices(repo, rulePresetRef);
     const selectedSession = await readSessionPreset(repo, meetKey);
     const loadPreference = await readSessionLoadPreference(repo, meetKey);
-    const planner = buildPlannerState(snapshot, meetKey, rulePreset.found ? rulePreset.value : undefined, selectedSession.preset, loadPreference);
+    // One load of the live model serves the planner, the suggestions, the scoring warnings and the cut tags (D7 decision L).
+    const loaded = await liveLoader(snapshot);
     const sessionSchedule: ScorerTagStateMessage['sessionSchedule'] = selectedSession.ref
       ? { ref: selectedSession.ref, ...(selectedSession.preset ? { preset: selectedSession.preset } : {}), ...(sessionScheduleError ? { error: sessionScheduleError } : {}) }
       : { note: 'No session preset is chosen for this meet. Choose one in the docked dashboard first.' };
     const tags = rows.map(t => ({ teamId: String(t.teamId), swimmerId: String(t.swimmerId), role: t.role }));
     const selectedOwnTeam = ownTeamId && snapshot.teams.some(team => String(team.id) === String(ownTeamId)) ? String(ownTeamId) : undefined;
-    const suggestions = await suggestOpponentRosters(snapshot, meetKey, selectedOwnTeam, tags as ScorerTag[], rulePreset.found ? rulePreset.value : undefined,
+    const base = { meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: teamLabel(String(t.id), t.name) })),
+      swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: swimmerLabel(String(s.id), s.display_name || s.name || undefined), gender: s.gender || 'Unknown' })),
+      tags, ownTeamId: selectedOwnTeam, rulePresetRef, rulePreset: rulePreset.found ? rulePreset.value : undefined, rulePresetChoices: choices.map(c => ({ ref: c.ref, label: c.label })), sessionSchedule };
+    // The roster season could not be applied: say so, with the real tags, instead of the "could not load saved tags" error.
+    if (loaded.kind === 'error') { postPanelMessage(rosterErrorState(base, loaded.reason)); return; }
+    const live = loaded.kind === 'ready' ? loaded.live : null;
+    const suggestions = live === null ? [] : await suggestOpponentRosters(live, selectedOwnTeam, tags as ScorerTag[], rulePreset.found ? rulePreset.value : undefined,
       (lp, options) => optimizer.solveLp(lp, options));
     if (pendingSnapshot !== snapshot || !latestPanelPort) return;
-    const scored = scoreScorerTags(snapshot, meetKey, selectedOwnTeam !== undefined, [...tags, ...suggestedTags(suggestions)] as ScorerTag[], rulePreset.found ? rulePreset.value : undefined);
-      postPanelMessage({ kind: 'scorer-tag-state', meetKey,
-      teams: snapshot.teams.map(t => ({ id: String(t.id), name: teamLabel(String(t.id), t.name) })),
-      swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: swimmerLabel(String(s.id), s.display_name || s.name || undefined), gender: s.gender || 'Unknown' })),
-      tags, ownTeamId: selectedOwnTeam, rulePresetRef, rulePreset: rulePreset.found ? rulePreset.value : undefined, rulePresetChoices: choices.map(c => ({ ref: c.ref, label: c.label })),
+    const allTags = [...tags, ...suggestedTags(suggestions)] as ScorerTag[];
+    const scored = scoreOrNotLoaded(loaded, selectedOwnTeam !== undefined, allTags, rulePreset.found ? rulePreset.value : undefined);
+    // Suggestions first: the planner scores with the same tags as the scorer-tag scoring, or an NSISC meet cannot be scored at all.
+    const planner = buildPlannerState(live, rulePreset.found ? rulePreset.value : undefined, selectedSession.preset, loadPreference, allTags);
+    postPanelMessage({ kind: 'scorer-tag-state', ...base,
       scoringTeamSize: scored.scoringTeamSize, warnings: scored.warnings,
-        suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: panelCutTags(snapshot, meetKey, (await readSetting(repo, 'cutCloseThresholdPct')) ?? 1), planner, sessionSchedule, ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
+      suggestions: suggestions.map(s => ({ teamId: s.teamId, gender: s.gender, result: s.result })), cutTags: live === null ? [] : panelCutTags(live, (await readSetting(repo, 'cutCloseThresholdPct')) ?? 1), planner, ...(error ? { error } : {}) } satisfies ScorerTagStateMessage);
   } catch (cause) {
     postPanelMessage({ kind: 'scorer-tag-state', meetKey, teams: snapshot.teams.map(t => ({ id: String(t.id), name: teamLabel(String(t.id), t.name) })), swimmers: (snapshot.swimmers ?? []).map(s => ({ id: String(s.id), teamId: String(s.teamId), name: swimmerLabel(String(s.id), s.display_name || s.name || undefined), gender: s.gender || 'Unknown' })), tags: [], warnings: [], error: `Could not load saved scorer tags or team: ${cause instanceof Error ? cause.message : String(cause)}` } satisfies ScorerTagStateMessage);
   }

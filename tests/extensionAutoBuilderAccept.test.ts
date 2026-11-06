@@ -18,6 +18,7 @@ import { saveScorerOwnTeam, saveScorerRulePreset, toSwimCloudId } from '../apps/
 import type { SimSnapshot } from '../apps/extension/src/shared/bridgeSchema';
 import { configCWorld, nodeScore, realSolveLp, RULE_REF, runWorld } from './helpers/autoBuilderFixtures';
 import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
+import { readyLive } from './helpers/liveFixtures';
 
 /** A solver whose first call waits for `release()`. `entered` settles when that call has started. */
 function gatedSolver(): { solveLp: LpSolve; entered: Promise<void>; release: () => void } {
@@ -38,7 +39,7 @@ function gatedSolver(): { solveLp: LpSolve; entered: Promise<void>; release: () 
 }
 
 const baseDeps = (w: ConfigCWorld, over: Partial<AcceptDeps>): AcceptDeps => ({
-  repo: w.repo, solveLp: realSolveLp, score: nodeScore, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', ...over,
+  repo: w.repo, solveLp: realSolveLp, score: nodeScore, loadLive: w.loadLive, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', ...over,
 });
 
 const tagKey = (w: ConfigCWorld, swimmerId: string): [string, string, string] => [w.meetKey, toSwimCloudId(w.ownTeamId), toSwimCloudId(swimmerId)];
@@ -214,7 +215,9 @@ describe('Accept: the re-score uses the objective of the run', () => {
     const w = await configCWorld();
     try {
       // A fresh world per case (Accept writes). Its snapshot is the same fixture, but not the same bytes as the one the run saw.
-      const out = await acceptProposal({ ...tagged, snapshotKey: snapshotKey(w.snapshot) }, new Map(), baseDeps(w, { score }));
+      // The live key names the snapshot too, so the run's key is replaced with this world's, as the snapshot key is.
+      const liveKey = (await readyLive(w.loadLive, w.snapshot)).key;
+      const out = await acceptProposal({ ...tagged, snapshotKey: snapshotKey(w.snapshot), inputs: { ...tagged.inputs, liveKey } }, new Map(), baseDeps(w, { score }));
       return { out, lineups: (await w.repo.list('lineups')).length };
     } finally {
       w.close();

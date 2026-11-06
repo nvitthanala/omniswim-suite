@@ -1,7 +1,7 @@
 import { requireComplete, RosterSuggestError, suggestScoringRosters } from '@omniswim/engine';
 import type { Gender, LpSolve, RosterSuggestion, RulePreset, ScorerTag } from '@omniswim/engine';
-import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
-import type { SimSnapshot } from '../shared/bridgeSchema';
+import { partitionTags } from './liveModel';
+import type { LiveModel } from './liveModel';
 
 export type DisplaySuggestion =
   | { readonly kind: 'suggested'; readonly swimmerIds: readonly string[]; readonly points: number; readonly spots: { readonly numerator: number; readonly denominator: number }; readonly method: 'all_entered' | 'ilp' }
@@ -9,16 +9,17 @@ export type DisplaySuggestion =
   | { readonly kind: 'error'; readonly code: string; readonly subject: string | null };
 export interface SuggestedRosterState { readonly teamId: string; readonly gender: string; readonly result: DisplaySuggestion }
 
-/** Compute ephemeral opponent tags; they are returned for scoring/rendering and never persisted. */
-export async function suggestOpponentRosters(snapshot: SimSnapshot, meetKey: string, ownTeamId: string | undefined,
+/**
+ * Compute ephemeral opponent tags on the live model; they are returned for scoring/rendering and never persisted.
+ * A coach tag on a `not_member` swimmer is set aside first: the swimmer has no entries, and the engine refuses a tag on one (D7 live-model spec section 4).
+ */
+export async function suggestOpponentRosters(live: LiveModel, ownTeamId: string | undefined,
   coachTags: readonly ScorerTag[], preset: RulePreset | undefined, solve: LpSolve): Promise<readonly SuggestedRosterState[]> {
   if (!ownTeamId || !preset) return [];
-  const adapted = adaptSimulatorSnapshot(snapshot, { meetKey, snapshotId: 'live-snapshot' });
-  if (adapted.kind !== 'ready') return [];
-  const teamIds = new Set(adapted.adapted.model.teams.map(t => String(t.teamId)));
+  const teamIds = new Set(live.model.teams.map(t => String(t.teamId)));
   if (!teamIds.has(ownTeamId)) return [];
   const sideKeys = new Map<string, { teamId: string; gender: Gender }>();
-  for (const entry of adapted.adapted.lineup.entries) {
+  for (const entry of live.lineup.entries) {
     if (String(entry.teamId) === ownTeamId) continue;
     const key = `${entry.teamId}\u0000${entry.gender}`;
     sideKeys.set(key, { teamId: String(entry.teamId), gender: entry.gender });
@@ -27,9 +28,9 @@ export async function suggestOpponentRosters(snapshot: SimSnapshot, meetKey: str
   if (!targets.length) return [];
   try {
     const rules = requireComplete(preset);
-    const results = await suggestScoringRosters({ model: adapted.adapted.model, lineup: adapted.adapted.lineup,
-      rules, sourcing: { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } },
-      coachTags, ownTeamId, targets }, solve);
+    const results = await suggestScoringRosters({ model: live.model, lineup: live.lineup,
+      rules, sourcing: live.sourcing,
+      coachTags: partitionTags(live, coachTags).kept, ownTeamId, targets }, solve);
     return results.map((r: RosterSuggestion) => ({ teamId: String(r.teamId), gender: r.gender,
       result: r.kind === 'suggested' ? { kind: 'suggested' as const, swimmerIds: r.tags.map(t => String(t.swimmerId)),
         points: r.referencePoints, spots: r.spots, method: r.method } : { kind: 'absent' as const, reason: r.reason } }));

@@ -8,6 +8,7 @@ import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
 import { mountPagePanel } from '../apps/extension/src/overlay/pagePanel';
 import type { ScorerTagStateMessage } from '../apps/extension/src/shared/panelProtocol';
 import { buildSnapshot } from './helpers/simulatorFixtures';
+import { liveOf } from './helpers/liveFixtures';
 
 function panelFixture() {
   const win = new HappyWindow(); let closed: unknown = null;
@@ -57,7 +58,7 @@ describe('extension cut tags', () => {
 
   it('does not invent an estimate for SCY-only simulator swims', () => {
     const { snapshot } = buildSnapshot('A');
-    const rows = panelCutTags(snapshot, 'cut-test', 1);
+    const rows = panelCutTags(liveOf(snapshot), 1);
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((row) => row.estimated === 'No converted LCM swim')).toBe(true);
   });

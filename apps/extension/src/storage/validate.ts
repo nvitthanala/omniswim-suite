@@ -392,6 +392,13 @@ const SETTING_VALUES: { readonly [K in keyof SettingsMap]: (v: unknown, path: st
       else if (r.teamId !== undefined) fail(`${p}.${meetKey}.teamId`, 'unknown key');
     }
   },
+  rosterSeasonsByMeet: (v, p) => {
+    const map = isObj(v) ? v : fail(p, 'expected an object keyed by meet key');
+    for (const [meetKey, label] of Object.entries(map)) {
+      str(meetKey, `${p} key`);
+      if (typeof label !== 'string' || !/^\d{4}-\d{4}$/.test(label)) fail(`${p}.${meetKey}`, 'expected a season label such as 2025-2026');
+    }
+  },
 };
 
 function parserInfo(raw: unknown, path: string, withWarnings: boolean): void {

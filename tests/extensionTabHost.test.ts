@@ -22,6 +22,7 @@ import { freshFactory, steppingClock } from './helpers/extensionDb';
 import { saveSnapshot } from '../apps/extension/src/dashboard/snapshotSave';
 import type { RulePresetRecord } from '../apps/extension/src/storage/schema';
 import { fixtureRecord, withoutRev } from './helpers/extensionRecords';
+import { repoLoader } from './helpers/liveFixtures';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -32,7 +33,7 @@ const clock = (): string => '2026-10-31T14:05:00.000Z';
 
 beforeAll(async () => {
   world = await configCWorld();
-  await saveSnapshot(world.snapshot, 'Dual meet snapshot', { repo: world.repo, solveLp: realSolveLp, now: clock, newId: () => 'snap-1' });
+  await saveSnapshot(world.snapshot, 'Dual meet snapshot', { repo: world.repo, loadLive: repoLoader(world.repo), solveLp: realSolveLp, now: clock, newId: () => 'snap-1' });
 }, 120_000);
 
 afterEach(async () => {

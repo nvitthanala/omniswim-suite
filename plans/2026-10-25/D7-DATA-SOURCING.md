@@ -248,6 +248,7 @@ Same-origin requests from the simulator tab, at least 3 s apart. Stop on a chall
 | 8 | A current swimmer with a same-team swim older than 3 years (diff of item 7) | 0 | F1.1 fixture |
 | 9 | After E4: repeat check 1 from the extension's isolated world | 1 | Content-script equivalence |
 | 10 | Distinct Class values on rosters 58, 48 and 412 | 2 | Class vocabulary (GR? 5Y?) |
+| 12 | After E4: choose a roster season in the Rosters tab; the Score note and the page panel refresh in the same page (the writing page receives its own `chrome.storage.onChanged`) | 0 | liveModel refresh (added 2026-11-06) |
 | 11 | 2026-27 relays for teams 48, 58, 412 (the page's own Season click) compared with the 2022-23 rows of the P4 recon | 0 | Rules out "too-old window returns current relays" (lead, advisor) |
 
 **Results (2026-11-05):** checks 1-8, 10 and 11 ran; check 9 waits on E4. See `02-SIMULATOR-RECON.md` section "D7 live checks, 2026-11-05". Summary: no challenge on a background roster fetch; `gender` and `season_id` work; season 30 = 2026-27; the id join holds (42 of 42); no pagination; team-scope LCM in summer 2025 is empty for team 58; a 7-year window is honored but adds one individual best and no relay over 3 years; Class values FR, SO, JR, SR and "–" only. Captures were not taken (raw bodies not saved); fixtures stay synthetic until a capture is approved.

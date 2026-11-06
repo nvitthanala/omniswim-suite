@@ -25,20 +25,20 @@ import type {
   SessionPreset,
   TeamId,
 } from '@omniswim/engine';
-import { adaptSimulatorSnapshot, SIMULATOR_SOURCING } from '@omniswim/swimcloud/browser';
-import type { SimSnapshot } from '../shared/bridgeSchema';
 import type { AutoBuildWireRequest } from '../shared/autobuilderProtocol';
 import { readScorerOwnTeam, readScorerRulePreset, readSessionLoadPreference, readSessionPreset, resolveRulePreset } from '../storage';
 import type { PresetRef, StorageRepo } from '../storage';
 import { suggestedTags, suggestOpponentRosters } from './suggestedRosters';
 import type { SuggestedRosterState } from './suggestedRosters';
+import { partitionTags, snapshotKey } from './liveModel';
+import type { LiveModel } from './liveModel';
 
 import { meetKeyForSnapshot } from './meetKey';
 
 export { meetKeyForSnapshot };
 
-/** A snapshot's identity. Two snapshots with the same key hold the same simulator state. */
-export const snapshotKey = (snapshot: SimSnapshot): string => JSON.stringify(snapshot);
+/** A snapshot's identity. Two snapshots with the same key hold the same simulator state. It lives in `liveModel.ts`, which keys the live model by it. */
+export { snapshotKey };
 
 /** Algorithm parameters, not competition values. A test pins them to `AUTOBUILD_DEFAULT_LIMITS`. */
 export const DEFAULT_LIMITS: AutoBuildLimits = {
@@ -118,13 +118,22 @@ export interface RunInputs {
   readonly sessionRef: PresetRef | undefined;
   readonly sessionPreset: SessionPreset | undefined;
   readonly loadPreference: LoadPreference;
-  /** The coach's tags, as stored, sorted. */
+  /** The coach's tags, as stored, sorted. Tags of `not_member` swimmers are still here: the store is not changed, and Accept compares with it. */
   readonly coachTags: readonly ScorerTag[];
   readonly names: Names;
+  /** `LiveModel.key` of the model the request was built from. Accept refuses when the live model has another key now. */
+  readonly liveKey: string;
 }
 
 export type PreparedRequest =
-  | { readonly kind: 'ready'; readonly request: AutoBuildWireRequest; readonly inputs: RunInputs; readonly suggestions: readonly SuggestedRosterState[] }
+  | {
+      readonly kind: 'ready';
+      readonly request: AutoBuildWireRequest;
+      readonly inputs: RunInputs;
+      readonly suggestions: readonly SuggestedRosterState[];
+      /** Coach tags set aside because the swimmer is not on the chosen roster season. They are not in `request.tags`. */
+      readonly droppedTags: readonly ScorerTag[];
+    }
   | { readonly kind: 'missing'; readonly missing: readonly string[] };
 
 const byTeamSwimmer = (a: ScorerTag, b: ScorerTag): number => (a.teamId < b.teamId ? -1 : a.teamId > b.teamId ? 1 : a.swimmerId < b.swimmerId ? -1 : a.swimmerId > b.swimmerId ? 1 : 0);
@@ -140,19 +149,28 @@ export function namesOf(display: { readonly swimmers: Readonly<Record<string, { 
   return { swimmer: (id) => swimmerLabel(id, display?.swimmers[id]?.name), team: (id) => teamLabel(id, display?.teams[id]?.name) };
 }
 
+/** Why a roster season cannot decide membership for the coach's own team. Plain words; the spec gives none, so these are the dashboard's. */
+const ROSTER_STATUS_REASON = {
+  'not-loaded': 'has not been fetched',
+  'verified-empty': 'lists no swimmers',
+  'id-join-suspect': 'shares no swimmer with the simulator',
+} as const;
+
 /**
- * Read the store and the snapshot and build one request. A choice the coach has not made, or a result the engine cannot score yet,
- * comes back as `missing` with plain-language reasons. Nothing is guessed.
+ * Build one request from the live model and the coach's stored choices. A choice the coach has not made, or a result the engine cannot score yet,
+ * comes back as `missing` with plain-language reasons. Nothing is guessed. The caller loads `live` once; nothing here loads it again.
  */
-export async function prepareRequest(args: { snapshot: SimSnapshot; repo: StorageRepo; solveLp: LpSolve; controls: AutoBuildControls }): Promise<PreparedRequest> {
-  const { snapshot, repo, solveLp, controls } = args;
-  const meetKey = meetKeyForSnapshot(snapshot);
-  const adapted = adaptSimulatorSnapshot(snapshot, { meetKey, snapshotId: 'live-snapshot' });
-  if (adapted.kind !== 'ready') return { kind: 'missing', missing: ['SwimCloud has not loaded the simulator results yet.'] };
-  const { model, lineup } = adapted.adapted;
+export async function prepareRequest(args: { live: LiveModel; repo: StorageRepo; solveLp: LpSolve; controls: AutoBuildControls }): Promise<PreparedRequest> {
+  const { live, repo, solveLp, controls } = args;
+  const { meetKey, model, lineup } = live;
   const missing: string[] = [];
   const ownTeamId = await readScorerOwnTeam(repo, meetKey);
   if (ownTeamId === undefined || !model.teams.some((t) => String(t.teamId) === String(ownTeamId))) missing.push('Choose your team in the page panel.');
+  else if (live.choice.kind === 'season') {
+    // Without the own team's roster every own swimmer is unknown, and the build would change nothing and say nothing.
+    const status = live.enrichment.teams.find((t) => t.teamId === String(ownTeamId))?.status;
+    if (status !== 'members') missing.push(`The ${live.choice.label} roster of your team ${status === undefined ? 'is not in this meet' : ROSTER_STATUS_REASON[status]}. Fetch it in the Rosters tab, or choose Simulator (current).`);
+  }
   const ruleRef = await readScorerRulePreset(repo, meetKey);
   const resolved = ruleRef === undefined ? undefined : await resolveRulePreset(repo, ruleRef);
   if (ruleRef === undefined || resolved === undefined || !resolved.found) missing.push('Choose your OmniSwim scoring rules in the page panel.');
@@ -164,7 +182,8 @@ export async function prepareRequest(args: { snapshot: SimSnapshot; repo: Storag
     return { kind: 'missing', missing: [`The chosen rules are not complete: ${cause instanceof Error ? cause.message : String(cause)}`] };
   }
   const coachTags = await readCoachTags(repo, meetKey);
-  const suggestions = await suggestOpponentRosters(snapshot, meetKey, String(ownTeamId), coachTags, resolved.value, solveLp);
+  const { kept, notMember } = partitionTags(live, coachTags);
+  const suggestions = await suggestOpponentRosters(live, String(ownTeamId), coachTags, resolved.value, solveLp);
   const selected = await readSessionPreset(repo, meetKey);
   const loadPreference = await readSessionLoadPreference(repo, meetKey);
   const ownGenders = new Set(model.swimmers.filter((s) => String(s.teamId) === String(ownTeamId)).map((s) => s.gender));
@@ -173,8 +192,8 @@ export async function prepareRequest(args: { snapshot: SimSnapshot; repo: Storag
     model,
     lineup,
     rules,
-    sourcing: SIMULATOR_SOURCING,
-    tags: [...coachTags, ...suggestedTags(suggestions)],
+    sourcing: live.sourcing,
+    tags: [...kept, ...suggestedTags(suggestions)],
     ownTeamId: String(ownTeamId) as TeamId,
     genders,
     objective: objectiveOf(controls),
@@ -193,6 +212,7 @@ export async function prepareRequest(args: { snapshot: SimSnapshot; repo: Storag
     loadPreference,
     coachTags,
     names: namesOf(lineup.display),
+    liveKey: live.key,
   };
-  return { kind: 'ready', request, inputs, suggestions };
+  return { kind: 'ready', request, inputs, suggestions, droppedTags: notMember };
 }

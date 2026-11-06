@@ -19,12 +19,13 @@ import type { LpSolve } from '@omniswim/engine';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import type { AutoBuildStatusMessage } from '../shared/panelProtocol';
 import type { StorageRepo, UndoStack } from '../storage';
+import type { LiveLoader } from './liveModel';
 import { AUTOBUILD_CANCELLED, AutoBuildRunError, createAutoBuildClient } from './autobuilderClient';
 import type { AutoBuildClient } from './autobuilderClient';
 import { acceptBlock, acceptProposal, defaultRemoveChoices } from './autoBuilderAccept';
 import type { AcceptOutcome, RemoveChoice } from './autoBuilderAccept';
 import { defaultControls, meetKeyForSnapshot, prepareRequest, snapshotKey, TIME_LIMIT_RANGE } from './autoBuilderRequest';
-import type { AutoBuildControls, ModeChoice } from './autoBuilderRequest';
+import type { AutoBuildControls, ModeChoice, PreparedRequest } from './autoBuilderRequest';
 import {
   changeLines,
   changeSummary,
@@ -235,6 +236,8 @@ type Phase =
 export interface AutoBuilderPanelProps {
   readonly snapshot: SimSnapshot;
   readonly repoForMeet: () => Promise<StorageRepo>;
+  /** Loads the live model of a snapshot (D7 decision L). Run and Accept each call it once. */
+  readonly loadLive: LiveLoader;
   /** When set, Accept records one undo entry (the Save tab's Undo reverts it). */
   readonly undoStack?: () => Promise<UndoStack>;
   /** The solver of `optimizer.worker`, for opponent rosters. */
@@ -270,7 +273,26 @@ function controlsReady(controls: AutoBuildControls, teams: readonly { readonly i
   return controls.mode !== 'margin' || teams.some((t) => t.id === controls.rivalTeamId);
 }
 
-export function AutoBuilderPanel({ snapshot, repoForMeet, undoStack, solveLp, onStatus, client, now = () => performance.now() }: AutoBuilderPanelProps) {
+/** Load the live model once, then build the request from it. A snapshot SwimCloud has not loaded is `missing`; an unreadable one throws, and the run reports it. */
+async function prepareFromSnapshot(loadLive: LiveLoader, snapshot: SimSnapshot, rest: { repo: StorageRepo; solveLp: LpSolve; controls: AutoBuildControls }): Promise<PreparedRequest> {
+  const loaded = await loadLive(snapshot);
+  if (loaded.kind === 'not_loaded') return { kind: 'missing', missing: ['SwimCloud has not loaded the simulator results yet.'] };
+  if (loaded.kind === 'error') throw new Error(loaded.reason);
+  return prepareRequest({ live: loaded.live, ...rest });
+}
+
+/** Coach tags a run set aside because the swimmer is not on the chosen roster season. The tags stay saved. */
+function DroppedTagsNote({ tagged }: { readonly tagged: TaggedResult }): React.ReactElement | null {
+  const dropped = tagged.droppedTags ?? [];
+  if (dropped.length === 0) return null;
+  return (
+    <p className="osx-ab-note" data-testid="ab-dropped">
+      {dropped.length} of your tags {dropped.length === 1 ? 'was' : 'were'} not used, because the swimmer is not on the chosen roster season: {dropped.map((t) => tagged.inputs.names.swimmer(String(t.swimmerId))).join(', ')}. The tags stay saved.
+    </p>
+  );
+}
+
+export function AutoBuilderPanel({ snapshot, repoForMeet, loadLive, undoStack, solveLp, onStatus, client, now = () => performance.now() }: AutoBuilderPanelProps) {
   const [controls, setControls] = React.useState<AutoBuildControls>(defaultControls);
   const [state, setState] = React.useState<Phase>({ phase: 'idle' });
   const [accept, setAccept] = React.useState<AcceptView>({ phase: 'idle' });
@@ -298,11 +320,12 @@ export function AutoBuilderPanel({ snapshot, repoForMeet, undoStack, solveLp, on
     const limitMs = controls.timeLimitSeconds * 1000;
     setAccept({ phase: 'idle' });
     setState({ phase: 'preparing' });
-    const taggedKey = snapshotKey(snapshotRef.current);
+    const runSnapshot = snapshotRef.current;
+    const taggedKey = snapshotKey(runSnapshot);
     const startedAt = now();
     try {
       const repo = await repoForMeet();
-      const prepared = await prepareRequest({ snapshot: snapshotRef.current, repo, solveLp, controls });
+      const prepared = await prepareFromSnapshot(loadLive, runSnapshot, { repo, solveLp, controls });
       if (prepared.kind === 'missing') {
         setState({ phase: 'missing', missing: prepared.missing });
         return;
@@ -318,7 +341,7 @@ export function AutoBuilderPanel({ snapshot, repoForMeet, undoStack, solveLp, on
       timer.current = setInterval(tick, 250);
       const { result, loadMs, wallMs } = await clientNow.runTimed(prepared.request, (p) => { solvesDone = p.solvesDone; });
       stopTimer();
-      const tagged: TaggedResult = { result, request: prepared.request, inputs: prepared.inputs, controls, snapshotKey: taggedKey, loadMs, wallMs };
+      const tagged: TaggedResult = { result, request: prepared.request, inputs: prepared.inputs, controls, snapshotKey: taggedKey, loadMs, wallMs, droppedTags: prepared.droppedTags };
       const proposal = proposalOf(result);
       setChoices(proposal === null ? new Map() : defaultRemoveChoices(proposal));
       setState({ phase: 'done', tagged });
@@ -336,7 +359,7 @@ export function AutoBuilderPanel({ snapshot, repoForMeet, undoStack, solveLp, on
     setAccept({ phase: 'checking' });
     try {
       const repo = await repoForMeet();
-      const outcome = await acceptProposal(tagged, choices, { repo, solveLp, score: (req, lineup, tags, scaleD) => (clientRef.current as AutoBuildClient).score(req, lineup, tags, scaleD), currentSnapshot: () => snapshotRef.current, now: () => new Date().toISOString(), newId: () => crypto.randomUUID(), ...(undoStack ? { undoStack: await undoStack() } : {}) });
+      const outcome = await acceptProposal(tagged, choices, { repo, solveLp, score: (req, lineup, tags, scaleD) => (clientRef.current as AutoBuildClient).score(req, lineup, tags, scaleD), loadLive, currentSnapshot: () => snapshotRef.current, now: () => new Date().toISOString(), newId: () => crypto.randomUUID(), ...(undoStack ? { undoStack: await undoStack() } : {}) });
       setAccept(outcome.kind === 'blocked' ? { phase: 'blocked', reason: outcome.reason } : { phase: 'accepted', outcome });
     } catch (cause) {
       setAccept({ phase: 'error', message: cause instanceof Error ? cause.message : String(cause) });
@@ -430,6 +453,7 @@ export function AutoBuilderPanel({ snapshot, repoForMeet, undoStack, solveLp, on
         />
       )}
       {state.phase === 'done' && state.tagged.snapshotKey !== currentKey && <p className="osx-ab-note" data-testid="ab-stale">This result is from an earlier simulator state.</p>}
+      {state.phase === 'done' && <DroppedTagsNote tagged={state.tagged} />}
     </section>
   );
 }

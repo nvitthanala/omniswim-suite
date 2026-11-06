@@ -26,6 +26,7 @@ import type {
   Lineup,
   LineupEntry,
   RivalRef,
+  ScorerTag,
   Violation,
 } from '@omniswim/engine';
 import type { AutoBuildWireRequest } from '../shared/autobuilderProtocol';
@@ -41,6 +42,8 @@ export interface TaggedResult {
   readonly snapshotKey: string;
   readonly loadMs: number;
   readonly wallMs: number;
+  /** Coach tags the run set aside because the swimmer is not on the chosen roster season (`PreparedRequest.droppedTags`). Absent when none were. */
+  readonly droppedTags?: readonly ScorerTag[];
 }
 
 /** The proposal a result carries: `improved` has one, `current_infeasible` may carry an alternative, the others have none. */

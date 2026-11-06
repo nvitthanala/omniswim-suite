@@ -185,6 +185,11 @@ export interface SettingsMap {
   sessionLoadPreferencesByMeet: Readonly<Record<string, LoadPreference>>;
   /** Explicit rival per simulator meet. */
   rivalsByMeet: Readonly<Record<string, RivalRef>>;
+  /**
+   * The roster season the coach chose per simulator meet (F1.1a, liveModel wiring). Each value is a season label `YYYY-YYYY`. No entry for a meet
+   * means 'Simulator (current)'. No default is written and the database version does not change.
+   */
+  rosterSeasonsByMeet: Readonly<Record<string, string>>;
 }
 export interface SettingRecord<K extends keyof SettingsMap = keyof SettingsMap> {
   readonly key: K;

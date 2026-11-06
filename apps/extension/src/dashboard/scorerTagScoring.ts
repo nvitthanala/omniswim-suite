@@ -1,9 +1,9 @@
 import { closeThresholdFromPercent, cutTagForSwim, foldEventCutTags, formatHundredths, requireComplete, scoreMeet } from '@omniswim/engine';
 import type { CutTag, MeetSwim, ScorerTag } from '@omniswim/engine';
 import type { RulePreset } from '@omniswim/engine';
-import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
-import type { SimSnapshot } from '../shared/bridgeSchema';
 import { swimmerLabel, teamLabel } from '../shared/names';
+import { droppedTagWarnings, partitionTags } from './liveModel';
+import type { LiveModel } from './liveModel';
 
 export interface ScorerTagScoringState {
   readonly scored: boolean;
@@ -35,11 +35,9 @@ function describeTag(tag: CutTag | undefined): string {
   return tag.kind === 'not-applicable' ? 'Not applicable: diving' : 'Unknown';
 }
 
-/** Build display-only real and converted tag rows from the engine's meet model. */
-export function panelCutTags(snapshot: SimSnapshot, meetKey: string, closeThresholdPct: number): readonly PanelCutTagRow[] {
-  const adapted = adaptSimulatorSnapshot(snapshot, { meetKey, snapshotId: 'live-snapshot' });
-  if (adapted.kind !== 'ready') return [];
-  return panelCutTagsForModel(adapted.adapted.model, adapted.adapted.divisionSeasonNote, closeThresholdPct);
+/** Build display-only real and converted tag rows from the live model (D7 decision L). */
+export function panelCutTags(live: LiveModel, closeThresholdPct: number): readonly PanelCutTagRow[] {
+  return panelCutTagsForModel(live.model, live.adapted.divisionSeasonNote, closeThresholdPct);
 }
 
 export function panelCutTagsForModel(model: import('@omniswim/engine').MeetModel, divisionSeasonNote: string | undefined, closeThresholdPct: number): readonly PanelCutTagRow[] {
@@ -76,17 +74,20 @@ export function panelCutTagsForModel(model: import('@omniswim/engine').MeetModel
   });
 }
 
-/** Runs the normal engine scoring path with saved coach tags and formats its roster warnings. */
-export function scoreScorerTags(snapshot: SimSnapshot, meetKey: string, hasOwnTeam: boolean, tags: readonly ScorerTag[], preset?: RulePreset): ScorerTagScoringState {
-  const adapted = adaptSimulatorSnapshot(snapshot, { meetKey, snapshotId: 'live-snapshot' });
-  if (adapted.kind !== 'ready') return { scored: false, warnings: [] };
+/**
+ * Runs the normal engine scoring path on the live model with saved coach tags and formats its roster warnings. A tag on a `not_member` swimmer is not
+ * used: the swimmer has no entries under the chosen roster season. Each one is reported as a warning, and the stored tag stays.
+ */
+export function scoreScorerTags(live: LiveModel, hasOwnTeam: boolean, tags: readonly ScorerTag[], preset?: RulePreset): ScorerTagScoringState {
   if (!preset) return { scored: false, warnings: [] };
   const sizeSetting = preset.scorers.scoringTeamSize;
   const scoringTeamSize = sizeSetting.state === 'set' && typeof sizeSetting.value === 'number' ? sizeSetting.value : undefined;
   if (!hasOwnTeam) return { scored: false, ...(scoringTeamSize === undefined ? {} : { scoringTeamSize }), warnings: [] };
+  const { kept, notMember } = partitionTags(live, tags);
+  const dropped = droppedTagWarnings(live, notMember);
   try {
-    const results = scoreMeet(adapted.adapted.model, adapted.adapted.lineup, tags, requireComplete(preset), { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } });
-    const warnings: string[] = [];
+    const results = scoreMeet(live.model, live.lineup, kept, requireComplete(preset), live.sourcing);
+    const warnings: string[] = [...dropped];
     for (const violation of results.violations) {
       if (violation.kind === 'scoring_team_size') warnings.push(`${violation.teamId} ${violation.gender}: ${violation.spots.numerator}/${violation.spots.denominator} scorer spots exceeds ${violation.limit}`);
       if (violation.kind === 'scorer_without_entry') warnings.push(`${violation.swimmerId} is tagged scorer but has no entry`);
@@ -94,6 +95,6 @@ export function scoreScorerTags(snapshot: SimSnapshot, meetKey: string, hasOwnTe
     }
     return { scored: true, ...(scoringTeamSize === undefined ? {} : { scoringTeamSize }), warnings };
   } catch (cause) {
-    return { scored: false, ...(scoringTeamSize === undefined ? {} : { scoringTeamSize }), warnings: [cause instanceof Error ? cause.message : String(cause)] };
+    return { scored: false, ...(scoringTeamSize === undefined ? {} : { scoringTeamSize }), warnings: [...dropped, cause instanceof Error ? cause.message : String(cause)] };
   }
 }

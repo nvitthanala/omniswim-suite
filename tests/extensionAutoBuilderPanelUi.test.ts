@@ -23,6 +23,7 @@ import { configCWorld, nodeScore, realSolveLp, runWorld } from './helpers/autoBu
 import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
 import { createUndoStack } from '../apps/extension/src/storage';
 import type { UndoStack } from '../apps/extension/src/storage';
+import { repoLoader } from './helpers/liveFixtures';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -94,7 +95,7 @@ async function mount(over: { snapshot?: typeof world.snapshot; repo?: typeof wor
   root = createRoot(host);
   const clock = over.clock ?? { t: 0 };
   const element = (snapshot: typeof world.snapshot): React.ReactElement =>
-    React.createElement(AutoBuilderPanel, { snapshot, repoForMeet: async () => over.repo ?? world.repo, solveLp: realSolveLp, onStatus: (m) => statuses.push(m), client, now: () => clock.t, ...(over.undoStack ? { undoStack: over.undoStack } : {}) });
+    React.createElement(AutoBuilderPanel, { snapshot, repoForMeet: async () => over.repo ?? world.repo, loadLive: repoLoader(over.repo ?? world.repo), solveLp: realSolveLp, onStatus: (m) => statuses.push(m), client, now: () => clock.t, ...(over.undoStack ? { undoStack: over.undoStack } : {}) });
   await act(async () => root?.render(element(over.snapshot ?? world.snapshot)));
   return {
     client,

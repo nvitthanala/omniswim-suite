@@ -27,7 +27,8 @@ import { createRosterFlow } from '../apps/extension/src/dashboard/rosterFlow';
 import type { RosterFlow } from '../apps/extension/src/dashboard/rosterFlow';
 import { createStorageRepo, openOmniDb, toSwimCloudId } from '../apps/extension/src/storage';
 import type { StorageRepo } from '../apps/extension/src/storage';
-import { saveFetchPosture } from '../apps/extension/src/dashboard/settingsStore';
+import { readRosterSeason, saveFetchPosture, saveRosterSeason } from '../apps/extension/src/dashboard/settingsStore';
+import { meetKeyForSnapshot } from '../apps/extension/src/dashboard/meetKey';
 import { buildSnapshot } from './helpers/simulatorFixtures';
 import { freshFactory, sequentialIds, steppingClock } from './helpers/extensionDb';
 
@@ -81,11 +82,12 @@ describe('the Rosters tab', () => {
     expect(t.flow.client.state()).toEqual({ phase: 'idle' });
   });
 
-  it('the tab says plainly that roster membership is applied to Score, Build, Plan and scorer tags nowhere', async () => {
+  it('the tab says plainly where a roster season applies (Build, Plan, scorer tags) and where it does not (Score, Chart, the SwimCloud check, Save)', async () => {
     const t = await mount({ posture: 'on-click' });
-    const text = t.q('roster-not-applied')!.textContent ?? '';
-    for (const word of ['preview', 'not applied', 'Score', 'Build', 'Plan', 'scorer tags']) expect(text, word).toContain(word);
-    expect(container!.textContent).not.toContain('Score tab is not changed');
+    const text = t.q('roster-applies')!.textContent ?? '';
+    for (const word of ['applies to Build', 'Plan', 'scorer tags', 'Score, Chart and the SwimCloud check stay on SwimCloud', 'cannot save a snapshot or a lineup, or Accept an AutoBuilder proposal, while a roster season is chosen', 'Simulator (current) removes no entry and no tag.']) expect(text, word).toContain(word);
+    // The old preview-only wording is false now that the model is wired.
+    expect(container!.textContent).not.toMatch(/preview|not applied|Nothing is removed/i);
   });
 
   it('turning fetching off while a run is going cancels that run (fetch-cancel for its run id)', async () => {
@@ -201,9 +203,34 @@ describe('the Rosters tab', () => {
     const t = await mount({ posture: 'on-click' });
     const select = t.q<HTMLSelectElement>('roster-season')!;
     await act(async () => { select.value = '2025-2026'; select.dispatchEvent(new Event('change', { bubbles: true })); });
-    await t.settle();
+    await t.until(() => expect(t.q(`roster-row-${ids58[0]}`)).not.toBeNull());
     expect(t.q('roster-fetch')!.textContent).toBe('Fetch rosters (6 requests, about 15 s)');
     const row = t.q(`roster-row-${ids58[0]}`)!;
     expect(row.querySelector('[aria-label="roster membership unknown"]')).not.toBeNull();
+  });
+
+  it('T9: a stored roster season is shown selected even when the season list has not arrived; the choice is stored per meet, not in component state', async () => {
+    const meetKey = meetKeyForSnapshot(snapshot);
+    const t = await mount({ posture: 'on-click', withSeasons: false, seed: (repo) => saveRosterSeason(repo, meetKey, { kind: 'season', label: '2024-2025' }) });
+    await t.until(() => expect(t.q<HTMLSelectElement>('roster-season')!.value).toBe('2024-2025'));
+    const options = [...t.q<HTMLSelectElement>('roster-season')!.options].map((o) => o.value);
+    expect(options).toEqual(['', '2024-2025']);
+    // The Rosters tab says why only the default can be fetched, and the membership badge shows unknown (no roster stored for that season).
+    expect(t.q('roster-no-seasons')).not.toBeNull();
+    await t.until(() => expect(t.q(`roster-row-${ids58[0]}`)).not.toBeNull());
+    expect(t.q(`roster-row-${ids58[0]}`)!.querySelector('[aria-label="roster membership unknown"]')).not.toBeNull();
+  });
+
+  it('T9: choosing a season in the select stores it for this meet, and choosing Simulator (current) removes it', async () => {
+    const meetKey = meetKeyForSnapshot(snapshot);
+    const t = await mount({ posture: 'on-click' });
+    const select = t.q<HTMLSelectElement>('roster-season')!;
+    await act(async () => { select.value = '2025-2026'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    await t.until(() => expect(t.q<HTMLSelectElement>('roster-season')!.value).toBe('2025-2026'));
+    expect(await readRosterSeason(t.repo, meetKey)).toEqual({ kind: 'season', label: '2025-2026' });
+    expect(await readRosterSeason(t.repo, 'another-meet')).toEqual({ kind: 'simulator-current' });
+    await act(async () => { select.value = ''; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    await t.until(async () => expect(t.q<HTMLSelectElement>('roster-season')!.value).toBe(''));
+    await vi.waitFor(async () => expect(await readRosterSeason(t.repo, meetKey)).toEqual({ kind: 'simulator-current' }));
   });
 });

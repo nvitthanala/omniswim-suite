@@ -9,6 +9,7 @@ import { createUndoStack } from '../apps/extension/src/storage';
 import { DiffView, MeetsView, orderForDiff, SettingsView } from '../apps/extension/src/dashboard/tabHost';
 import { saveLineup, saveSnapshot } from '../apps/extension/src/dashboard/snapshotSave';
 import { configCWorld, realSolveLp } from './helpers/autoBuilderFixtures';
+import { repoLoader } from './helpers/liveFixtures';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root | undefined;
@@ -24,7 +25,7 @@ async function render(a: LineupRecord, b: LineupRecord): Promise<HTMLElement> {
 describe('snapshot comparison and undo', () => {
   it('shows absent team values accessibly, calls out stripped display data, and names a key mismatch', async () => {
     const world = await configCWorld();
-    await saveSnapshot(world.snapshot, 'Earlier', { repo: world.repo, solveLp: realSolveLp, now: () => '2026-10-31T00:00:00.000Z', newId: () => 'uc-a' });
+    await saveSnapshot(world.snapshot, 'Earlier', { repo: world.repo, loadLive: repoLoader(world.repo), solveLp: realSolveLp, now: () => '2026-10-31T00:00:00.000Z', newId: () => 'uc-a' });
     const stored = await world.repo.get('lineups', 'uc-a');
     if (!stored.found) throw new Error('snapshot was not saved');
     const earlier = stored.value;
@@ -43,7 +44,7 @@ describe('snapshot comparison and undo', () => {
     const repo = world.repo;
     const stack = createUndoStack(repo);
     expect(await stack.undo()).toEqual({ status: 'empty' });
-    await saveSnapshot(world.snapshot, 'Undo me', { repo, solveLp: realSolveLp, now: () => '2026-10-31T00:00:00.000Z', newId: () => 'uc-undo' });
+    await saveSnapshot(world.snapshot, 'Undo me', { repo, loadLive: repoLoader(world.repo), solveLp: realSolveLp, now: () => '2026-10-31T00:00:00.000Z', newId: () => 'uc-undo' });
     const saved = await repo.get('lineups', 'uc-undo');
     if (!saved.found) throw new Error('snapshot was not saved');
     stack.recordUndo({ changes: [{ before: { op: 'delete', store: 'lineups', key: saved.value.lineupId }, writtenRev: saved.value.rev }] });
@@ -59,7 +60,7 @@ describe('snapshot comparison and undo', () => {
 
   it('saves a lineup and explains that it has no report or compare results', async () => {
     const world = await configCWorld();
-    await saveLineup(world.snapshot, 'Entries only', { repo: world.repo, solveLp: realSolveLp, now: () => '2026-10-31T00:00:00.000Z', newId: () => 'uc-lineup' });
+    await saveLineup(world.snapshot, 'Entries only', { repo: world.repo, loadLive: repoLoader(world.repo), solveLp: realSolveLp, now: () => '2026-10-31T00:00:00.000Z', newId: () => 'uc-lineup' });
     host = document.createElement('div'); document.body.append(host); root = createRoot(host);
     await act(async () => root?.render(React.createElement(MeetsView, { repo: world.repo })));
     for (let i = 0; i < 5; i += 1) await act(async () => new Promise((r) => setTimeout(r, 0)));
@@ -73,7 +74,7 @@ describe('snapshot comparison and undo', () => {
 
   it("keeps a saved lineup's tags and facts but never its results", async () => {
     const world = await configCWorld();
-    await saveLineup(world.snapshot, "With tags", { repo: world.repo, solveLp: realSolveLp, now: () => "2026-10-31T00:00:00.000Z", newId: () => "uc-lineup-tags" });
+    await saveLineup(world.snapshot, "With tags", { repo: world.repo, loadLive: repoLoader(world.repo), solveLp: realSolveLp, now: () => "2026-10-31T00:00:00.000Z", newId: () => "uc-lineup-tags" });
     const stored = await world.repo.get("lineups", "uc-lineup-tags");
     if (!stored.found) throw new Error("the lineup was not saved");
     expect(stored.value.kind).toBe("lineup");

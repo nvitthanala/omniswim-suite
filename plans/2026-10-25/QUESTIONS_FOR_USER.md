@@ -270,3 +270,13 @@ need U1.
 - **U13 (new, 2026-11-06).** The fetch on/off switch now sits in the
   Rosters tab, because there is no Settings screen yet. It is still off
   until you turn it on. Keep it there for now? Default: yes.
+- **U14 (new, 2026-11-06).** Saving a snapshot while a past roster season
+  is chosen: refuse until a saved report can record the season? Default:
+  refuse (plans/2026-10-25/D7-LIVEMODEL-SPEC.md section 7).
+- **U15 (new, 2026-11-06).** Is the roster-season choice per meet or one
+  choice for all meets? Default: per meet, so a past season never narrows
+  another meet without saying so.
+- **U16 (new, 2026-11-06).** Use stored class years in the default mode
+  too? Default: yes. Scores do not change; report class years fill in.
+  Applies to Accept too (2026-11-06): with a past roster season chosen,
+  the AutoBuilder still proposes, but Accept refuses to store the lineup.

@@ -10,6 +10,7 @@ import { readScorerOwnTeam, saveScorerOwnTeam, toSwimCloudId } from '../apps/ext
 import { scoreScorerTags } from '../apps/extension/src/dashboard/scorerTagScoring';
 import { buildSnapshot } from './helpers/simulatorFixtures';
 import { builtinRulePreset } from '@omniswim/engine';
+import { liveOf } from './helpers/liveFixtures';
 
 function makeWindow(): { win: HappyWindow; root(): ShadowRoot } {
   const win = new HappyWindow(); let closed: unknown = null;
@@ -78,7 +79,7 @@ describe('extension scorer tags', () => {
     const reloadedDb = await openOmniDb({ factory }); const reloadedRepo = createStorageRepo(reloadedDb);
     const restored = await readScorerOwnTeam(reloadedRepo, meetKey);
     expect(restored).toBe(chosenTeam);
-    const scoring = scoreScorerTags(snapshot, meetKey, restored !== undefined, snapshot.swimmers!.map(s => ({ teamId: String(s.teamId), swimmerId: String(s.id), role: 'scorer' as const })), builtinRulePreset('nsisc', 4));
+    const scoring = scoreScorerTags(liveOf(snapshot), restored !== undefined, snapshot.swimmers!.map(s => ({ teamId: String(s.teamId), swimmerId: String(s.id), role: 'scorer' as const })), builtinRulePreset('nsisc', 4));
     expect(scoring.scored).toBe(true);
     reloadedDb.close();
   });

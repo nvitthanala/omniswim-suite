@@ -31,6 +31,7 @@ import { mountPagePanel } from '../apps/extension/src/overlay/pagePanel';
 import { isAutoBuildStatus } from '../apps/extension/src/shared/panelProtocol';
 import { configCWorld, nodeScore, realSolveLp, runWorld } from './helpers/autoBuilderFixtures';
 import type { ConfigCWorld } from './helpers/autoBuilderFixtures';
+import { readyLive } from './helpers/liveFixtures';
 import { createUndoStack, toSwimCloudId } from '../apps/extension/src/storage';
 
 /** The visible text of rendered markup, with the entities React writes decoded. */
@@ -80,8 +81,8 @@ describe('defaults and the objective of the controls', () => {
   });
 
   it('builds the request from the store: own tags are coach tags, opponents are suggested, swaps are opt-in', async () => {
-    const off = await prepareRequest({ snapshot: world.snapshot, repo: world.repo, solveLp: realSolveLp, controls: defaultControls() });
-    const on = await prepareRequest({ snapshot: world.snapshot, repo: world.repo, solveLp: realSolveLp, controls: { ...defaultControls(), proposeSwaps: true, timeLimitSeconds: 20 } });
+    const off = await prepareRequest({ live: await readyLive(world.loadLive, world.snapshot), repo: world.repo, solveLp: realSolveLp, controls: defaultControls() });
+    const on = await prepareRequest({ live: await readyLive(world.loadLive, world.snapshot), repo: world.repo, solveLp: realSolveLp, controls: { ...defaultControls(), proposeSwaps: true, timeLimitSeconds: 20 } });
     if (off.kind !== 'ready' || on.kind !== 'ready') throw new Error('not ready');
     expect(off.request.roster).toBe('fixed');
     expect(on.request.roster).toBe('propose-swaps');
@@ -96,7 +97,7 @@ describe('defaults and the objective of the controls', () => {
     const empty = await configCWorld();
     try {
       const other = { ...empty.snapshot, settings: { ...empty.snapshot.settings, startDate: '2001-01-01' } };
-      const missing = await prepareRequest({ snapshot: other, repo: empty.repo, solveLp: realSolveLp, controls: defaultControls() });
+      const missing = await prepareRequest({ live: await readyLive(empty.loadLive, other), repo: empty.repo, solveLp: realSolveLp, controls: defaultControls() });
       if (missing.kind !== 'missing') throw new Error('expected missing');
       expect(missing.missing.join(' ')).toMatch(/Choose your team/);
       expect(missing.missing.join(' ')).toMatch(/scoring rules/);
@@ -368,7 +369,7 @@ describe('Accept: the blocks', () => {
   });
 
   const deps = (over: Partial<Parameters<typeof acceptProposal>[2]> = {}): Parameters<typeof acceptProposal>[2] => ({
-    repo: world.repo, solveLp: realSolveLp, score: nodeScore, currentSnapshot: world.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', ...over,
+    repo: world.repo, solveLp: realSolveLp, score: nodeScore, loadLive: world.loadLive, currentSnapshot: world.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', ...over,
   });
 
   it('blocks when the stored scorer tags changed after the run', async () => {
@@ -376,7 +377,7 @@ describe('Accept: the blocks', () => {
     try {
       const tagged = await runWorld(w);
       await w.repo.put('tags', { meetKey: w.meetKey, teamId: toSwimCloudId(w.ownTeamId), swimmerId: toSwimCloudId(w.pinned[0] as string), role: 'non-scorer' }, (await w.repo.get('tags', [w.meetKey, toSwimCloudId(w.ownTeamId), toSwimCloudId(w.pinned[0] as string)]) as { found: true; value: { rev: number } }).value.rev);
-      const out = await acceptProposal(tagged, new Map(), { ...deps(), repo: w.repo, currentSnapshot: w.snapshot });
+      const out = await acceptProposal(tagged, new Map(), { ...deps(), repo: w.repo, loadLive: w.loadLive, currentSnapshot: w.snapshot });
       expect(out).toStrictEqual({ kind: 'blocked', reason: 'Your scorer tags changed after this run. Run the AutoBuilder again.' });
       expect(await w.repo.list('lineups')).toHaveLength(0);
     } finally {
@@ -388,7 +389,7 @@ describe('Accept: the blocks', () => {
     const same: TaggedResult = withResult({ ...current(), proposal: { ...proposal, lineup: base.request.lineup, tagsForScoring: base.request.tags, entryChanges: [] } });
     const w = await configCWorld();
     try {
-      const out = await acceptProposal({ ...same, inputs: base.inputs }, new Map(), { ...deps(), repo: w.repo });
+      const out = await acceptProposal({ ...same, inputs: base.inputs }, new Map(), { ...deps(), repo: w.repo, loadLive: w.loadLive });
       expect(out.kind).toBe('blocked');
       if (out.kind === 'blocked') {
         expect(out.reason).toMatch(/With fresh opponent rosters the proposal scores \d+ against \d+ for your current lineup \(0\)\. It is not above the current lineup, so it is not accepted/);
@@ -418,7 +419,7 @@ describe('Accept: what it writes', () => {
       const accepted = tagged.result.proposal;
       const before = JSON.stringify(w.snapshot);
       const out = await acceptProposal(tagged, defaultRemoveChoices(accepted), {
-        repo: w.repo, solveLp: realSolveLp, score: nodeScore, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1',
+        repo: w.repo, solveLp: realSolveLp, score: nodeScore, loadLive: w.loadLive, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1',
       });
       if (out.kind !== 'accepted') throw new Error(`blocked: ${out.reason}`);
       expect(out.verified.proposal).toBeGreaterThan(out.verified.current);
@@ -511,7 +512,7 @@ describe('Accept and Undo (slice S1)', () => {
     const tagsBefore = await tagRows(w);
     const stack = createUndoStack(w.repo);
     const out = await acceptProposal(withRemoves, new Map<string, RemoveChoice>([[toDelete, 'delete']]), {
-      repo: w.repo, solveLp: realSolveLp, score: nodeScore, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', undoStack: stack,
+      repo: w.repo, solveLp: realSolveLp, score: nodeScore, loadLive: w.loadLive, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', undoStack: stack,
     });
     if (out.kind !== 'accepted') throw new Error(`blocked: ${out.reason}`);
     return { stack, tagsBefore, toNon, toDelete, adds: swap.rosterAdds.length, added: swap.rosterAdds[0] };
@@ -582,7 +583,7 @@ describe('Accept and Undo (slice S1)', () => {
       const row = (await w.repo.get('tags', [w.meetKey, own, swimmer])) as { found: true; value: { rev: number } };
       await w.repo.put('tags', { meetKey: w.meetKey, teamId: own, swimmerId: swimmer, role: 'non-scorer' }, row.value.rev);
       const stack = createUndoStack(w.repo);
-      const out = await acceptProposal(tagged, new Map(), { repo: w.repo, solveLp: realSolveLp, score: nodeScore, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', undoStack: stack });
+      const out = await acceptProposal(tagged, new Map(), { repo: w.repo, solveLp: realSolveLp, score: nodeScore, loadLive: w.loadLive, currentSnapshot: w.snapshot, now: () => '2026-10-31T12:00:00.000Z', newId: () => 'lineup-1', undoStack: stack });
       expect(out.kind).toBe('blocked');
       expect(stack.size).toBe(0);
     } finally {

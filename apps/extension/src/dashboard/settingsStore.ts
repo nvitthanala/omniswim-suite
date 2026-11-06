@@ -13,6 +13,7 @@ import type { OmniDbSchema } from '../storage';
 import { isHexColor } from '../shared/theme';
 import type { ThemePreference } from '../shared/theme';
 import { closeThresholdFromPercent } from '@omniswim/engine';
+import type { RosterSeasonChoice } from './rosterPlan';
 
 export async function readSetting<K extends keyof SettingsMap>(repo: StorageRepo, key: K): Promise<SettingsMap[K] | undefined> {
   const row = await repo.get('settings', key);
@@ -121,5 +122,27 @@ export function saveRival(repo: StorageRepo, meetKey: string, rival: RivalRef | 
   return updateSetting(repo, 'rivalsByMeet', (current) => {
     const { [meetKey]: _old, ...rest } = current ?? {};
     return rival === undefined ? rest : { ...rest, [meetKey]: rival };
+  });
+}
+
+/** A season label as the SwimCloud page prints it: `2025-2026`. The storage validator checks the same shape. */
+const SEASON_LABEL = /^\d{4}-\d{4}$/;
+
+/**
+ * The roster season the coach chose for this meet (F1.1a). No stored entry means 'Simulator (current)'.
+ * The choice is per meet (user question U15), so a choice for one meet never reaches another.
+ */
+export async function readRosterSeason(repo: StorageRepo, meetKey: string): Promise<RosterSeasonChoice> {
+  const map = await readSetting(repo, 'rosterSeasonsByMeet');
+  if (map === undefined || !Object.hasOwn(map, meetKey)) return { kind: 'simulator-current' };
+  return { kind: 'season', label: map[meetKey] as string };
+}
+
+/** Store the choice. 'Simulator (current)' removes the meet's entry, so the default applies again. A label that is not `YYYY-YYYY` throws and nothing is stored. */
+export async function saveRosterSeason(repo: StorageRepo, meetKey: string, choice: RosterSeasonChoice): Promise<void> {
+  if (choice.kind === 'season' && !SEASON_LABEL.test(choice.label)) throw new RangeError(`The roster season must look like 2025-2026, not "${choice.label}".`);
+  await updateSetting(repo, 'rosterSeasonsByMeet', (current) => {
+    const { [meetKey]: _old, ...rest } = current ?? {};
+    return choice.kind === 'simulator-current' ? rest : { ...rest, [meetKey]: choice.label };
   });
 }

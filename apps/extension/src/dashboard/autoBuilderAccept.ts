@@ -25,6 +25,14 @@ import { readCoachTags, snapshotKey } from './autoBuilderRequest';
 import { changeLines, modeLabel, plain, proposalOf, signed } from './autoBuilderResult';
 import type { ChangeLine, TaggedResult } from './autoBuilderResult';
 import { suggestedTags, suggestOpponentRosters } from './suggestedRosters';
+import type { LiveLoader } from './liveModel';
+
+/** SwimCloud dropped its simulator results between the run and Accept. */
+const NOT_LOADED_AGAIN = 'SwimCloud has not loaded the simulator results, so the proposal cannot be re-scored. Run the AutoBuilder again.';
+/** The live model of the run is not the live model now. */
+const LIVE_CHANGED = 'The roster season, a stored roster or a class year changed after this run. Run the AutoBuilder again.';
+/** Accept saves a lineup and cannot record the roster season it was built under. The Save tab says the same of snapshots. */
+export const SEASON_ACCEPT_REFUSED = 'Accept saves a lineup, and a saved lineup cannot record a roster season yet. Choose Simulator (current) and run the AutoBuilder again.';
 
 /** What Accept writes for a swimmer the proposal takes off the scoring roster (user question A10). */
 export type RemoveChoice = 'non-scorer' | 'delete';
@@ -66,6 +74,11 @@ export interface AcceptDeps {
    * A plain value is the snapshot at the call, and cannot show a change that happens during Accept.
    */
   readonly currentSnapshot: SimSnapshot | (() => SimSnapshot);
+  /**
+   * Loads the live model of a snapshot (D7 decision L). `verifyProposal` calls it once, with the snapshot the page holds then, and compares the
+   * model's key with the run's. A roster season, a stored roster or a class year that changed since the run makes the keys differ.
+   */
+  readonly loadLive: LiveLoader;
   readonly now: () => string;
   readonly newId: () => string;
   /** When set, a successful Accept records one undo entry: the new lineup and every tag put or delete. */
@@ -105,7 +118,14 @@ export async function verifyProposal(tagged: TaggedResult, proposal: AutoBuildPr
   const { inputs, request } = tagged;
   let suggestions;
   try {
-    suggestions = await suggestOpponentRosters(snapshotNow(deps), inputs.meetKey, inputs.ownTeamId, inputs.coachTags, inputs.rulePreset, deps.solveLp);
+    const loaded = await deps.loadLive(snapshotNow(deps));
+    if (loaded.kind === 'not_loaded') return { ok: false, reason: NOT_LOADED_AGAIN };
+    if (loaded.kind === 'error') return { ok: false, reason: `The simulator could not be read again: ${loaded.reason}` };
+    // The roster season, a stored roster or a class year changed since the run: the request was built from another model.
+    if (loaded.live.key !== inputs.liveKey) return { ok: false, reason: LIVE_CHANGED };
+    // Accept saves a lineup, and `builtUnder` cannot record a roster season yet (user question U14, F1.3b). Build still ran and showed its proposal.
+    if (loaded.live.choice.kind === 'season') return { ok: false, reason: SEASON_ACCEPT_REFUSED };
+    suggestions = await suggestOpponentRosters(loaded.live, inputs.ownTeamId, inputs.coachTags, inputs.rulePreset, deps.solveLp);
   } catch (cause) {
     return { ok: false, reason: `Could not re-suggest the opponent rosters: ${cause instanceof Error ? cause.message : String(cause)}` };
   }
@@ -285,6 +305,15 @@ export async function acceptProposal(tagged: TaggedResult, choices: ReadonlyMap<
   // The recheck, last: the re-score above took real time. Read the database's changeRev first, then the inputs, so any write that lands
   // after this point, in any store, moves the changeRev and putMany refuses the batch. The snapshot check is synchronous.
   const changeRev = await deps.repo.changeRev();
+  // The season, a stored roster or a class year can change during the slow re-score. The first key check ran before it. This load is a key check
+  // only: it feeds nothing. It comes after the `changeRev` read, so a write that lands after it moves the `changeRev` and `putMany` refuses.
+  // The snapshot is part of the live key, so its own message comes first: a changed simulator is not a roster change.
+  const snapshotMoved = acceptBlock(tagged, snapshotNow(deps));
+  if (snapshotMoved !== null) return { kind: 'blocked', reason: snapshotMoved };
+  const liveNow = await deps.loadLive(snapshotNow(deps));
+  if (liveNow.kind === 'not_loaded') return { kind: 'blocked', reason: NOT_LOADED_AGAIN };
+  if (liveNow.kind === 'error') return { kind: 'blocked', reason: `The simulator could not be read again: ${liveNow.reason}` };
+  if (liveNow.live.key !== tagged.inputs.liveKey) return { kind: 'blocked', reason: LIVE_CHANGED };
   const changedAfter = await inputsChanged(tagged, deps.repo);
   if (changedAfter !== null) return { kind: 'blocked', reason: changedAfter };
   const sinceRun = acceptBlock(tagged, snapshotNow(deps));

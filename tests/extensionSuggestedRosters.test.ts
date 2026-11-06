@@ -12,6 +12,7 @@ import type { PresetRef } from '../apps/extension/src/storage/schema';
 import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
 import { scoreScorerTags } from '../apps/extension/src/dashboard/scorerTagScoring';
 import loadHighs from 'highs';
+import { liveOf } from './helpers/liveFixtures';
 
 describe('extension suggested rosters', () => {
   let highsPromise: ReturnType<typeof loadHighs> | undefined;
@@ -40,14 +41,14 @@ describe('extension suggested rosters', () => {
     const opponent = String(snapshot.teams.find(t => String(t.id) !== own)!.id);
     const rules = builtinRulePreset('nsisc', 4)!;
     const solve = realSolve;
-    expect(await suggestOpponentRosters(snapshot, 'fixture-A', undefined, [], rules, solve)).toEqual([]);
+    expect(await suggestOpponentRosters(liveOf(snapshot), undefined, [], rules, solve)).toEqual([]);
     const swimmer = snapshot.swimmers!.find(s => String(s.teamId) === opponent)!;
     const pin = { teamId: opponent, swimmerId: String(swimmer.id), role: 'scorer' as const };
     const ownPins = snapshot.swimmers!.filter(s => String(s.teamId) === own).map(s => ({ teamId: own, swimmerId: String(s.id), role: 'scorer' as const }));
     measuredSolveMs = 0; measuredSolveCalls = 0;
-    const first = await suggestOpponentRosters(snapshot, 'fixture-A', own, [...ownPins, pin], rules, solve);
+    const first = await suggestOpponentRosters(liveOf(snapshot), own, [...ownPins, pin], rules, solve);
     console.info(`fixture A optimizer solve time: ${measuredSolveMs.toFixed(2)} ms across ${measuredSolveCalls} HiGHS calls`);
-    const second = await suggestOpponentRosters(snapshot, 'fixture-A', own, [...ownPins, { ...pin, role: 'non-scorer' }], rules, solve);
+    const second = await suggestOpponentRosters(liveOf(snapshot), own, [...ownPins, { ...pin, role: 'non-scorer' }], rules, solve);
     expect(first.length).toBeGreaterThan(0);
     expect(first.map(x => x.teamId)).toContain(opponent);
     expect(first.every(x => x.result.kind === 'suggested' || (x.result.kind === 'absent' && x.result.reason === 'solver_not_optimal'))).toBe(true);
@@ -77,13 +78,13 @@ describe('extension suggested rosters', () => {
     const snapshot = buildSnapshot('A').snapshot;
     const own = String(snapshot.teams[0]!.id);
     const selected = builtinRulePreset('nsisc', 4)!;
-    const scored = scoreScorerTags(snapshot, 'fixture-A', true, snapshot.swimmers!.map(s => ({ teamId: String(s.teamId), swimmerId: String(s.id), role: 'scorer' as const })), selected);
+    const scored = scoreScorerTags(liveOf(snapshot), true, snapshot.swimmers!.map(s => ({ teamId: String(s.teamId), swimmerId: String(s.id), role: 'scorer' as const })), selected);
     expect(scored.scored).toBe(true);
     const adapted = adaptSimulatorSnapshot(snapshot, { meetKey: 'fixture-A', snapshotId: 'live-snapshot' });
     expect(adapted.kind).toBe('ready');
     if (adapted.kind !== 'ready') return;
     const ownPins = snapshot.swimmers!.filter(s => String(s.teamId) === own).map(s => ({ teamId: own, swimmerId: String(s.id), role: 'scorer' as const }));
-    const refused = await suggestOpponentRosters(snapshot, 'fixture-A', own, ownPins, adapted.adapted.preset.preset, async () => ({ status: 'Optimal', objective: 0, columns: {} }));
+    const refused = await suggestOpponentRosters(liveOf(snapshot), own, ownPins, adapted.adapted.preset.preset, async () => ({ status: 'Optimal', objective: 0, columns: {} }));
     expect(refused.every(item => item.result.kind === 'error' && item.result.code === 'suggest_rule_unsupported')).toBe(true);
     expect(refused.some(item => item.result.kind === 'error' && item.result.subject === 'scorers.eligibility')).toBe(true);
     const win = new HappyWindow(); let shadow: unknown = null;

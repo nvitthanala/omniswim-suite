@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * The Rosters tab of the docked panel (F1.1a, D7 section 4). It asks SwimCloud for one roster page per team, only when the coach clicks Fetch and
- * has turned fetching on. It shows each team's roster status, the class year of each swimmer with its source, and a preview of what the chosen
- * roster season does to membership. The preview never feeds the Score tab: parity reads the raw snapshot (D7 decision P).
+ * has turned fetching on. It shows each team's roster status, the class year of each swimmer with its source, and what the chosen roster season does
+ * to membership. The chosen season is stored per meet (`rosterSeasonsByMeet`) and applies to Build, Plan and the scorer tags through the live model
+ * (`liveModel.ts`). It never feeds the Score tab: parity reads the raw snapshot (D7 decision P).
  */
 import * as React from 'react';
 import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
@@ -14,12 +15,14 @@ import { swimmerLabel, teamLabel } from '../shared/names';
 import { CLASS_YEARS, classifyRoster, toSwimCloudId } from '../storage';
 import type { ClassYearCode, ClassYearOverrideRecord, RosterRecord, StorageRepo } from '../storage';
 import type { RosterFlow, RosterSaveState, SeasonList } from './rosterFlow';
+import { currentLabelOf, loadLiveStored } from './liveModel';
+import type { LiveStored } from './liveModel';
 import { describeRequests, planRosterRequests } from './rosterPlan';
 import type { PlannedRosterRequest, RosterPlan, RosterSeasonChoice } from './rosterPlan';
 import { buildTeamView } from './rosterView';
 import type { TeamRosterView } from './rosterView';
 import { meetKeyForSnapshot } from './meetKey';
-import { readFetchPosture, saveFetchPosture } from './settingsStore';
+import { readFetchPosture, readRosterSeason, saveFetchPosture, saveRosterSeason } from './settingsStore';
 import type { RunState } from './fetchClient';
 
 const GENDERS = { M: 'Men', F: 'Women' } as const;
@@ -34,20 +37,14 @@ export function runStatusText(state: RunState<PlannedRosterRequest>): string {
   }
 }
 
-/** Said in the tab, always: membership from a fetched season is shown here and applied nowhere else yet (architect ruling, F1.1a). */
-const NOT_APPLIED = 'Roster membership from a fetched season is a preview. It is not applied to Score, Build (Auto-builder), Plan or the scorer tags, and none of them changes when you fetch.';
+/** Said in the tab, always: where a chosen roster season applies and where it does not (architect ruling 2, F1.1a). */
+const APPLIES = "A roster season you choose here applies to Build (AutoBuilder), Plan and the scorer tags. A swimmer who is not on that roster loses their entries there, and a scorer tag on them is not used. Score, Chart and the SwimCloud check stay on SwimCloud's own table. You cannot save a snapshot or a lineup, or Accept an AutoBuilder proposal, while a roster season is chosen. Simulator (current) removes no entry and no tag.";
 const when = (iso: string): string => iso.slice(0, 16).replace('T', ' ') + ' UTC';
 const errorText = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
 
 function teamStatus(record: RosterRecord | undefined): string {
   if (!record) return 'Not loaded';
   return classifyRoster(record) === 'verified-empty' ? `No roster posted (${when(record.fetchedAt)})` : `${record.memberIds.length} swimmers (${when(record.fetchedAt)})`;
-}
-
-interface Stored {
-  readonly membership: ReadonlyMap<string, RosterRecord>;
-  readonly current: ReadonlyMap<string, RosterRecord>;
-  readonly overrides: readonly ClassYearOverrideRecord[];
 }
 
 function safeAdapt(snapshot: SimSnapshot): AdaptedSimulator | null {
@@ -59,34 +56,6 @@ function safeAdapt(snapshot: SimSnapshot): AdaptedSimulator | null {
 
 function safeTeamView(input: Parameters<typeof buildTeamView>[0]): TeamRosterView | { readonly error: string } {
   try { return buildTeamView(input); } catch (cause) { return { error: errorText(cause) }; }
-}
-
-async function loadRosters(repo: StorageRepo, teamIds: readonly string[], label: string | null, gender: 'Men' | 'Women'): Promise<Map<string, RosterRecord>> {
-  const map = new Map<string, RosterRecord>();
-  if (label === null) return map;
-  for (const id of teamIds) {
-    let key;
-    try { key = toSwimCloudId(id); } catch { continue; }
-    const found = await repo.get('rosters', [key, label, gender]);
-    if (found.found) map.set(id, found.value);
-  }
-  return map;
-}
-
-async function loadStored(repo: StorageRepo, teamIds: readonly string[], gender: 'Men' | 'Women', membershipLabel: string | null, currentLabel: string | null): Promise<Stored> {
-  const [membership, current] = await Promise.all([loadRosters(repo, teamIds, membershipLabel, gender), loadRosters(repo, teamIds, currentLabel, gender)]);
-  const overrides = currentLabel === null ? [] : await repo.list('classYearOverrides', { index: 'bySeason', value: currentLabel });
-  return { membership, current, overrides };
-}
-
-/** The current season's label: the page's season list, else a roster this panel saved from the server's current page. */
-function currentLabelOf(seasons: SeasonList | null, save: RosterSaveState): string | null {
-  if (seasons) return seasons.current.label;
-  if (save.kind !== 'saved') return null;
-  for (const r of save.reports) {
-    if (r.request.role !== 'chosen-season' && (r.status.kind === 'saved' || r.status.kind === 'saved-empty')) return r.status.seasonLabel;
-  }
-  return null;
 }
 
 function refusalText(save: RosterSaveState, teamId: string): string | null {
@@ -131,6 +100,8 @@ function FetchControls(props: {
         <select data-testid="roster-season" value={choiceLabel} onChange={(e) => props.onChoice(e.currentTarget.value)}>
           <option value="">Simulator (current)</option>
           {(seasons?.seasons ?? []).map((s) => <option key={s.label} value={s.label}>{s.label}{s.isCurrent ? ' (current)' : ''}</option>)}
+          {/* The stored choice is always an option, even when the season list is missing or lacks it: the select must not show a season that is not applied. */}
+          {choiceLabel !== '' && !(seasons?.seasons ?? []).some((s) => s.label === choiceLabel) && <option value={choiceLabel}>{choiceLabel}</option>}
         </select>
       </label>
       {!seasons && <p className="osx-status osx-status--warn" data-testid="roster-no-seasons">The season list has not arrived from the SwimCloud page, so only "Simulator (current)" can be fetched.</p>}
@@ -151,7 +122,7 @@ function FetchControls(props: {
   );
 }
 
-function TeamList(props: { readonly snapshot: SimSnapshot; readonly stored: Stored | null; readonly save: RosterSaveState }): React.ReactElement {
+function TeamList(props: { readonly snapshot: SimSnapshot; readonly stored: LiveStored | null; readonly save: RosterSaveState }): React.ReactElement {
   return (
     <>
       <h3>Teams</h3>
@@ -182,7 +153,7 @@ function MembershipNotes(props: { readonly view: TeamRosterView; readonly choice
       {note && choiceLabel === '' && note.notOnRoster.length > 0 && <p className="osx-status osx-status--warn" data-testid="roster-mismatch">{note.notOnRoster.length} simulator swimmers are not on the fetched roster. They stay members: the simulator is the source.</p>}
       {removed.length > 0 && (
         <div data-testid="roster-removed">
-          <p className="osx-status osx-status--warn">{removed.length} lineup entries would be removed because the swimmer is not on the {choiceLabel} roster. Nothing is removed: this is a preview only.</p>
+          <p className="osx-status osx-status--warn">{removed.length} lineup entries are left out of Build and Plan, because the swimmer is not on the {choiceLabel} roster. A scorer tag on that swimmer is not used. Score still shows SwimCloud's own lineup.</p>
           <ul>{removed.map((r) => <li key={r.entryKey}>{r.kind === 'relay' ? 'Relay' : 'Entry'} {r.eventKey}: {r.swimmerIds.map((id) => swimmerLabel(id, names.get(id))).join(', ')}</li>)}</ul>
         </div>
       )}
@@ -232,10 +203,11 @@ export interface RosterTabProps {
 export function RosterTab({ snapshot, flow, repoForMeet, active }: RosterTabProps): React.ReactElement {
   const [, bump] = React.useReducer((n: number) => n + 1, 0);
   React.useEffect(() => flow.subscribe(bump), [flow]);
+  // The stored choice for this meet; '' is Simulator (current). It is read from storage with the rosters, never held only here.
   const [choiceLabel, setChoiceLabel] = React.useState('');
   const [teamId, setTeamId] = React.useState('');
   const [posture, setPosture] = React.useState<Posture>('off');
-  const [stored, setStored] = React.useState<Stored | null>(null);
+  const [stored, setStored] = React.useState<LiveStored | null>(null);
   const [message, setMessage] = React.useState('');
   const [reload, setReload] = React.useState(0);
 
@@ -250,6 +222,7 @@ export function RosterTab({ snapshot, flow, repoForMeet, active }: RosterTabProp
   const selectedTeam = teamIds.includes(teamId) ? teamId : (teamIds[0] ?? '');
   const currentLabel = currentLabelOf(seasons, save);
   const membershipLabel = choiceLabel === '' ? currentLabel : choiceLabel;
+  const meetKey = meetKeyForSnapshot(snapshot);
   const adapted = React.useMemo(() => safeAdapt(snapshot), [snapshot]);
 
   React.useEffect(() => {
@@ -260,14 +233,16 @@ export function RosterTab({ snapshot, flow, repoForMeet, active }: RosterTabProp
       try {
         const repo = await repoForMeet();
         const nextPosture = await readFetchPosture(repo);
-        const next = await loadStored(repo, ids, GENDERS[gender], membershipLabel, currentLabel);
-        if (live) { setPosture(nextPosture); setStored(next); }
+        const storedChoice = await readRosterSeason(repo, meetKey);
+        const nextLabel = storedChoice.kind === 'season' ? storedChoice.label : '';
+        const next = await loadLiveStored(repo, ids, GENDERS[gender], nextLabel === '' ? currentLabel : nextLabel, currentLabel);
+        if (live) { setPosture(nextPosture); setChoiceLabel(nextLabel); setStored(next); }
       } catch (cause) {
         if (live) setMessage(`The saved rosters could not be read: ${errorText(cause)}`);
       }
     })();
     return () => { live = false; };
-  }, [active, gender, teamKey, membershipLabel, currentLabel, repoForMeet, reload, save, run.phase]);
+  }, [active, gender, teamKey, meetKey, currentLabel, repoForMeet, reload, save, run.phase]);
 
   const view = !adapted || !stored || !selectedTeam ? null
     : safeTeamView({ adapted, teamId: selectedTeam, mode: choiceLabel === '' ? 'simulator-current' : 'season', membershipRoster: stored.membership.get(selectedTeam), currentRoster: stored.current.get(selectedTeam), overrides: stored.overrides, currentLabel });
@@ -277,6 +252,11 @@ export function RosterTab({ snapshot, flow, repoForMeet, active }: RosterTabProp
     if (gender === null) return;
     const result = flow.fetchRosters({ teamIds, gender, choice, posture });
     setMessage(result.ok ? '' : result.reason);
+  };
+  const onChoice = (label: string): void => {
+    void repoForMeet().then((repo) => saveRosterSeason(repo, meetKey, label === '' ? { kind: 'simulator-current' } : { kind: 'season', label }))
+      .then(() => { setMessage(''); setStored(null); setChoiceLabel(label); setReload((n) => n + 1); })
+      .catch((cause: unknown) => setMessage(`Not saved: ${errorText(cause)}`));
   };
   const onPosture = (next: Posture): void => {
     if (next === 'off') flow.client.cancel(); // turning fetching off ends a run that is going; the overlay answers with fetch-end
@@ -290,8 +270,8 @@ export function RosterTab({ snapshot, flow, repoForMeet, active }: RosterTabProp
 
   return (
     <section className="osx-roster" data-testid="roster-tab">
-      <FetchControls flow={flow} seasons={seasons} choiceLabel={choiceLabel} onChoice={setChoiceLabel} posture={posture} onPosture={onPosture} plan={plan} run={run} save={save} onFetch={onFetch} />
-      <p className="osx-status osx-status--warn" data-testid="roster-not-applied">{NOT_APPLIED}</p>
+      <FetchControls flow={flow} seasons={seasons} choiceLabel={choiceLabel} onChoice={onChoice} posture={posture} onPosture={onPosture} plan={plan} run={run} save={save} onFetch={onFetch} />
+      <p className="osx-status osx-status--warn" data-testid="roster-applies">{APPLIES}</p>
       {message && <p className="osx-status osx-status--bad" role="alert" data-testid="roster-message">{message}</p>}
       <TeamList snapshot={snapshot} stored={stored} save={save} />
       <h3>Class years</h3>

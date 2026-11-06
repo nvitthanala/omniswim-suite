@@ -8,6 +8,7 @@
 import * as React from 'react';
 import { scoreProgression } from '@omniswim/engine';
 import type { LpSolve, Progression, Results, TeamId } from '@omniswim/engine';
+import { AdapterError, rescoreSimulator } from '@omniswim/swimcloud/browser';
 import type { ParityReport } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import { readScorerOwnTeam, readSessionPreset } from '../storage';
@@ -20,6 +21,7 @@ import { readRival } from './settingsStore';
 import { ScoreChart } from './ScoreChart';
 import { defaultSnapshotName, saveLineup, saveSnapshot } from './snapshotSave';
 import type { SaveSnapshotOutcome } from './snapshotSave';
+import type { LiveLoader } from './liveModel';
 
 export type View =
   | { kind: 'empty' }
@@ -30,6 +32,22 @@ export type View =
 
 export type ScoredView = Extract<View, { kind: 'scored' }>;
 
+/**
+ * The Score tab's view of a snapshot. It scores the RAW snapshot with `rescoreSimulator`, never the live model: the table is SwimCloud's own lineup,
+ * scored as SwimCloud scores it, and the parity report compares OmniSwim with SwimCloud (D7 decision P). A fetched roster must not reach it.
+ */
+export function viewOf(snapshot: SimSnapshot): View {
+  try {
+    const result = rescoreSimulator(snapshot, { meetKey: 'swimcloud-simulator', snapshotId: 'live-snapshot' });
+    if (result.kind === 'not_loaded') return result;
+    if (result.kind === 'preset_incomplete') return result;
+    return { kind: 'scored', snapshot, results: result.results, parity: result.parity };
+  } catch (error) {
+    if (error instanceof AdapterError) return { kind: 'error', code: error.code, reason: error.message };
+    return { kind: 'error', code: 'unexpected', reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 const teamName = (snapshot: SimSnapshot, id: string): string => teamLabel(id, snapshot.teams.find((t) => String(t.id) === id)?.name);
 
 /** What the docked panel says before there is a scored view. The Score tab shows the status; the other tabs say they wait for it. */
@@ -37,11 +55,13 @@ export function WaitingNote({ view }: { view: View }): React.ReactElement {
   return <p className="osx-status osx-status--warn" data-testid="waiting">{view.kind === 'empty' ? 'Waiting for the SwimCloud simulator results.' : 'The simulator results are not ready, see the Score tab.'}</p>;
 }
 
-export function ScoreTab({ view }: { view: View }): React.ReactElement {
+/** `rosterNote` says that a chosen roster season does not change this table (`rosterSeasonNote`). It is `null` in Simulator (current). */
+export function ScoreTab({ view, rosterNote = null }: { view: View; rosterNote?: string | null }): React.ReactElement {
   if (view.kind === 'empty') return <p data-testid="waiting">Waiting for the SwimCloud simulator results.</p>;
   return (
     <section className="osx-results" aria-live="polite">
       <h2>SwimCloud simulator</h2>
+      {rosterNote !== null && <p className="osx-status osx-status--warn" data-testid="score-roster-note">{rosterNote}</p>}
       {view.kind === 'error' && <p className="osx-status osx-status--warn" data-testid="parity">Not compared: {view.code} — {view.reason}</p>}
       {view.kind === 'not_loaded' && <p className="osx-status osx-status--warn" data-testid="parity">Not loaded: {view.missing.join(', ')}</p>}
       {view.kind === 'preset_incomplete' && <p className="osx-status osx-status--warn" data-testid="parity">Preset incomplete: {view.pending.join(', ')}</p>}
@@ -110,6 +130,8 @@ export interface SaveTabProps {
   readonly view: ScoredView;
   readonly repoForMeet: () => Promise<StorageRepo>;
   readonly solveLp: LpSolve;
+  /** Loads the live model of the snapshot (D7 decision L). A save calls it once. */
+  readonly loadLive: LiveLoader;
   /** The URL of this dashboard as a browser tab. */
   readonly tabUrl: string;
   readonly now?: () => string;
@@ -120,14 +142,14 @@ export interface SaveTabProps {
 
 type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'error'; message: string } | (SaveSnapshotOutcome & { savedAs?: 'snapshot' | 'lineup' });
 
-export function SaveTab({ view, repoForMeet, solveLp, tabUrl, undo, undoStack, now = () => new Date().toISOString(), newId = () => crypto.randomUUID() }: SaveTabProps): React.ReactElement {
+export function SaveTab({ view, repoForMeet, solveLp, loadLive, tabUrl, undo, undoStack, now = () => new Date().toISOString(), newId = () => crypto.randomUUID() }: SaveTabProps): React.ReactElement {
   const [name, setName] = React.useState('');
   const [state, setState] = React.useState<SaveState>({ kind: 'idle' });
   const [undoMessage, setUndoMessage] = React.useState('');
   const save = async (kind: 'snapshot' | 'lineup'): Promise<void> => {
     setState({ kind: 'saving' });
     try {
-      const outcome = await (kind === 'snapshot' ? saveSnapshot : saveLineup)(view.snapshot, name, { repo: await repoForMeet(), solveLp, now, newId, ...(undoStack ? { undoStack: await undoStack() } : {}) });
+      const outcome = await (kind === 'snapshot' ? saveSnapshot : saveLineup)(view.snapshot, name, { repo: await repoForMeet(), solveLp, loadLive, now, newId, ...(undoStack ? { undoStack: await undoStack() } : {}) });
       setState(outcome.kind === 'saved' ? { ...outcome, savedAs: kind } : outcome);
     } catch (cause) {
       setState({ kind: 'error', message: cause instanceof Error ? cause.message : String(cause) });
