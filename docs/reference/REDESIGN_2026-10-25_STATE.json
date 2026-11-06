@@ -53,8 +53,8 @@
     },
     "agents": {
       "claude": "The previous session used executor ad2051c440db6ce85 (engine, storage) and worker a32c73e6b18c0d4a1 (dashboard, overlay). Both were idle. Agent ids belong to that session; a new session briefs fresh agents from this file instead of using SendMessage.",
-      "codex": "No Codex worker is active. The last run, run_a365359b0be7 (E1 and F3 reviews), delivered worker_done and was released. About 27 idle Codex terminals remain open in Orca at the prompt. They hold no unsaved work and can be closed.",
-      "dispatchHelper": "scripts/orca/dispatch-codex.sh <brief-file> \"<objective>\" starts one Codex worker in the current worktree, clears the Codex update prompt, and prints run, dispatch and terminal. It replaces the literal RUNID in the brief file. Wait: until orca orchestration check --run R --json | grep -q '\"worker_done\"\\|\"escalation\"'; do sleep 30; done. Follow-up: orca terminal send --terminal T --text \"...\" --enter --wait-submit 20, then wait for \"Worked for\" on the screen. Release: orca orchestration worker-release --dispatch ctx_... (no --run flag)."
+      "codex": "No Codex worker is active. The last run, run_a365359b0be7 (E1 and F3 reviews, dispatch ctx_e092a6d5e489), is released (Orca: already_released). orca orchestration check may still replay its old worker_done; it is handled, ignore it. About 27 idle Codex terminals remain open in Orca at the prompt. They hold no unsaved work and can be closed.",
+      "dispatchHelper": "scripts/orca/dispatch-codex.sh <brief-file> \"<objective>\" starts one Codex worker in the current worktree, clears the Codex update prompt, and prints run, dispatch and terminal. It replaces the literal RUNID in the brief file. Wait: until orca orchestration check --run R --json | grep -q '\"worker_done\"\\|\"escalation\"'; do sleep 30; done. Follow-up: orca terminal send --terminal T --text \"...\" --enter --wait-submit 20, then wait for \"Worked for\" on the screen. Release: orca orchestration worker-release --dispatch ctx_... (no --run flag). Limits: it hard-codes cd /c/Users/nihar/Documents/GitHub/omniswim-suite, and it edits the brief file in place (sed -i on RUNID), so pass a copy."
     },
     "rules": [
       "A diff is reviewed by a different provider than its author (Codex reviews Claude work; architect or Codex reviews Codex work). Review notes go to docs/reference/<SLICE>_CODEX_REVIEW.md.",
@@ -69,7 +69,11 @@
       "Extra SwimCloud fetches need the user's yes. Stop on a Cloudflare challenge or a 403. Never commit raw captures.",
       "Do not click the legacy \"Copy for Omniswim\" or \"Multi team crawl (Omniswim)\" buttons. Do not submit forms without permission."
     ],
-    "budget": "2026-11-05: Budget tier full, 7d 4% used, resets in 7d."
+    "budget": "2026-11-05: Budget tier full, 7d 4% used, resets in 7d.",
+    "reviewDisposition": {
+      "E1": "docs/reference/E1_CODEX_REVIEW.md: (LOW) goal-seek restore now uses the metric alone, like the MIP and the gate; no result changes because goal seek with prefer is refused, so its penalty is 0. (MEDIUM) the explain time guard can overrun by one unit; the slowest unit measured is about 20 ms, under the 100 ms margin. Both answered in the D5 amendment 12 review note (D5-AUTOBUILDER.md, after item 9). Nothing open.",
+      "F3": "docs/reference/F3_CODEX_REVIEW.md: all three findings fixed in 498ee8e8 before the commit: an edit counter keeps edits made during a save (sessionPlannerEditor.tsx:94-99), a failed save keeps the draft and offers Discard changes, and every async handler checks alive. Nothing open except planner-meet-token (nextUnblocked)."
+    }
   },
   "decisions": "plans/2026-10-25/README.md#decisions-user-2026-10-25",
   "created": "2026-10-25",
@@ -698,7 +702,7 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
-    "RESUME (2026-11-05, after a Claude Code restart): read restartHandoff at the top of this file. 1) git status (expect only omniswim-suite/data/ untracked) and git log -4 (expect the handoff commits e3c7e281 and c42a4f2b, and a one-line fix, on top of 498ee8e8). 2) orca orchestration check --json: expect no live worker. 3) Settle restartHandoff.pendingUserRequest (the subagent config) with the user. 4) Then build restartHandoff.nextUnblocked (explanation-limit-ui, planner-meet-token), each reviewed by another provider, full gates, advisor audit, one commit each. 5) Everything else waits on the 34 questions in plans/2026-10-25/QUESTIONS_FOR_USER.md."
+    "RESUME (2026-11-05, after a Claude Code restart): read restartHandoff at the top of this file. 1) git status (expect only omniswim-suite/data/ untracked) and git log -5 (expect the handoff commits e3c7e281 and c42a4f2b, and two small state file fixes, on top of 498ee8e8). 2) orca orchestration check --json: expect no live worker. 3) Settle restartHandoff.pendingUserRequest (the subagent config) with the user. 4) Then build restartHandoff.nextUnblocked (explanation-limit-ui, planner-meet-token), each reviewed by another provider, full gates, advisor audit, one commit each. 5) Everything else waits on the 34 questions in plans/2026-10-25/QUESTIONS_FOR_USER.md."
   ],
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
