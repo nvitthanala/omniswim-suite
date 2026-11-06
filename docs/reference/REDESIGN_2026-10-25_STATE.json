@@ -6,10 +6,10 @@
     "readFirst": "This block is the current picture. Older blocks below are history; where they disagree, this block and git log win.",
     "head": "fd9412d0 is the last code commit on nvitthanala/extension-redesign (draft PR #8): 3f623254 explanation-limit panel, da77b25d planner meet token, fd9412d0 NSISC results source. A docs commit follows it (recon, decisions, questions, routing, this file). Tree clean except untracked omniswim-suite/data/ (never commit it).",
     "gatesAtHead": {
-      "status": "all green on the P4.0+F1.3a tree, run by the lead 2026-11-06 before the commits; P4.0 alone also green (lint 0, vitest 206 files, freshness after its own build)",
+      "status": "green at the F1.1a commit, lead rerun 2026-11-06; CI green at 6c338c2e (run on PR #8)",
       "buildExtension": "npm run build:extension",
       "lint": "npm run lint",
-      "vitest": "SKIP_BUDGET_ENV=local npx vitest run --maxWorkers=4 -> 208 files, 3596 tests",
+      "vitest": "SKIP_BUDGET_ENV=local npx vitest run --maxWorkers=4 -> 215 files, 3717 tests",
       "npmTest": "npm test -> 65",
       "golden": "npx tsx tests/coreReviewGoldenHarness.ts && git diff --exit-code docs/reference/golden-after-F1.json",
       "mutation": "npx vitest run tests/mutation -> 413",
@@ -29,19 +29,8 @@
     },
     "nextUnblocked": [
       {
-        "id": "F1.3a-followup",
-        "what": "Engine follow-up (blocks F1.3b and F1.2): pass sourcing into sessionLoad and captureReportFacts, make buildIndex sourcing required, mark flyover and converted-split relay legs estimated and keep usedConverted; plus event_mismatch for a wrong-event flyover leg (flip tests/engineFlyover.test.ts:495), leg-1 flyover = no time + basis_position, an evaluator parity test with a flyover leg and a converted split",
-        "owner": "executor",
-        "scope": "packages/engine/src/{planner,report,model,autobuilder}, every caller of captureReportFacts in apps/extension/src/dashboard",
-        "status": "dispatched 2026-11-06"
-      },
-      {
-        "id": "F1.1a",
-        "what": "Roster + class year in the panel, first consumer of fetch-run. Acceptance includes the P4.0 follow-ups: forward the season list (onSeasons), check the heading Season {label} {Men|Women}, check item indices 0..delivered-1, treat a missing fetch-end after reconnect as failed, refuse an unmapped Class word (U7), keep the dash as unknown",
-        "owner": "executor",
-        "scope": "apps/extension (panel side) per D7 F1.1a",
-        "precheck": "confirm the raw /api/seasonchoices/ body shape (keys, date strings, current marker) with one same-origin fetch from the simulator tab before relying on parseSeasonChoices",
-        "status": "dispatched 2026-11-06"
+        "id": "liveModel",
+        "what": "D7 section 8 step 4b, alone (touches Score, Build and Plan). Brief only after reading decision L; architect spec first if L does not fix the seam. Acceptance: simulator-current mode leaves golden and LP baselines unchanged; snapshotSave and the report read the same enriched model the results were scored from; rescoreSimulator untouched; F1.1a ruling 2 requirements."
       }
     ],
     "thenDesignNext": "P8 opponent prediction needs a design pass (architect) before any build. Ask the user before starting it.",
@@ -117,6 +106,7 @@
         "F1.3a engine flyover + non-SCY splits + recordedEventKeyFor",
         "live visit (D7 section 9; check 9 needs the extension loaded)",
         "F1.1a roster + class year",
+        "liveModel wiring of roster membership (F1.1a follow-up 0)",
         "F1.3b split window",
         "F1.2 LCM",
         "F1.1 wider window"
@@ -163,7 +153,7 @@
           "commit": "9f8b38a0"
         },
         "F1.1a": {
-          "status": "built-blocked-on-boundary-ruling-and-architect-review",
+          "status": "done",
           "owner": "executor",
           "scope": "packages/swimcloud/**, apps/extension/** except dashboard/snapshotSave.ts; no packages/engine",
           "seasonchoicesRaw": "2026-11-06 live: bare array of {seasonId:number,label,startDate YYYY-MM-DD,endDate YYYY-MM-DD,isCurrent:boolean}, one current row, 10 rows; matches parseSeasonChoices",
@@ -175,7 +165,17 @@
             "a page with no Class column is flagged, not refused: confirm",
             "T-R1 counts describe a 2026-27 page with no capture: tested against the committed 2025-26 counts (user approval needed for a capture)",
             "D7 finding 8 correction: the UWF empty page has a checked gender radio; the parser cross-checks it"
-          ]
+          ],
+          "review": "docs/reference/F1_1A_ROSTER_ARCHITECT_REVIEW.md",
+          "followUps": [
+            "liveModel.ts wiring (decision L; unassigned in D7 section 8): apply rosters after adaptSimulatorSnapshot, drop or report scorer tags on not_member, store the season choice outside useState, pass class years for every team, never touch rescoreSimulator; before F1.3b",
+            "save validated pages of a stopped run (Saved k of n), never after out-of-order, wrong-path, incomplete or port-lost",
+            "enrich.ts sets classYear null for teams without class years (wiring must pass every team)",
+            "T-R1 counts pinned to 2025-26 until a 2026-27 capture is approved (U12)"
+          ],
+          "commit": "the commit that carries this state change (Add the roster season and class year fetch)",
+          "gates": "2026-11-06 lead rerun: build 0, lint 0, vitest 215 files 3717 tests, npm test 65, mutation 413, golden unchanged, lpBaseline 5 identical, bundle leak only autobuilder.worker.js, sim-bridge 5784 B; harness 2 passed (executor)",
+          "notProvenLive": "the Rosters tab and the fetch path have never run in a real browser; live check 9 (isolated-world fetch) needs the user to load apps/extension/dist (E4)"
         },
         "F1.3b": {
           "status": "pending",
@@ -205,6 +205,12 @@
           "fixReport": "2026-11-06: MEDIUM-A (unnameable leg event -> event_mismatch), LOW-C (LegOption.usedConverted removed), LOW-D/LOW-B docs (D2:682, D5:142; leg-1 flyover is quiet by design: rival relay keeps no_time with basis_position in results.violations only; own built relay is replaced by the solver), LOW-E test; targeted 10 files 221 passed, mutation 413, golden unchanged, lpBaseline 5 identical. Lead fixed D2:676 (SourcingSettings).",
           "commit": "the commit that carries this state change (Pass sourcing to the planner and report)",
           "isolatedGates": "2026-11-06 lead, slice alone (F1.1a files backed up and restored, sha256 identical): build 0, lint 0, vitest 210 files 3620 tests, npm test 65, mutation 413, golden unchanged, lpBaseline 5 identical, bundle leak only autobuilder.worker.js; harness: CI"
+        },
+        "liveModel": {
+          "status": "next",
+          "why": "F1.1a ruling 2",
+          "blocks": "F1.3b",
+          "spec": "D7 section 8 step 4b; decision L (one builder serves autoBuilderRequest.ts:150, scorerTagScoring.ts:40/81, suggestedRosters.ts:16; the literals at scorerTagScoring.ts:88 and suggestedRosters.ts:31 go)"
         }
       },
       "review": "Each executor diff: architect review under R83 until the user signs Cursor in; note in docs/reference/<SLICE>_ARCHITECT_REVIEW.md",

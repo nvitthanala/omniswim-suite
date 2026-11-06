@@ -68,6 +68,14 @@ export async function saveAccent(repo: StorageRepo, hex: string): Promise<void> 
   await updateSetting(repo, 'accent', () => hex);
 }
 
+/** Default `'off'` (R7, D7 U5): no extra SwimCloud request is made until the coach turns this on. */
+export async function readFetchPosture(repo: StorageRepo): Promise<'off' | 'on-click'> {
+  return (await readSetting(repo, 'fetchPosture')) ?? 'off';
+}
+
+/** Store the fetch posture. Nothing else reads it to start a request: the Rosters tab does, from a click. */
+export const saveFetchPosture = (repo: StorageRepo, posture: 'off' | 'on-click'): Promise<void> => updateSetting(repo, 'fetchPosture', () => posture);
+
 export async function saveCutCloseThreshold(repo: StorageRepo, value: number): Promise<void> {
   closeThresholdFromPercent(value);
   await updateSetting(repo, 'cutCloseThresholdPct', () => value);

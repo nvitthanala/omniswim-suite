@@ -38,6 +38,8 @@ import { MeetsView, PresetsSlot, SettingsView } from './tabHost';
 import type { SettingsSubscribe } from './tabHost';
 import { meetKeyForSnapshot } from './meetKey';
 import { readSetting, readThemeSettings } from './settingsStore';
+import { createRosterFlow } from './rosterFlow';
+import { RosterTab } from './rosterTab';
 
 export type DashboardHost = 'tab' | 'docked';
 
@@ -76,6 +78,7 @@ function DockedApp({ view }: { view: View }): React.ReactElement {
     { id: 'chart', label: 'Chart', render: ({ expanded, active }) => (scored ? <ChartTab view={scored} repoForMeet={repoForTags} expanded={expanded} active={active} /> : <WaitingNote view={view} />) },
     { id: 'build', label: 'Build', render: () => (scored ? <AutoBuilderPanel snapshot={scored.snapshot} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} undoStack={undoStackForDashboard} onStatus={postAutoBuildStatus} /> : <WaitingNote view={view} />) },
     { id: 'plan', label: 'Plan', render: () => (scored ? <SessionPlannerEditor snapshot={scored.snapshot} repoForMeet={repoForTags} subscribe={subscribeToPlanner} /> : <WaitingNote view={view} />) },
+    { id: 'rosters', label: 'Rosters', render: ({ active }) => (scored ? <RosterTab snapshot={scored.snapshot} flow={rosterFlow} repoForMeet={repoForTags} active={active} /> : <WaitingNote view={view} />) },
     { id: 'save', label: 'Save', render: () => (scored ? <SaveTab view={scored} repoForMeet={repoForTags} solveLp={solveForAutoBuilder} tabUrl={tabUrl} undo={async () => (await undoStackForDashboard()).undo()} undoStack={undoStackForDashboard} /> : <WaitingNote view={view} />) },
   ];
   return <DockedShell tabs={tabs} hostLabel="host: docked" onSize={postPanelSize} />;
@@ -123,6 +126,15 @@ function postPanelMessage(message: unknown): void {
   const port = latestPanelPort;
   postPanelMessageSafely(port, message, () => { if (latestPanelPort === port) latestPanelPort = null; });
 }
+/** Roster fetches (F1.1a). The run message must reach a live port: a lost message would leave the run waiting for a `fetch-end` that never comes. */
+const rosterFlow = createRosterFlow({
+  post: (message) => {
+    if (!latestPanelPort) throw new Error('the SwimCloud page is not connected');
+    latestPanelPort.postMessage(message);
+  },
+  newRunId: () => crypto.randomUUID(),
+  repo: () => repoForTags(),
+});
 let sessionScheduleError: string | undefined;
 let tagRepo: Promise<StorageRepo> | undefined;
 /** The tab host's Settings view listens here for a settings change another context made. */
@@ -274,9 +286,10 @@ const panel = nonce ? listenForPanelPort(chrome.runtime, nonce, (snapshot) => {
   window.dispatchEvent(new CustomEvent('osx-snapshot', { detail: snapshot }));
   postPanelMessage({ kind: 'scorer-tags-loading' });
   void publishTagState();
-}, action => { void handleTagAction(action); }, port => { latestPanelPort = port; void publishTagState(); void applyStoredTheme(); if (panelSize !== 'compact') postPanelSize(panelSize); }, raw => { void handleSessionPresetEdit(raw); },
+}, action => { void handleTagAction(action); }, port => { latestPanelPort = port; rosterFlow.portChanged(); void publishTagState(); void applyStoredTheme(); if (panelSize !== 'compact') postPanelSize(panelSize); }, raw => { void handleSessionPresetEdit(raw); },
 // A closed port takes no more messages. Only the port in use is dropped: a newer connect may already have replaced it.
-closed => { if (latestPanelPort === closed) latestPanelPort = null; }) : null;
+closed => { if (latestPanelPort === closed) { latestPanelPort = null; rosterFlow.portChanged(); } },
+{ onFetchMessage: message => rosterFlow.handle(message), onSeasons: seasons => rosterFlow.setSeasons(seasons) }) : null;
 // `__OSX_HARNESS__` is false in the production build, so esbuild drops this call and the probe.
 if (__OSX_HARNESS__) installHarness(host ?? 'unknown', panel);
 void applyStoredTheme();

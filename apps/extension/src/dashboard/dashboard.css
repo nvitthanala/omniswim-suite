@@ -224,3 +224,13 @@ body {
   --osx-accent-soft: color-mix(in srgb, var(--osx-accent) 12%, var(--osx-surface)) !important;
 }
 }
+
+/* Rosters tab (F1.1a). Tokens only, so Dark, Light and a custom accent all apply. */
+.osx-roster h2 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.osx-roster h3 { margin: 12px 0 4px; font-size: 13px; font-weight: 600; }
+.osx-roster-note { margin: 0 0 8px; font-size: 12px; color: var(--osx-fg-muted); }
+.osx-roster-line { display: block; margin: 6px 0; font-size: 12px; }
+.osx-roster-teams { margin: 0; padding-left: 18px; font-size: 12px; }
+.osx-roster table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.osx-roster th, .osx-roster td { padding: 4px 6px; border-bottom: 1px solid var(--osx-border); text-align: left; }
+.osx-roster select { max-width: 100%; }

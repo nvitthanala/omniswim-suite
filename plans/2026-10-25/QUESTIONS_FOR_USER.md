@@ -262,3 +262,11 @@ need U1.
   you to open the roster page in a tab. Keep?
 - **U11.** Build the wider window at all? It adds only older swims of
   current swimmers for the same team. Default: build it last.
+- **U12 (new, 2026-11-06).** Save one real 2026-27 roster page as a test
+  capture? D7's roster test numbers (team 58: 42 men, FR 8, SO 12, JR 12,
+  SR 7, 3 with no class) come from the live 2026-27 page, but no capture of
+  that page is in the repo. The tests use the committed 2025-26 captures.
+  Default: no; keep the 2025-26 captures.
+- **U13 (new, 2026-11-06).** The fetch on/off switch now sits in the
+  Rosters tab, because there is no Settings screen yet. It is still off
+  until you turn it on. Keep it there for now? Default: yes.

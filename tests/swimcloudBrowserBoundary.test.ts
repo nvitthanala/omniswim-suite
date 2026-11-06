@@ -4,8 +4,14 @@
  *
  * Boundary of `@omniswim/swimcloud/browser` (plans/2026-10-25/01-REDESIGN-PLAN.md, section 3.1,
  * invariant 7). The extension bundles this folder into a browser page, so it may import only
- * `@omniswim/engine` and its own files. It never imports `node:*`, `playwright-core`, or a file of
- * the swimcloud package outside `browser/`.
+ * `@omniswim/engine`, its own files, and the ten shared pure parser files named in SHARED_PURE.
+ * It never imports `node:*`, `playwright-core`, or any other file of the swimcloud package.
+ *
+ * Invariant 7 is about Node and Playwright code. The roster fetch reader (D7 section 1) wraps the
+ * existing page parsers and does not edit them, so it must reach them. SHARED_PURE keeps the
+ * guarantee: each listed file imports no `node:*`, no package but the engine, no file but a listed
+ * one, and names no Node or browser-only global. A test fails if the files the browser folder really
+ * reaches differ from the list, in either direction.
  *
  * The scan reads each file with the TypeScript parser, so a word in a comment never trips it. The
  * scanner has its own tests, so a scanner that stops matching fails here.
@@ -15,7 +21,26 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 
-const BROWSER = join(process.cwd(), 'packages', 'swimcloud', 'src', 'browser');
+const SRC = join(process.cwd(), 'packages', 'swimcloud', 'src');
+const BROWSER = join(SRC, 'browser');
+
+/**
+ * The files of `packages/swimcloud/src/` that `browser/` may import, by name without `.ts`. They are
+ * the page parsers and their helpers. This is the exact set the browser folder reaches: the test
+ * "the browser folder reaches exactly SHARED_PURE" fails if an entry is stale or a new one is missing.
+ */
+const SHARED_PURE: readonly string[] = [
+  'entities',
+  'html',
+  'indexed',
+  'parseCells',
+  'parseElements',
+  'parseResult',
+  'rosterPage',
+  'swimFields',
+  'teamSeasons',
+  'urlClassifier',
+];
 
 /** Every module specifier a source text imports, re-exports, `import()`s or `require()`s. */
 function specifiersOf(text: string, fileName = 'x.ts'): string[] {
@@ -38,15 +63,57 @@ function specifiersOf(text: string, fileName = 'x.ts'): string[] {
   return out;
 }
 
-/** The reason a specifier is not allowed in `browser/`, or `null`. */
-function banned(specifier: string): string | null {
-  if (specifier.startsWith('./')) return /\.\.\//.test(specifier) ? 'leaves browser/' : null;
-  if (specifier.startsWith('../') || specifier === '..' || specifier.startsWith('/')) return 'leaves browser/';
+/** A relative specifier of the form `<prefix><name>` with no further slash; the name, or `null`. */
+function bareName(specifier: string, prefix: string): string | null {
+  if (!specifier.startsWith(prefix)) return null;
+  const name = specifier.slice(prefix.length);
+  return name.length > 0 && !name.includes('/') && !name.startsWith('.') ? name : null;
+}
+
+/**
+ * The reason a specifier is not allowed, or `null`. `from` is where the importing file lives:
+ * `browser` for `browser/*.ts`, `shared` for a file named in SHARED_PURE.
+ */
+function banned(specifier: string, from: 'browser' | 'shared'): string | null {
   if (specifier === '@omniswim/engine' || specifier.startsWith('@omniswim/engine/')) return null;
+  if (from === 'browser') {
+    if (specifier.startsWith('./')) return /\.\.\//.test(specifier) ? 'leaves browser/' : null;
+    const name = bareName(specifier, '../');
+    if (name !== null) return SHARED_PURE.includes(name) ? null : `a swimcloud file that is not in SHARED_PURE ("${name}")`;
+    if (specifier.startsWith('../') || specifier === '..' || specifier.startsWith('/')) return 'leaves browser/';
+  } else {
+    const name = bareName(specifier, './');
+    if (name !== null) return SHARED_PURE.includes(name) ? null : `a file that is not in SHARED_PURE ("${name}")`;
+    if (specifier.startsWith('.') || specifier.startsWith('/')) return 'leaves the shared pure files';
+  }
   if (specifier.startsWith('node:')) return 'a node: module';
   if (specifier === 'playwright-core' || specifier.startsWith('playwright-core/')) return 'playwright-core';
   if (specifier.startsWith('@omniswim/')) return 'another @omniswim package';
   return `a package other than @omniswim/engine ("${specifier}")`;
+}
+
+/** The shared files `browser/` reaches by relative imports, followed through the shared files themselves. */
+function reachedShared(): { readonly reached: string[]; readonly problems: string[] } {
+  const reached = new Set<string>();
+  const problems: string[] = [];
+  const queue: string[] = [];
+  for (const file of readdirSync(BROWSER).filter((f) => f.endsWith('.ts'))) {
+    for (const specifier of specifiersOf(readFileSync(join(BROWSER, file), 'utf8'), file)) {
+      const name = bareName(specifier, '../');
+      if (name !== null) queue.push(name);
+      else if (specifier.startsWith('../')) problems.push(`${file}: "${specifier}" is not a bare ../<name> import`);
+    }
+  }
+  for (let name = queue.pop(); name !== undefined; name = queue.pop()) {
+    if (reached.has(name)) continue;
+    reached.add(name);
+    for (const specifier of specifiersOf(readFileSync(join(SRC, `${name}.ts`), 'utf8'), `${name}.ts`)) {
+      const next = bareName(specifier, './');
+      if (next !== null) queue.push(next);
+      else if (specifier.startsWith('.')) problems.push(`${name}.ts: "${specifier}" is not a bare ./<name> import`);
+    }
+  }
+  return { reached: [...reached].sort(), problems };
 }
 
 describe('swimcloud browser boundary', () => {
@@ -63,7 +130,7 @@ describe('swimcloud browser boundary', () => {
     for (const file of files) {
       for (const specifier of specifiersOf(readFileSync(join(BROWSER, file), 'utf8'), file)) {
         seen += 1;
-        const why = banned(specifier);
+        const why = banned(specifier, 'browser');
         if (why !== null) problems.push(`${file}: "${specifier}" is ${why}`);
       }
     }
@@ -71,13 +138,28 @@ describe('swimcloud browser boundary', () => {
     expect(problems).toEqual([]);
   });
 
-  it('no file names a Node global or a browser-only global', () => {
+  it('the browser folder reaches exactly SHARED_PURE, and each shared file imports only the engine and other shared files', () => {
+    const { reached, problems } = reachedShared();
+    expect(problems).toEqual([]);
+    expect(reached).toEqual([...SHARED_PURE].sort());
+    const bad: string[] = [];
+    for (const name of SHARED_PURE) {
+      for (const specifier of specifiersOf(readFileSync(join(SRC, `${name}.ts`), 'utf8'), `${name}.ts`)) {
+        const why = banned(specifier, 'shared');
+        if (why !== null) bad.push(`${name}.ts: "${specifier}" is ${why}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('no file, in browser/ or in SHARED_PURE, names a Node global or a browser-only global', () => {
     const globals = /\b(process|Buffer|__dirname|require|window|document|chrome|localStorage|fetch)\b/;
     const problems: string[] = [];
-    for (const file of files) {
-      const source = ts.createSourceFile(file, readFileSync(join(BROWSER, file), 'utf8'), ts.ScriptTarget.ES2022, true);
+    const paths = [...files.map((f) => join(BROWSER, f)), ...SHARED_PURE.map((n) => join(SRC, `${n}.ts`))];
+    for (const file of paths) {
+      const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.ES2022, true);
       const visit = (node: ts.Node): void => {
-        if (ts.isIdentifier(node) && globals.test(node.text) && !ts.isPropertyAccessExpression(node.parent)) problems.push(`${file}: ${node.text}`);
+        if (ts.isIdentifier(node) && globals.test(node.text) && !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node)) problems.push(`${file}: ${node.text}`);
         ts.forEachChild(node, visit);
       };
       visit(source);
@@ -100,17 +182,37 @@ describe('the boundary scanner', () => {
     expect(specifiersOf(text)).toEqual(['./a', '@omniswim/engine', './c', 'node:fs', 'playwright-core', '../x', '@omniswim/swimcloud']);
   });
 
-  it('flags each banned kind and allows the two permitted ones', () => {
-    expect(banned('./adapt')).toBeNull();
-    expect(banned('@omniswim/engine')).toBeNull();
-    expect(banned('@omniswim/engine/lib/cutlineEventNames')).toBeNull();
-    expect(banned('node:fs')).not.toBeNull();
-    expect(banned('playwright-core')).not.toBeNull();
-    expect(banned('../crawler')).not.toBeNull();
-    expect(banned('@omniswim/swimcloud')).not.toBeNull();
-    expect(banned('@omniswim/db')).not.toBeNull();
-    expect(banned('zod')).not.toBeNull();
-    expect(banned('react')).not.toBeNull();
+  it('flags each banned kind and allows the permitted ones', () => {
+    expect(banned('./adapt', 'browser')).toBeNull();
+    expect(banned('@omniswim/engine', 'browser')).toBeNull();
+    expect(banned('@omniswim/engine/lib/cutlineEventNames', 'browser')).toBeNull();
+    expect(banned('node:fs', 'browser')).not.toBeNull();
+    expect(banned('playwright-core', 'browser')).not.toBeNull();
+    expect(banned('../crawler', 'browser')).not.toBeNull();
+    expect(banned('@omniswim/swimcloud', 'browser')).not.toBeNull();
+    expect(banned('@omniswim/db', 'browser')).not.toBeNull();
+    expect(banned('zod', 'browser')).not.toBeNull();
+    expect(banned('react', 'browser')).not.toBeNull();
+  });
+
+  it('allows a listed shared file from browser/ and nothing else outside it', () => {
+    expect(banned('../rosterPage', 'browser')).toBeNull();
+    for (const name of SHARED_PURE) expect(banned(`../${name}`, 'browser'), name).toBeNull();
+    expect(banned('../crawlPlan', 'browser')).not.toBeNull();
+    expect(banned('../../x', 'browser')).not.toBeNull();
+    expect(banned('../rosterPage/x', 'browser')).not.toBeNull();
+    expect(banned('..', 'browser')).not.toBeNull();
+    expect(banned('./../rosterPage', 'browser')).not.toBeNull();
+  });
+
+  it('a shared file may import the engine and another listed file, and nothing else', () => {
+    expect(banned('./html', 'shared')).toBeNull();
+    expect(banned('@omniswim/engine', 'shared')).toBeNull();
+    expect(banned('./fetcher', 'shared')).not.toBeNull();
+    expect(banned('./browser/adapt', 'shared')).not.toBeNull();
+    expect(banned('../x', 'shared')).not.toBeNull();
+    expect(banned('node:fs', 'shared')).not.toBeNull();
+    expect(banned('zod', 'shared')).not.toBeNull();
   });
 
   it('ignores a banned word in a comment or a string', () => {

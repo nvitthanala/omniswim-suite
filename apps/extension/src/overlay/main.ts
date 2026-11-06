@@ -49,4 +49,5 @@ window.addEventListener('message', (event: MessageEvent) => {
   latestParity = report;
   pagePanel.refresh();
 });
-startOverlay(window, console, (snapshot) => panel.sendSnapshot(snapshot), () => pagePanel.setApplyStatus('Acknowledged: simulator settings match the requested values.'));
+// The sixth argument is the page's own season list (D7 section 3). The docked panel needs it for the roster-season choices.
+startOverlay(window, console, (snapshot) => panel.sendSnapshot(snapshot), () => pagePanel.setApplyStatus('Acknowledged: simulator settings match the requested values.'), undefined, (seasons) => panel.sendSeasons(seasons));

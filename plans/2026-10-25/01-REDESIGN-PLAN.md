@@ -595,6 +595,10 @@ From `docs/INVARIANTS.md` (numbers as there). Each becomes a test in
 - #6 The alias resolver is opt-in; a missing resolver double-counts.
 - #7 A bare `@omniswim/swimcloud` import pulls Node and Playwright code. The
   extension imports only the browser entry. A bundle test enforces it.
+  The browser entry may also import ten pure parser files outside
+  `browser/` (SHARED_PURE in `tests/swimcloudBrowserBoundary.test.ts`,
+  architect ruling 2026-11-06, F1.1a). None of them reaches Node or
+  Playwright, and the test fails if the list goes stale.
 - #8 `isRankableSwim` is the only best-time gate.
 - #9 A SwimCloud `A` time is never adjusted again.
 - #10 SCM to SCY truncates and uses the team's division table.

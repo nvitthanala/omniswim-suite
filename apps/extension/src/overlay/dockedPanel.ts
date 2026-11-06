@@ -18,9 +18,9 @@
  * retries a few times if the port closes before the first reply.
  */
 import { THEME_ATTRIBUTE } from '../shared/theme';
-import { isPanelPong, isPanelSnapshot, panelPortName } from '../shared/panelProtocol';
-import type { PanelPing, PanelSnapshot } from '../shared/panelProtocol';
-import type { SimSnapshot } from '../shared/bridgeSchema';
+import { isPanelPong, isPanelSnapshot, panelPortName, parseSeasonsState } from '../shared/panelProtocol';
+import type { PanelPing, PanelSnapshot, SeasonsStateMessage } from '../shared/panelProtocol';
+import type { ParsedSeasonChoices, SimSnapshot } from '../shared/bridgeSchema';
 
 /** The slice of a `chrome.runtime.Port` this file uses. A test passes a fake. */
 export interface PanelPort {
@@ -55,6 +55,8 @@ export interface DockedPanel {
   /** The URL the iframe loads, `#<nonce>` included. */
   readonly url: string;
   sendSnapshot(snapshot: SimSnapshot): void;
+  /** The page's checked season list. The latest list is kept and sent again after every reconnect, as the snapshot is. A list that fails the check is not sent. */
+  sendSeasons(seasons: Extract<ParsedSeasonChoices, { ok: true }>): void;
   sendMessage(message: unknown): void;
   onMessage(listener: (message: unknown) => void): void;
   /** Called when the live port closes, before any reconnect. A message sent while there is no port is lost. */
@@ -103,6 +105,7 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
   let pings = 0;
   let activePort: PanelPort | null = null;
   let latest: PanelSnapshot | null = null;
+  let latestSeasons: SeasonsStateMessage | null = null;
   const messageListeners = new Set<(message: unknown) => void>();
   const disconnectListeners = new Set<() => void>();
   const connect = (): void => {
@@ -111,6 +114,7 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
     const port = runtime.connect({ name: panelPortName(nonce) });
     activePort = port;
     if (latest) port.postMessage(latest);
+    if (latestSeasons) port.postMessage(latestSeasons);
     port.onMessage.addListener((message) => {
       // Only our own iframe holds our nonce, so only it can answer with it.
       if (!isPanelPong(message) || message.nonce !== nonce) return;
@@ -150,6 +154,12 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
       const message: PanelSnapshot = { kind: 'simulator-snapshot', snapshot };
       if (!isPanelSnapshot(message)) return;
       latest = message;
+      activePort?.postMessage(message);
+    },
+    sendSeasons(seasons) {
+      const message: SeasonsStateMessage = { kind: 'seasons-state', seasons: seasons.seasons.map((s) => ({ ...s })) };
+      if (!parseSeasonsState(message)) return;
+      latestSeasons = message;
       activePort?.postMessage(message);
     },
   };

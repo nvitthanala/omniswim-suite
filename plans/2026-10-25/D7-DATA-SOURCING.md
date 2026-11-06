@@ -225,6 +225,7 @@ Risk: core, executor.
 | 2 | F1.3a engine (includes K, `splitScyValue`) | — | 1 |
 | 3 | Live visit (section 9) | user present for check 9 (extension loaded) | — |
 | 4 | F1.1a | live checks 1-5, 10 | — |
+| 4b | liveModel wiring (added 2026-11-06, F1.1a ruling 2): `dashboard/liveModel.ts` (decision L) applies roster membership after `adaptSimulatorSnapshot`, drops or reports scorer tags on `not_member` swimmers, stores the roster-season choice outside component state, passes class years for every team, never touches `rescoreSimulator` | 4 | — (touches Score, Build and Plan in `main.tsx`) |
 | 5 | F1.3b | step 1 season list | serial with 4 (shares `enrich.ts`) |
 | 6 | F1.2 | live check 6 | — |
 | 7 | F1.1 | live checks 7-8 | — |

@@ -10,10 +10,10 @@
  * the host page shares the content script's origin and could forge a "save lineup" message.
  */
 
-import { simSnapshotSchema } from './bridgeSchema';
+import { parseSeasonChoices, simSnapshotSchema } from './bridgeSchema';
 import { isHexColor } from './theme';
 import type { ThemePreference } from './theme';
-import type { SimSnapshot } from './bridgeSchema';
+import type { ParsedSeasonChoices, SeasonChoice, SimSnapshot } from './bridgeSchema';
 import { FETCH_FEATURES } from './fetchProtocol';
 import type { FetchFeature, FetchTarget } from './fetchProtocol';
 import type { PresetRef } from '../storage/schema';
@@ -250,4 +250,76 @@ export function isFetchCancel(m: unknown): m is FetchCancelMessage {
   if (!m || typeof m !== 'object') return false;
   const v = m as Partial<Record<keyof FetchCancelMessage, unknown>>;
   return v.kind === 'fetch-cancel' && typeof v.runId === 'string';
+}
+
+// ---- Overlay to panel: run progress, parsed strictly (F1.1a) --------------------------------------------------------------------------
+// The overlay is a content script in the host page's origin. The panel treats every message from it as untrusted data: each guard checks every
+// field and returns a copy, never the object it was given. A message that fails a guard is dropped by the caller.
+
+export const FETCH_STOP_REASONS: readonly FetchStopReason[] = ['challenge', 'forbidden', 'rate-limited', 'server-error', 'unexpected-status', 'network',
+  'redirected', 'cancelled', 'lock-held', 'lock-unavailable', 'busy', 'refused', 'internal'];
+
+const isRunId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 128;
+const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
+const isIsoInstant = (v: unknown): v is string => typeof v === 'string' && ISO_INSTANT.test(v) && !Number.isNaN(Date.parse(v));
+
+export function parseFetchProgress(m: unknown): FetchProgressMessage | null {
+  if (!m || typeof m !== 'object') return null;
+  const v = m as Record<string, unknown>;
+  if (v.kind !== 'fetch-progress' || !isRunId(v.runId) || !isCount(v.index) || !isCount(v.waitMs)) return null;
+  if (v.why !== 'start' && v.why !== 'pacing' && v.why !== 'rate-limited') return null;
+  return { kind: 'fetch-progress', runId: v.runId, index: v.index, waitMs: v.waitMs, why: v.why };
+}
+
+export function parseFetchItem(m: unknown): FetchItemMessage | null {
+  if (!m || typeof m !== 'object') return null;
+  const v = m as Record<string, unknown>;
+  if (v.kind !== 'fetch-item' || !isRunId(v.runId) || !isCount(v.index)) return null;
+  if (typeof v.path !== 'string' || typeof v.finalPath !== 'string' || typeof v.contentType !== 'string' || typeof v.body !== 'string') return null;
+  if (!isIsoInstant(v.fetchedAt)) return null;
+  return { kind: 'fetch-item', runId: v.runId, index: v.index, path: v.path, finalPath: v.finalPath, contentType: v.contentType, body: v.body, fetchedAt: v.fetchedAt };
+}
+
+export function parseFetchEnd(m: unknown): FetchEndMessage | null {
+  if (!m || typeof m !== 'object') return null;
+  const v = m as Record<string, unknown>;
+  if (v.kind !== 'fetch-end' || !isRunId(v.runId) || !isCount(v.delivered)) return null;
+  if (v.stopped === null) return { kind: 'fetch-end', runId: v.runId, delivered: v.delivered, stopped: null };
+  if (!v.stopped || typeof v.stopped !== 'object') return null;
+  const s = v.stopped as Record<string, unknown>;
+  if (!FETCH_STOP_REASONS.includes(s.reason as FetchStopReason) || !isCount(s.index) || !isCount(s.status) || typeof s.detail !== 'string') return null;
+  return { kind: 'fetch-end', runId: v.runId, delivered: v.delivered, stopped: { reason: s.reason as FetchStopReason, index: s.index, status: s.status, detail: s.detail } };
+}
+
+export type FetchOverlayMessage = FetchProgressMessage | FetchItemMessage | FetchEndMessage;
+
+/** The overlay's run message, or `null` for anything that is not exactly one. */
+export function parseFetchOverlayMessage(m: unknown): FetchOverlayMessage | null {
+  const kind = m && typeof m === 'object' ? (m as { kind?: unknown }).kind : undefined;
+  if (kind === 'fetch-progress') return parseFetchProgress(m);
+  if (kind === 'fetch-item') return parseFetchItem(m);
+  if (kind === 'fetch-end') return parseFetchEnd(m);
+  return null;
+}
+
+// ---- Overlay to panel: the page's season list --------------------------------------------------------------------------------------------
+
+/**
+ * The checked season list from the page's own `GET /api/seasonchoices/` (D7 section 3). The overlay checks it once with `parseSeasonChoices`
+ * and the panel checks it again, so a forged port message cannot add a season. The overlay keeps the latest list and sends it again after
+ * every reconnect, as it does the snapshot.
+ */
+export interface SeasonsStateMessage {
+  readonly kind: 'seasons-state';
+  readonly seasons: readonly SeasonChoice[];
+}
+
+/** The checked list, or `null`. Re-runs `parseSeasonChoices`; the returned rows are copies. */
+export function parseSeasonsState(m: unknown): ParsedSeasonChoices & { ok: true } | null {
+  if (!m || typeof m !== 'object') return null;
+  const v = m as { kind?: unknown; seasons?: unknown };
+  if (v.kind !== 'seasons-state') return null;
+  const parsed = parseSeasonChoices(v.seasons);
+  return parsed.ok ? parsed : null;
 }

@@ -4,9 +4,11 @@
  *
  * `@omniswim/swimcloud/browser`: the browser-safe entry (plan section 3.1, invariant 7).
  *
- * It imports only `@omniswim/engine` and files in this folder. It never imports `node:*`,
- * `playwright-core`, or a swimcloud file outside `browser/` (`tests/swimcloudBrowserBoundary.test.ts`
- * scans for all three). The extension imports this entry and nothing else from the package.
+ * It imports only `@omniswim/engine`, files in this folder, and the ten shared pure parser files
+ * listed as SHARED_PURE in `tests/swimcloudBrowserBoundary.test.ts` (the roster reader wraps the page
+ * parsers, D7 section 1). It never imports `node:*`, `playwright-core`, or any other swimcloud file.
+ * The test scans for all of these and fails if the shared files reached differ from the list. The
+ * extension imports this entry and nothing else from the package.
  *
  * P2: the simulator adapter, the SwimCloud rule preset, and the parity report.
  */
@@ -35,3 +37,7 @@ export { AdapterError } from './simulatorTypes';
 export { parseSwimCloudHundredths } from './times';
 export type { BestRelaySplit, HistorySource, TeamHistoryOptions, TimesByEventOptions } from './history';
 export { bestRelaySplitsAcrossTeams, parseTeamRelayHistory, parseTimesByEventResponse, teamsFromTimesByEvent } from './history';
+export type { RosterClassCode, RosterFetchInput, RosterFetchOutcome, RosterFetchRefusalCode, RosterFetchTarget } from './rosterFetch';
+export { findRosterPagination, readRosterFetch } from './rosterFetch';
+export type { EnrichInput, EnrichMode, EnrichResult, RemovedEntry, RosterEvidence, TeamEnrichment, TeamRosterStatus } from './enrich';
+export { enrichRosterMembership } from './enrich';
