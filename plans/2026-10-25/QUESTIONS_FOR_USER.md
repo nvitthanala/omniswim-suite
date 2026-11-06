@@ -238,3 +238,27 @@ never appeared. Change the threshold in Settings. Keep 1.0 %?
 it in Excel. Does a seed time such as "1:52.34" read back exactly as
 written, and does "José" show correctly? Excel runs only on your machine,
 so I cannot check this myself.
+
+## P4. Data sourcing (plans/2026-10-25/D7-DATA-SOURCING.md section 10, added 2026-11-05)
+
+The build uses each default until you answer. The most important is U1:
+the approved LCM route (one request per team) returns only swims recorded
+for that team, and recon got zero LCM rows from it. So converted LCM swims
+need U1.
+
+- **U1.** Fetch cross-team LCM swims per swimmer (about 120 requests, 6
+  minutes, for 3 teams)? Default: no; show "no LCM swims" honestly.
+- **U2.** Also fetch SCM swims (one more request per team)? Default: no.
+- **U3.** Fetch per-swimmer dated history for transfers, former members and
+  robust mode? Default: no.
+- **U4.** Keep fetched team data after a reload? Default: no, session only.
+- **U5.** Fetching stays off until you turn it on once in Settings. Keep?
+- **U6.** "Include converted swims" starts off per meet. Keep?
+- **U7.** A roster with a class word the parser does not know is refused
+  whole. Keep?
+- **U8.** A roster that spans several pages is refused (R86 approved one
+  page). Keep?
+- **U9.** If SwimCloud challenges a background roster fetch: stop and ask
+  you to open the roster page in a tab. Keep?
+- **U11.** Build the wider window at all? It adds only older swims of
+  current swimmers for the same team. Default: build it last.

@@ -91,7 +91,49 @@
       "R94: archive 2026 NSISC results PDF, settle config C 100 IM and small-field 1650",
       "R89: live Chrome check incl. Apply",
       "P4: R84-R88 fetches and their pipeline"
-    ]
+    ],
+    "p4": {
+      "spec": "plans/2026-10-25/D7-DATA-SOURCING.md (architect, 2026-11-05; lead spot-checked results.ts:433/449, convert.ts:127, schema.ts:177/203, squads.ts:84, recon item 8)",
+      "order": [
+        "P4.0 fetch queue + protocol + season list",
+        "F1.3a engine flyover + non-SCY splits + recordedEventKeyFor",
+        "live visit (D7 section 9; check 9 needs the extension loaded)",
+        "F1.1a roster + class year",
+        "F1.3b split window",
+        "F1.2 LCM",
+        "F1.1 wider window"
+      ],
+      "items": {
+        "P4.0": {
+          "status": "dispatched",
+          "owner": "executor",
+          "scope": "apps/extension/src/{shared/fetchProtocol.ts,shared/panelProtocol.ts,overlay/fetchQueue.ts,overlay/overlay.ts,bridge/install.ts (seasonchoices only)} + new tests"
+        },
+        "F1.3a": {
+          "status": "dispatched",
+          "owner": "executor",
+          "scope": "packages/engine/src/{sourcing/flyover.ts,sourcing/convert.ts,sourcing/cutTag.ts,model/results.ts,autobuilder/squads.ts,index.ts}, scoreMeet callers, packages/swimcloud/src/browser/rescore.ts, tests/engineScoreMeet.test.ts + new tests"
+        },
+        "live-visit": {
+          "status": "pending",
+          "note": "checks 1-8, 10, 11 need only Chrome; check 9 needs the extension loaded (E4)"
+        },
+        "F1.1a": {
+          "status": "pending"
+        },
+        "F1.3b": {
+          "status": "pending"
+        },
+        "F1.2": {
+          "status": "pending"
+        },
+        "F1.1": {
+          "status": "pending"
+        }
+      },
+      "review": "Each executor diff: architect review under R83 until the user signs Cursor in; note in docs/reference/<SLICE>_ARCHITECT_REVIEW.md",
+      "userChoicesOnDefault": "U1-U11 in D7 section 10, listed in QUESTIONS_FOR_USER.md section P4"
+    }
   },
   "decisions": "plans/2026-10-25/README.md#decisions-user-2026-10-25",
   "created": "2026-10-25",
