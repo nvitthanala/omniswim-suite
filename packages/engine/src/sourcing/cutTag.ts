@@ -24,7 +24,7 @@ import { cutlineTableCourseForSwim } from '../lib/cutlineUtils';
 import type { ConversionBasis, MeetSwim, MeetSwimmer, MeetTeam } from '../model/meet';
 import type { Hundredths, TimeValue } from '../model/primitives';
 import { parseTimeText } from '../model/primitives';
-import { scyEventKeyFor } from './convert';
+import { recordedEventKeyFor, scyEventKeyFor } from './convert';
 
 export type { CutlineTier as CutTier } from '../cutlines';
 
@@ -209,15 +209,18 @@ export function cutTagForSwim(swim: MeetSwim, swimmer: MeetSwimmer, team: MeetTe
     );
   }
 
-  // A swim whose division publishes the swim's own course is judged there, as a real swim.
+  // A swim whose division publishes the swim's own course is judged there, as a real swim. The own-course
+  // tables name the swim's recorded event (the NAIA SCM 400 and 1500), and a 400, 800 or 1500 swim sits in
+  // the model under its yards key (decision K, D7 section 2), so the lookup maps back first.
   if (swim.recordedCourse !== 'SCY') {
-    const own = cutlineTableCourseForSwim(swimmer.gender, swim.eventKey, ref.division, swim.recordedCourse, season);
+    const recordedKey = recordedEventKeyFor(swim.eventKey, swim.recordedCourse);
+    const own = cutlineTableCourseForSwim(swimmer.gender, recordedKey, ref.division, swim.recordedCourse, season);
     if (own === swim.recordedCourse) {
       return cutTagFromLegacy(
         buildCutlineTag({
           timeSec: swim.recordedTime === null ? null : swim.recordedTime.hundredths / 100,
           gender: swimmer.gender,
-          event: swim.eventKey,
+          event: recordedKey,
           division: ref.division,
           season,
           swimCourse: swim.recordedCourse,

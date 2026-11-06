@@ -18,7 +18,7 @@ import type {
   AutoBuildRequest,
   AutoBuildResult,
   CompleteRulePreset,
-  ConversionSettings,
+  SourcingSettings,
   Lineup,
   LineupEntry,
   LoadPreference,
@@ -61,7 +61,7 @@ const buildOf = (lp: string): LpBuild => {
   return found;
 };
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 const EVENTS = ['50 Freestyle', '100 Freestyle', '100 Backstroke', '100 Butterfly', '200 Individual Medley'];
 const DIVE = '1-Meter Diving';

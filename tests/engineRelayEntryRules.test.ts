@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { builtinRulePreset, requireComplete, scoreMeet } from '@omniswim/engine';
 import type {
   CompleteRulePreset,
-  ConversionSettings,
+  SourcingSettings,
   Lineup,
   LineupEntry,
   MeetEvent,
@@ -26,7 +26,7 @@ import type {
 } from '@omniswim/engine';
 import { set } from './engineTestPresets';
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 const RELAY_400 = '400 Freestyle Relay';
 const RELAY_200 = '200 Freestyle Relay';

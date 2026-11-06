@@ -1,10 +1,10 @@
 /** Public API regression for relays whose sorted leg signature is identical. */
 import { describe, expect, it } from 'vitest';
 import { builtinRulePreset, requireComplete, scoreMeet } from '@omniswim/engine';
-import type { CompleteRulePreset, ConversionSettings, Lineup, LineupEntry, MeetEvent, MeetModel, MeetSwim, RelaySplit, RulePreset, ScorerTag } from '@omniswim/engine';
+import type { CompleteRulePreset, SourcingSettings, Lineup, LineupEntry, MeetEvent, MeetModel, MeetSwim, RelaySplit, RulePreset, ScorerTag } from '@omniswim/engine';
 import { set } from './engineTestPresets';
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 const FREE = '100 Freestyle';
 const RELAY = '400 Freestyle Relay';

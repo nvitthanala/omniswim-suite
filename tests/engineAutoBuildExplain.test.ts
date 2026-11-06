@@ -21,7 +21,7 @@ import type {
   AutoBuildRequest,
   AutoBuildResult,
   CompleteRulePreset,
-  ConversionSettings,
+  SourcingSettings,
   Lineup,
   LineupEntry,
   LoadPreference,
@@ -58,7 +58,7 @@ vi.mock('../packages/engine/src/autobuilder/explain', async (importOriginal) => 
   };
 });
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 const E1 = '100 Freestyle';
 const E2 = '100 Backstroke';

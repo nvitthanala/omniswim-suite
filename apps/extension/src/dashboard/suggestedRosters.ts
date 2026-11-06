@@ -28,7 +28,7 @@ export async function suggestOpponentRosters(snapshot: SimSnapshot, meetKey: str
   try {
     const rules = requireComplete(preset);
     const results = await suggestScoringRosters({ model: adapted.adapted.model, lineup: adapted.adapted.lineup,
-      rules, sourcing: { includeConvertedSwims: false, lcmToScy: null },
+      rules, sourcing: { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } },
       coachTags, ownTeamId, targets }, solve);
     return results.map((r: RosterSuggestion) => ({ teamId: String(r.teamId), gender: r.gender,
       result: r.kind === 'suggested' ? { kind: 'suggested' as const, swimmerIds: r.tags.map(t => String(t.swimmerId)),

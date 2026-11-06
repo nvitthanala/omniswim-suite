@@ -85,7 +85,7 @@ export function scoreScorerTags(snapshot: SimSnapshot, meetKey: string, hasOwnTe
   const scoringTeamSize = sizeSetting.state === 'set' && typeof sizeSetting.value === 'number' ? sizeSetting.value : undefined;
   if (!hasOwnTeam) return { scored: false, ...(scoringTeamSize === undefined ? {} : { scoringTeamSize }), warnings: [] };
   try {
-    const results = scoreMeet(adapted.adapted.model, adapted.adapted.lineup, tags, requireComplete(preset), { includeConvertedSwims: false, lcmToScy: null });
+    const results = scoreMeet(adapted.adapted.model, adapted.adapted.lineup, tags, requireComplete(preset), { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } });
     const warnings: string[] = [];
     for (const violation of results.violations) {
       if (violation.kind === 'scoring_team_size') warnings.push(`${violation.teamId} ${violation.gender}: ${violation.spots.numerator}/${violation.spots.denominator} scorer spots exceeds ${violation.limit}`);

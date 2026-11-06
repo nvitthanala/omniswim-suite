@@ -10,15 +10,15 @@
  * the engine is wrong, or SwimCloud changed its page. It is not a rule choice by the user.
  */
 import { requireComplete, scoreMeet } from '@omniswim/engine';
-import type { ConversionSettings, Results } from '@omniswim/engine';
+import type { Results, SourcingSettings } from '@omniswim/engine';
 import { adaptSimulatorSnapshot } from './adapt';
 import type { AdaptOptions, AdaptedSimulator } from './adapt';
 import { parityReport } from './parity';
 import type { ParityReport } from './parity';
 import type { SimulatorSnapshotInput } from './simulatorTypes';
 
-/** The simulator scores yards only, and converts nothing. */
-export const SIMULATOR_SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+/** The simulator scores yards only, converts nothing and has no flyover (decision P, D7 section 2). */
+export const SIMULATOR_SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 
 export type RescoreOutcome =
   | { readonly kind: 'not_loaded'; readonly missing: readonly ('swimmers' | 'swims' | 'splashes')[] }

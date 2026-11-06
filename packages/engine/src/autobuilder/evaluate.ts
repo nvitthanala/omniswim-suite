@@ -16,7 +16,7 @@ import type { MeetEvent, MeetModel, MeetSwim, MeetSwimmer, RelaySplit } from '..
 import type { Gender, SwimmerId, TeamId } from '../model/primitives';
 import type { ScorerRole } from '../model/lineup';
 import type { CompleteRulePreset } from '../rules/rulePreset';
-import type { ConversionSettings } from '../sourcing/convert';
+import type { SourcingSettings } from '../sourcing/flyover';
 import { FastScorer, fastSupported } from './fastScore';
 import { columnRaces, NO_RACES } from './load';
 import type { Races } from './load';
@@ -46,7 +46,7 @@ export interface EvalBase {
   readonly lineup: Lineup;
   readonly tags: readonly ScorerTag[];
   readonly rules: CompleteRulePreset;
-  readonly sourcing: ConversionSettings;
+  readonly sourcing: SourcingSettings;
   readonly own: TeamId;
   /** Every decision swimmer (pinned or free) of a built gender. Their entries are solver-owned. */
   readonly decision: ReadonlySet<SwimmerId>;

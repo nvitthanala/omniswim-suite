@@ -7,9 +7,6 @@
  * Not here, on purpose:
  * - The legacy bridge. `@omniswim/engine/rules/legacyBridge` carries the legacy `ScoringSettings`
  *   type, and the root stays free of it (D2 decision 0.4).
- * - The rest of the sourcing functions (3.10: flyover, SourcingSettings) and the planner functions
- *   (3.11). They arrive in P4 and P5. Cut tags (3.9), the conversion (3.10, 3.13), `validateMeetModel`
- *   (3.6) and `scoreMeet` (3.8, P2) are here.
  * The moved modules stay reachable by their own subpaths (`@omniswim/engine/lib/*`).
  */
 
@@ -124,9 +121,11 @@ export { AUTOBUILD_DEFAULT_LIMITS, AUTOBUILD_DEFAULT_ROBUST, AutoBuildError, aut
 // 3.10 Table D types. Retired from use (R58): no function reads them.
 export type { TableDPreset, TableDRow } from './sourcing/tableD';
 
-// 3.10 and 3.13 Conversion (the rest of 3.10, the flyover and SourcingSettings, arrives in P4)
+// 3.10 and 3.13 Conversion, and the flyover (F1.3a)
 export type { ConversionSettings, ConvertedScy } from './sourcing/convert';
-export { scyEventKeyFor, scyStatementFor, scyStatementForSplit } from './sourcing/convert';
+export { recordedEventKeyFor, scyEventKeyFor, scyStatementFor, scyStatementForSplit } from './sourcing/convert';
+export type { FlyoverSetting, SourcingSettings } from './sourcing/flyover';
+export { estimateFlyingLeg, flyoverFromSeconds, splitScyValue } from './sourcing/flyover';
 export type {
   LcmToScyAbsentReason,
   LcmToScyAppliedTo,

@@ -86,12 +86,19 @@
  *     and `notScoredReason: 'exhibition'`.
  *   A relay ranked past the point table in the full field takes no cap slot, so it is not chosen even when the
  *   removal moves it into the table. That is a known gap (D2 section 9, P3.relay-overcap).
- * - A relay leg of kind `flyover-estimate` throws (P4).
  *
  * A flat-start swim on leg 2 to 4 scores, with a `basis_position` violation. SwimCloud's aggregate free
  * relay does exactly this: it reorders the legs after it picks them, so a flat-start time can sit on
  * a flying leg (D2 8.12). The violation says so, and the points stay SwimCloud's.
- * - A relay split outside SCY throws: the split conversion statement is P4.
+ *
+ * ## Relay legs and the sourcing settings (D7 section 5, F1.3a)
+ * - A `flyover-estimate` leg (legs 2 to 4) is worth `estimateFlyingLeg`: the flat swim's yards time minus the
+ *   flyover. `null` is no time, and the relay has no total. With the flyover `unset` it is always `null`.
+ *   On leg 1 it throws `leg_basis_unsupported`: no rule says what it would mean.
+ * - A `split` leg is worth `splitScyValue`: a SCY split as is, any other course converted (README R62), `null`
+ *   when nothing converts. The flyover is never subtracted from a split.
+ * - `buildIndex` without sourcing settings keeps the older behaviour: a `flyover-estimate` leg throws
+ *   `leg_basis_unsupported` and a non-SCY split throws `split_not_scy`. `scoreMeet` always passes them.
  *
  * Every row is scored as an `A Final`, so the legacy place index equals `rank - 1`. This is a label
  * for the legacy scorer, not a statement about how the meet was swum.
@@ -106,14 +113,15 @@ import type { Cap } from '../rules/cap';
 import { RulePresetError } from '../rules/cap';
 import { toLegacyScoringSettings } from '../rules/legacyBridge';
 import type { CompleteRulePreset, DivingPerEventScorerCap, EngineScorerAutoRules, PerEventScorerCap, TieRule } from '../rules/rulePreset';
-import type { ConversionSettings } from '../sourcing/convert';
+import { estimateFlyingLeg, splitScyValue } from '../sourcing/flyover';
+import type { SourcingSettings } from '../sourcing/flyover';
 import type { SessionRef } from '../planner/types';
 import { formatHundredths } from './primitives';
 import type { EventKey, Gender, Hundredths, SwimmerId, TeamId } from './primitives';
 import type { Setting } from './provenance';
 import type { Lineup, LineupDisplay, LineupEntry, RelayEntry, ScorerRole, ScorerTag } from './lineup';
 import { entryKey } from './lineup';
-import type { MeetEvent, MeetModel, MeetSwim, MeetSwimmer, RelaySplit } from './meet';
+import type { DivisionRef, MeetEvent, MeetModel, MeetSwim, MeetSwimmer, RelaySplit } from './meet';
 
 export type NotScoredReason =
   /**
@@ -347,12 +355,15 @@ interface Index {
   readonly swims: ReadonlyMap<string, MeetSwim>;
   readonly swimsByKey: ReadonlyMap<string, readonly MeetSwim[]>;
   readonly splits: ReadonlyMap<string, RelaySplit>;
+  readonly divisions: ReadonlyMap<TeamId, DivisionRef>;
+  /** `null`: the caller passed none. A flyover estimate and a non-SCY split then throw, as before P4. */
+  readonly sourcing: SourcingSettings | null;
 }
 
 const eventId = (eventKey: EventKey, gender: Gender): string => `${gender}\u0000${eventKey}`;
 const seedKey = (swimmerId: SwimmerId, eventKey: EventKey): string => `${swimmerId}\u0000${eventKey}`;
 
-export function buildIndex(model: MeetModel): Index {
+export function buildIndex(model: MeetModel, sourcing?: SourcingSettings): Index {
   const swimsByKey = new Map<string, MeetSwim[]>();
   for (const swim of model.swims) {
     const k = seedKey(swim.swimmerId, swim.eventKey);
@@ -367,6 +378,8 @@ export function buildIndex(model: MeetModel): Index {
     swims: new Map(model.swims.map((s) => [s.swimId, s])),
     swimsByKey,
     splits: new Map(model.relaySplits.map((s) => [s.splitId, s])),
+    divisions: new Map(model.teams.map((t) => [t.teamId, t.division])),
+    sourcing: sourcing ?? null,
   };
 }
 
@@ -423,15 +436,27 @@ interface LegRead {
   readonly offPosition?: true;
 }
 
-function readLeg(entry: RelayEntry, position: number, key: string, index: Index): LegRead {
+function readLeg(entry: RelayEntry, position: number, key: string, index: Index, expected: readonly EventKey[] | null): LegRead {
   const leg = entry.legs[position];
   if (!leg) return fail('leg_missing', `${key}: leg ${position + 1} is missing`, key);
   const basis = leg.basis;
   switch (basis.kind) {
     case 'no-time':
       return { value: null, eventKey: null };
-    case 'flyover-estimate':
-      return fail('leg_basis_unsupported', `${key}: leg ${position + 1} uses a flyover estimate (P4)`, key);
+    case 'flyover-estimate': {
+      const sourcing = index.sourcing;
+      if (sourcing === null) return fail('leg_basis_unsupported', `${key}: leg ${position + 1} uses a flyover estimate and no sourcing settings were passed`, key);
+      if (position === 0) return fail('leg_basis_unsupported', `${key}: leg 1 is a flat start and takes no flyover estimate`, key);
+      const swim = index.swims.get(basis.swimId);
+      if (!swim) return fail('unresolved_swim', `${key}: leg ${position + 1} swim "${basis.swimId}" is not in the model`, key);
+      if (swim.swimmerId !== leg.swimmerId) {
+        return fail('seed_mismatch', `${key}: leg ${position + 1} swim "${swim.swimId}" belongs to ${swim.swimmerId}, not ${leg.swimmerId}`, key);
+      }
+      // The leg's expected event, not the swim's own: a swim of another event gets no estimate (invariant 13).
+      const legEvent = expected === null ? null : (expected[position] ?? null);
+      const estimate = legEvent === null ? null : estimateFlyingLeg(swim, legEvent, sourcing.flyover);
+      return estimate === null ? { value: null, eventKey: null } : { value: estimate.hundredths, eventKey: legEvent };
+    }
     case 'flat-start-swim': {
       const swim = index.swims.get(basis.swimId);
       if (!swim) return fail('unresolved_swim', `${key}: leg ${position + 1} swim "${basis.swimId}" is not in the model`, key);
@@ -446,10 +471,14 @@ function readLeg(entry: RelayEntry, position: number, key: string, index: Index)
       if (split.swimmerId !== leg.swimmerId) {
         return fail('seed_mismatch', `${key}: leg ${position + 1} split "${split.splitId}" belongs to ${split.swimmerId}, not ${leg.swimmerId}`, key);
       }
-      if (split.course !== 'SCY') {
-        return fail('split_not_scy', `${key}: leg ${position + 1} split "${split.splitId}" is ${split.course ?? 'of unknown course'}; converting splits arrives in P4`, key);
+      if (split.course === 'SCY') return { value: split.split.hundredths, eventKey: split.legEventKey };
+      if (index.sourcing === null) {
+        return fail('split_not_scy', `${key}: leg ${position + 1} split "${split.splitId}" is ${split.course ?? 'of unknown course'} and no sourcing settings were passed`, key);
       }
-      return { value: split.split.hundredths, eventKey: split.legEventKey };
+      // README R62: the individual conversion for the leg's stroke and distance, by the relay's gender. The flyover is not applied.
+      const division = index.divisions.get(entry.teamId);
+      if (division === undefined) return fail('unresolved_team', `${key}: team "${entry.teamId}" is not in the model`, key);
+      return { value: splitScyValue(split, division, entry.gender, index.sourcing), eventKey: split.legEventKey };
     }
   }
 }
@@ -502,7 +531,7 @@ export function resolveLineup(model: MeetModel, lineup: Lineup, index: Index): R
       if (swimmer.gender !== entry.gender) violations.push({ kind: 'relay_leg', entryKey: key, leg: position, reason: 'wrong_gender' });
       if (legSwimmers.includes(leg.swimmerId)) violations.push({ kind: 'relay_leg', entryKey: key, leg: position, reason: 'duplicate_swimmer' });
       legSwimmers.push(leg.swimmerId);
-      const read = readLeg(entry, i, key, index);
+      const read = readLeg(entry, i, key, index, expected);
       legs.push(read);
       if (read.offPosition) violations.push({ kind: 'relay_leg', entryKey: key, leg: position, reason: 'basis_position' });
       // An unverifiable leg event (null) is flagged, not trusted: the leg may be a different stroke.
@@ -1042,11 +1071,10 @@ export function scoreMeet(
   lineup: Lineup,
   tags: readonly ScorerTag[],
   rules: CompleteRulePreset,
-  // P2 reads nothing from the sourcing settings: each swim already carries its SCY statement. The
-  // parameter is here so P4 (flyover, split window) adds no argument. Do not rely on it being unread.
-  sourcing: ConversionSettings
+  // A swim carries its own SCY statement. The sourcing settings decide the two relay-leg kinds that do not:
+  // a `flyover-estimate` leg (the flyover) and a non-SCY `split` leg (the conversion settings).
+  sourcing: SourcingSettings
 ): Results {
-  void sourcing;
   checkScorable(model, lineup, tags, rules);
   const ties = settled(rules.scoring.ties, 'scoring.ties');
   const rosterMode = settled(rules.scorers.eligibility, 'scorers.eligibility') === 'roster';
@@ -1060,7 +1088,7 @@ export function scoreMeet(
   const exhibitionCounts = settled(rules.entries.exhibitionCounts, 'entries.exhibitionCounts');
 
   checkNameCollisions(model);
-  const index = buildIndex(model);
+  const index = buildIndex(model, sourcing);
   const { resolved, violations, rosterUnknown } = resolveLineup(model, lineup, index);
 
   const fieldOf = groupFields(resolved);

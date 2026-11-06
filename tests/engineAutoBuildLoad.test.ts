@@ -14,7 +14,7 @@ import type {
   AutoBuildLimits,
   AutoBuildRequest,
   CompleteRulePreset,
-  ConversionSettings,
+  SourcingSettings,
   Lineup,
   LineupEntry,
   LoadPreference,
@@ -43,7 +43,7 @@ vi.mock('../packages/engine/src/model/results', async (importOriginal) => {
   };
 });
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 const IM = '200 Individual Medley';
 const FREE50 = '50 Freestyle';

@@ -12,7 +12,7 @@ import loadHighs from 'highs';
 import { builtinRulePreset, requireComplete, RosterSuggestError, ScoreMeetError, scoreMeet, suggestScoringRosters } from '@omniswim/engine';
 import type {
   CompleteRulePreset,
-  ConversionSettings,
+  SourcingSettings,
   Lineup,
   LineupEntry,
   LpSolution,
@@ -29,7 +29,7 @@ import type {
 } from '@omniswim/engine';
 import { set } from './engineTestPresets';
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 const FREE = '100 Freestyle';
 const BACK = '100 Backstroke';

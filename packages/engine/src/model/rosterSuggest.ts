@@ -31,7 +31,7 @@ import type { Lineup, ScorerRole, ScorerTag } from './lineup';
 import type { Gender, SwimmerId, TeamId } from './primitives';
 import type { MeetModel } from './meet';
 import type { CompleteRulePreset } from '../rules/rulePreset';
-import type { ConversionSettings } from '../sourcing/convert';
+import type { SourcingSettings } from '../sourcing/flyover';
 
 /** The fields of `SolvedResponse` (apps/extension optimizerProtocol.ts) the suggester reads. */
 export interface LpSolution {
@@ -47,7 +47,7 @@ export interface RosterSuggestRequest {
   readonly model: MeetModel;
   readonly lineup: Lineup;
   readonly rules: CompleteRulePreset;
-  readonly sourcing: ConversionSettings;
+  readonly sourcing: SourcingSettings;
   /** The coach's own tags. A tag with `source` throws `suggested_tag_in_input`. */
   readonly coachTags: readonly ScorerTag[];
   readonly ownTeamId: TeamId;
@@ -608,7 +608,7 @@ export async function suggestScoringRosters(req: RosterSuggestRequest, solve: Lp
     }
   }
 
-  const index = buildIndex(req.model);
+  const index = buildIndex(req.model, req.sourcing);
   const swimmerSide = new Map<SwimmerId, { teamId: TeamId; gender: Gender }>();
   for (const s of [...req.model.swimmers].sort((a, b) => cmp(a.swimmerId, b.swimmerId))) swimmerSide.set(s.swimmerId, { teamId: s.teamId, gender: s.gender });
   const entered = enteredBySide(req.lineup, swimmerSide);

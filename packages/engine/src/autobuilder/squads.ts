@@ -4,13 +4,17 @@
  *
  * Relay squads (D5 3.2, slice A2). A squad is four distinct decision swimmers with a leg basis at each position. Leg options
  * follow invariant 13 (the exact leg event) and invariant 19 (leg 1 flat, legs 2 to 4 a split with a flying or unknown start),
- * so a built relay never raises a `relay_leg` violation. `Q_e` is the top T squads by time, the best squad that shares no
+ * so a built relay never raises a `relay_leg` violation. A split is valued by `splitScyValue` (a non-SCY split converts, README R62). When the
+ * flyover is set (README R14), a swimmer with no split option at leg 2 to 4 gets a flyover-estimate option from the fastest rankable swim of
+ * the leg event (D7 section 5). `Q_e` is the top T squads by time, the best squad that shares no
  * swimmer with each of them, and the current own squads. Nothing here scores: `scoreMeet` is the only scorer.
  */
 import { expectedLegEvents, isRankable, scyValue } from '../model/results';
+import { estimateFlyingLeg, splitScyValue } from '../sourcing/flyover';
+import type { SourcingSettings } from '../sourcing/flyover';
 import { entryKey } from '../model/lineup';
 import type { LegBasis, RelayEntry, RelayLeg } from '../model/lineup';
-import type { MeetEvent, MeetModel, MeetSwim, RelaySplit } from '../model/meet';
+import type { DivisionRef, MeetEvent, MeetModel, MeetSwim, RelaySplit } from '../model/meet';
 import type { Gender, SwimmerId, TeamId } from '../model/primitives';
 import { autoBuildFail } from './types';
 
@@ -51,25 +55,64 @@ export interface LegSources {
   readonly splitById: ReadonlyMap<string, RelaySplit>;
   readonly swimsBy: ReadonlyMap<SwimmerId, readonly MeetSwim[]>;
   readonly splitsBy: ReadonlyMap<SwimmerId, readonly RelaySplit[]>;
+  /** The conversion settings and the flyover the options and the current squads are valued under. */
+  readonly sourcing: SourcingSettings;
+  /** The division of each swimmer's team: a split converts by it. */
+  readonly divisionBy: ReadonlyMap<SwimmerId, DivisionRef>;
+  /** The meet events by `gender\u0000eventKey`: a current relay's expected leg events come from its event. */
+  readonly eventBy: ReadonlyMap<string, MeetEvent>;
 }
 
-export function buildLegSources(model: MeetModel): LegSources {
+export function buildLegSources(model: MeetModel, sourcing: SourcingSettings): LegSources {
   const swimsBy = new Map<SwimmerId, MeetSwim[]>();
   for (const s of model.swims) swimsBy.set(s.swimmerId, [...(swimsBy.get(s.swimmerId) ?? []), s]);
   const splitsBy = new Map<SwimmerId, RelaySplit[]>();
   for (const s of model.relaySplits) splitsBy.set(s.swimmerId, [...(splitsBy.get(s.swimmerId) ?? []), s]);
+  const teamDivision = new Map(model.teams.map((t) => [t.teamId, t.division]));
+  const divisionBy = new Map<SwimmerId, DivisionRef>();
+  for (const swimmer of model.swimmers) {
+    const division = teamDivision.get(swimmer.teamId);
+    if (division !== undefined) divisionBy.set(swimmer.swimmerId, division);
+  }
   return {
     swimById: new Map(model.swims.map((s) => [s.swimId, s])),
     splitById: new Map(model.relaySplits.map((s) => [s.splitId, s])),
     swimsBy,
     splitsBy,
+    sourcing,
+    divisionBy,
+    eventBy: new Map(model.events.map((e) => [`${e.gender}\u0000${e.eventKey}`, e])),
   };
 }
 
+const UNKNOWN_DIVISION: DivisionRef = { state: 'unknown', reason: 'unmapped_team' };
+
+/** A split's yards value (`splitScyValue`), by its swimmer's team division. A swimmer outside the model has an unknown division, never a guessed one. */
+const splitValue = (split: RelaySplit, gender: Gender, sources: LegSources): number | null =>
+  splitScyValue(split, sources.divisionBy.get(split.swimmerId) ?? UNKNOWN_DIVISION, gender, sources.sourcing);
+
 const better = (a: LegOption, b: LegOption | null): boolean => b === null || a.value < b.value || (a.value === b.value && a.id < b.id);
 
+/** The flyover-estimate option from the fastest rankable swim of the leg event, or `null` (flyover unset, no such swim, or no positive estimate). */
+function flyoverOption(swimmerId: SwimmerId, expected: string, sources: LegSources): LegOption | null {
+  let flat: MeetSwim | null = null;
+  let flatValue = 0;
+  for (const swim of sources.swimsBy.get(swimmerId) ?? []) {
+    if (swim.eventKey !== expected || !isRankable(swim)) continue;
+    const value = scyValue(swim);
+    if (value === null) continue;
+    if (flat === null || value < flatValue || (value === flatValue && swim.swimId < flat.swimId)) {
+      flat = swim;
+      flatValue = value;
+    }
+  }
+  if (flat === null) return null;
+  const estimate = estimateFlyingLeg(flat, expected, sources.sourcing.flyover);
+  return estimate === null ? null : { swimmerId, value: estimate.hundredths, basis: { kind: 'flyover-estimate', swimId: flat.swimId }, id: flat.swimId };
+}
+
 /** One swimmer's option at one position (D5 3.2), or `null`. */
-function optionAt(swimmerId: SwimmerId, position: number, expected: string, sources: LegSources): LegOption | null {
+function optionAt(swimmerId: SwimmerId, position: number, expected: string, gender: Gender, sources: LegSources): LegOption | null {
   let best: LegOption | null = null;
   if (position === 0) {
     for (const swim of sources.swimsBy.get(swimmerId) ?? []) {
@@ -81,11 +124,15 @@ function optionAt(swimmerId: SwimmerId, position: number, expected: string, sour
     }
   }
   for (const split of sources.splitsBy.get(swimmerId) ?? []) {
-    if (split.legEventKey !== expected || split.course !== 'SCY') continue;
+    if (split.legEventKey !== expected) continue;
     if (position === 0 ? split.start !== 'flat' : split.start === 'flat') continue;
-    const option: LegOption = { swimmerId, value: split.split.hundredths, basis: { kind: 'split', splitId: split.splitId }, id: split.splitId };
+    const value = splitValue(split, gender, sources);
+    if (value === null) continue;
+    const option: LegOption = { swimmerId, value, basis: { kind: 'split', splitId: split.splitId }, id: split.splitId };
     if (better(option, best)) best = option;
   }
+  // A flyover option only where the swimmer has no split option: a split already includes the exchange, so the estimate never competes with one.
+  if (position > 0 && best === null) best = flyoverOption(swimmerId, expected, sources);
   return best;
 }
 
@@ -96,7 +143,7 @@ export function legOptions(event: MeetEvent, swimmers: readonly SwimmerId[], sou
   const lists = [0, 1, 2, 3].map((position) => {
     const list: LegOption[] = [];
     for (const swimmerId of swimmers) {
-      const option = optionAt(swimmerId, position, expected[position] as string, sources);
+      const option = optionAt(swimmerId, position, expected[position] as string, event.gender, sources);
       if (option !== null) list.push(option);
     }
     return list.sort((a, b) => a.value - b.value || cmp(a.swimmerId, b.swimmerId));
@@ -164,16 +211,25 @@ export interface SquadSet {
 /** A current own relay as a squad: it keeps its bases, so its time is read from them. */
 export function currentSquad(entry: RelayEntry, sources: LegSources): Squad {
   let time = 0;
-  for (const leg of entry.legs) {
+  const event = sources.eventBy.get(`${entry.gender}\u0000${entry.eventKey}`);
+  const expected = event === undefined ? null : expectedLegEvents(event);
+  entry.legs.forEach((leg, position) => {
     const basis = leg.basis;
     let value: number | null = null;
-    if (basis.kind === 'split') value = sources.splitById.get(basis.splitId)?.split.hundredths ?? null;
-    else if (basis.kind === 'flat-start-swim') {
+    if (basis.kind === 'split') {
+      const split = sources.splitById.get(basis.splitId);
+      value = split === undefined ? null : splitValue(split, entry.gender, sources);
+    } else if (basis.kind === 'flat-start-swim') {
       const swim = sources.swimById.get(basis.swimId);
       value = swim === undefined ? null : scyValue(swim);
+    } else if (basis.kind === 'flyover-estimate') {
+      // Leg 1 takes no estimate (`scoreMeet` throws on it), and a leg event the meet does not name has none to check.
+      const swim = sources.swimById.get(basis.swimId);
+      const legEvent = expected === null ? undefined : expected[position];
+      value = swim === undefined || position === 0 || legEvent === undefined ? null : (estimateFlyingLeg(swim, legEvent, sources.sourcing.flyover)?.hundredths ?? null);
     }
     time = value === null ? Infinity : time + value;
-  }
+  });
   return { key: squadKeyOfEntry(entry), swimmers: entry.legs.map((l) => l.swimmerId), legs: entry.legs, time, current: entry };
 }
 

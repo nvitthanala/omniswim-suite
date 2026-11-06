@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { builtinRulePreset, requireComplete, scoreMeet } from '@omniswim/engine';
 import type {
   CompleteRulePreset,
-  ConversionSettings,
+  SourcingSettings,
   Lineup,
   LineupEntry,
   MeetEvent,
@@ -33,7 +33,7 @@ import { buildSnapshot } from './helpers/simulatorFixtures';
 import type { ConfigName } from './helpers/simulatorFixtures';
 import { set, TEST_PROVENANCE } from './engineTestPresets';
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 
 // ---- seeded RNG ---------------------------------------------------------------------------------
@@ -281,7 +281,7 @@ function rigFor(world: World, variant: Variant, seed: number, allScorers = false
   for (const e of lineup.entries) if (e.kind === 'individual' && e.teamId === own && rand() < 0.2) held.add(`${e.swimmerId}\u0000${e.eventKey}`);
   const decision = new Set(ownSwimmers);
   const base: EvalBase = { model, lineup, tags, rules, sourcing: SOURCING, own, decision, free, load, held };
-  const sources = buildLegSources(model);
+  const sources = buildLegSources(model, SOURCING);
   const squadCache = new Map<string, readonly Squad[]>();
   return {
     world,

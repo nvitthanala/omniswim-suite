@@ -22,7 +22,7 @@ import { formatHundredths, parseTimeText } from '../model/primitives';
 import { convertLcmToScy } from './lcmToScy';
 import type { LcmToScyPreset } from './lcmToScy';
 
-/** The conversion slice of D2 3.10 `SourcingSettings`, which extends this with the window and flyover (P4). */
+/** The conversion slice of D2 3.10 `SourcingSettings`; `SourcingSettings` (`flyover.ts`) extends this with the flyover. */
 export interface ConversionSettings {
   /** Per meet (F1.2). `false`: every non-SCY swim is `conversions_excluded`. */
   readonly includeConvertedSwims: boolean;
@@ -47,6 +47,23 @@ export function scyEventKeyFor(eventKey: EventKey, course: Course): EventKey {
   const canonical = normalizeEventForCutline(eventKey);
   const pair = COURSE_DISTANCE_PAIRS.find(p => p.scmEvent === canonical);
   return pair ? pair.yardsEvent : canonical;
+}
+
+/**
+ * The inverse of {@link scyEventKeyFor} for the three distance freestyle pairs: the event a swim in
+ * `course` is recorded as, given the yards event it competes in (decision K, D7 section 2). A
+ * non-SCY 400, 800 or 1500 swim sits in the model under its yards key (500, 1000, 1650), so one key
+ * passes validation, seeds the yards event and converts. Code that needs the swim's own-course
+ * table (the NAIA SCM 400 and 1500) maps back with this. Every other key, and every SCY key, is
+ * returned as given: the function never guesses and never judges whether the event exists in the
+ * course (that is `eventNotSwumInCourse`, invariant 16). Do not call it inside a conversion: an
+ * SCM `1000 Freestyle` would turn into an `800 Freestyle` and slip past that refusal.
+ */
+export function recordedEventKeyFor(eventKey: EventKey, course: Course): EventKey {
+  if (course === 'SCY') return eventKey;
+  const canonical = normalizeEventForCutline(eventKey);
+  const pair = COURSE_DISTANCE_PAIRS.find(p => p.yardsEvent === canonical);
+  return pair ? pair.scmEvent : eventKey;
 }
 
 function divisionOf(division: DivisionRef): 'unknown' | Extract<DivisionRef, { state: 'known' }>['division'] {
@@ -163,7 +180,7 @@ export function scyStatementFor(
  *
  * The converter has no split data, so a split converts with the individual divisor and turn for the
  * leg's stroke and distance (R62). A flying-start split already includes the exchange: this function
- * never applies a flyover, and P4's flyover must never be subtracted from a converted split (D2 3.13). The basis says `appliedTo:
+ * never applies a flyover, and the flyover is never subtracted from a converted split (D2 3.13). The basis says `appliedTo:
  * 'relay-split'`. A split with no `legEventKey`, no `course`, or a leg that has no row is
  * `not-convertible`: the course is never assumed SCY. SwimCloud shows no conversion for a split, so
  * step 1 of the order does not apply. `gender` is the relay's (`MeetEvent.gender`), required.

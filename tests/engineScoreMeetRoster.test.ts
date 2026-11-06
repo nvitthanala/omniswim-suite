@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { builtinRulePreset, requireComplete, ScoreMeetError, scoreMeet } from '@omniswim/engine';
 import type {
   CompleteRulePreset,
-  ConversionSettings,
+  SourcingSettings,
   Lineup,
   LineupEntry,
   MeetEvent,
@@ -23,7 +23,7 @@ import type {
 } from '@omniswim/engine';
 import { set } from './engineTestPresets';
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 const FREE = '100 Freestyle';
 const DIVE = '1-Meter Diving';

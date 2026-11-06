@@ -17,7 +17,7 @@ import {
 } from '@omniswim/engine';
 import type {
   CompleteRulePreset,
-  ConversionSettings,
+  SourcingSettings,
   Lineup,
   LineupEntry,
   MeetEvent,
@@ -28,9 +28,10 @@ import type {
   RulePreset,
 } from '@omniswim/engine';
 import { LEGACY_UNLIMITED, toLegacyScoringSettings } from '@omniswim/engine/rules/legacyBridge';
+import { buildIndex, resolveLineup } from '../packages/engine/src/model/results';
 import { completeNsisc, set } from './engineTestPresets';
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 
 // ---- builders ----------------------------------------------------------------------------------
@@ -371,11 +372,45 @@ describe('scoreMeet: relays', () => {
     expect(r.violations).toContainEqual({ kind: 'relay_leg', entryKey: 'r|T1|400 Freestyle Relay|Men|A', leg: 4, reason: 'duplicate_swimmer' });
   });
 
-  it('a flyover-estimate leg throws instead of scoring', () => {
+  // Leg 4 of T1's relay A: a flyover estimate from the swimmer's flat 100 Freestyle (F1.3a). Each split here is 1.00 under its flat swim.
+  const estimated = (() => {
+    const e = relay('T1', 'A', group('T1', 0));
+    const legs = [...e.legs] as unknown as { swimmerId: string; basis: unknown }[];
+    const who = legs[3]!.swimmerId;
+    legs[3] = { swimmerId: who, basis: { kind: 'flyover-estimate', swimId: `${who}:100 Freestyle:${flatOf.get(who)}` } };
+    return { ...e, legs: legs as never } as RelayLineupEntry;
+  })();
+  const rowsFor = (flyover: { state: 'unset' } | { state: 'set'; hundredths: number }) =>
+    rowsOf(scoreMeet(model(swimmers, swims, { splits }), lineup(estimated, ...entries.slice(1)), [], preset(), { ...SOURCING, flyover }), '400 Freestyle Relay');
+
+  it('a flyover-estimate leg has no time while the flyover is unset: the relay is not placed', () => {
+    const rows = rowsFor({ state: 'unset' });
+    const a = rows.find((x) => x.entryKey === 'r|T1|400 Freestyle Relay|Men|A')!;
+    expect([a.place, a.points, a.notScoredReason]).toEqual([null, 0, 'no_time']);
+    expect(rows.filter((x) => x.place !== null).map((x) => x.points)).toEqual([11, 4, 2]); // the three timed relays move up
+  });
+
+  it('a flyover-estimate leg is the flat time minus the flyover once it is set', () => {
+    // 1.00 off the flat swim equals the split the other lineup uses on that leg, so the table is the split table.
+    expect(rowsFor({ state: 'set', hundredths: 100 }).map((x) => [x.entryKey, x.place, x.points])).toEqual(
+      rowsOf(scoreMeet(model(swimmers, swims, { splits }), lineup(...entries), [], preset(), SOURCING), '400 Freestyle Relay').map((x) => [x.entryKey, x.place, x.points])
+    );
+    // The exact total moves one for one with the flyover: the split total, plus what the flyover leaves of the 1.00.
+    const m = model(swimmers, swims, { splits });
+    const totalFor = (flyover: { state: 'unset' } | { state: 'set'; hundredths: number }): number | null =>
+      resolveLineup(m, lineup(estimated), buildIndex(m, { ...SOURCING, flyover })).resolved[0]!.value;
+    const splitTotal = resolveLineup(m, lineup(entries[0]!), buildIndex(m, SOURCING)).resolved[0]!.value as number;
+    expect(totalFor({ state: 'set', hundredths: 100 })).toBe(splitTotal);
+    expect(totalFor({ state: 'set', hundredths: 50 })).toBe(splitTotal + 50);
+    expect(totalFor({ state: 'set', hundredths: 0 })).toBe(splitTotal + 100);
+    expect(totalFor({ state: 'unset' })).toBeNull();
+  });
+
+  it('a flyover-estimate on a swim that is not in the model throws', () => {
     const e = relay('T1', 'A', group('T1', 0));
     const legs = [...e.legs] as unknown as { swimmerId: string; basis: unknown }[];
     legs[3] = { swimmerId: legs[3]!.swimmerId, basis: { kind: 'flyover-estimate', swimId: 'x' } };
-    expect(scoreCode(() => scoreMeet(model(swimmers, swims, { splits }), lineup({ ...e, legs: legs as never }), [], preset(), SOURCING))).toBe('leg_basis_unsupported');
+    expect(scoreCode(() => scoreMeet(model(swimmers, swims, { splits }), lineup({ ...e, legs: legs as never }), [], preset(), SOURCING))).toBe('unresolved_swim');
   });
 });
 

@@ -13,7 +13,7 @@ import type {
   AutoBuildLimits,
   AutoBuildRequest,
   CompleteRulePreset,
-  ConversionSettings,
+  SourcingSettings,
   Lineup,
   LineupEntry,
   MeetEvent,
@@ -25,7 +25,7 @@ import type {
 import { nodeMipSolve } from './helpers/nodeMipSolve';
 import { set } from './engineTestPresets';
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 const FREE = '100 Freestyle';
 const BACK = '100 Backstroke';

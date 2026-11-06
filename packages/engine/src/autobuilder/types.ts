@@ -6,7 +6,7 @@
  * A1, A6 and A7). A goal seek under the `prefer` load mode throws `mode_not_built`.
  */
 import type { CompleteRulePreset } from '../rules/rulePreset';
-import type { ConversionSettings } from '../sourcing/convert';
+import type { SourcingSettings } from '../sourcing/flyover';
 import type { LoadPreference, SessionPreset } from '../planner/types';
 import type { sessionLoad } from '../planner/sessionLoad';
 import type { EventKey, Gender, Hundredths, SwimmerId, TeamId } from '../model/primitives';
@@ -75,7 +75,7 @@ export interface AutoBuildRequest {
   readonly model: MeetModel;
   readonly lineup: Lineup;
   readonly rules: CompleteRulePreset;
-  readonly sourcing: ConversionSettings;
+  readonly sourcing: SourcingSettings;
   /** Coach tags for every team plus suggested tags for opponents. An own-team tag must have no `source`. */
   readonly tags: readonly ScorerTag[];
   readonly ownTeamId: TeamId;

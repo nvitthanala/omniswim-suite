@@ -14,7 +14,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AutoBuildError, ScoreMeetError, autoBuild, autoBuildObjective, builtinRulePreset, requireComplete } from '@omniswim/engine';
-import type { AutoBuildLimits, AutoBuildRequest, AutoBuildResult, ConversionSettings, RulePreset, ScorerTag } from '@omniswim/engine';
+import type { AutoBuildLimits, AutoBuildRequest, AutoBuildResult, SourcingSettings, RulePreset, ScorerTag } from '@omniswim/engine';
 import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
 import type { AutoBuildErrorMessage, AutoBuildProgress, AutoBuildWireRequest, AutoBuildWorkerResponse } from '../apps/extension/src/shared/autobuilderProtocol';
 import { AUTOBUILD_CANCELLED, AutoBuildRunError, createAutoBuildClient } from '../apps/extension/src/dashboard/autobuilderClient';
@@ -22,7 +22,7 @@ import { createOptimizerClient } from '../apps/extension/src/dashboard/optimizer
 import { buildSnapshot } from './helpers/simulatorFixtures';
 import { nodeMipSolve } from './helpers/nodeMipSolve';
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 /** Generous: the engine never reaches the limit, so the result does not depend on how fast the machine is. */
 const LIMITS: AutoBuildLimits = { candidatesPerEvent: 6, maxCandidatesPerEvent: 6, relaySquadsPerEvent: 12, maxRelaySquadsPerEvent: 24, refineRounds: 0, timeLimitSeconds: 120 };
 

@@ -26,7 +26,7 @@ import type {
   AutoBuildRequest,
   AutoBuildResult,
   CompleteRulePreset,
-  ConversionSettings,
+  SourcingSettings,
   Lineup,
   LineupEntry,
   LoadPreference,
@@ -45,7 +45,7 @@ import { nodeMipSolve } from './helpers/nodeMipSolve';
 import { buildSnapshot } from './helpers/simulatorFixtures';
 import { set, TEST_PROVENANCE } from './engineTestPresets';
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 const FREE = '100 Freestyle';
 const BACK = '100 Backstroke';

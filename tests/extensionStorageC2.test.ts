@@ -6,7 +6,7 @@ import { openOmniDb } from '../apps/extension/src/storage/open';
 import { freshFactory, sequentialIds, steppingClock } from './helpers/extensionDb';
 import { fixtureRecord, withoutRev } from './helpers/extensionRecords';
 import { scoreMeet } from '@omniswim/engine';
-import type { ConversionSettings, Lineup, MeetModel } from '@omniswim/engine';
+import type { SourcingSettings, Lineup, MeetModel } from '@omniswim/engine';
 import { completeNsisc } from './engineTestPresets';
 import { exportData, importData } from '../apps/extension/src/storage/exportImport';
 
@@ -49,7 +49,7 @@ describe('P7 C2 storage additions', () => {
       relaySplits: [], recordRange: { kind: 'seasons', seasonIds: ['2025-26'] }, extendedWindow: false, observedScores: null,
     };
     const lineup: Lineup = { payloadVersion: 1, meetKey: 'synthetic', entries: [{ kind: 'individual', teamId: '48', swimmerId: '1001', eventKey: '100 Freestyle', gender: 'Women', seedSwimId: null }] };
-    const results = scoreMeet(model, lineup, [{ teamId: '48', swimmerId: '1001', role: 'scorer' }], completeNsisc(), { includeConvertedSwims: false, lcmToScy: null } satisfies ConversionSettings);
+    const results = scoreMeet(model, lineup, [{ teamId: '48', swimmerId: '1001', role: 'scorer' }], completeNsisc(), { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } } satisfies SourcingSettings);
     const first = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: sequentialIds('score') });
     const firstRepo = createStorageRepo(first, { now: steppingClock() });
     const snapshot = { ...withoutRev(fixtureRecord<Record<string, unknown>>('lineups', 1)), results };

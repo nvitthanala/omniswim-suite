@@ -193,7 +193,7 @@ export function buildProblem(req: AutoBuildRequest, support: Support, currentRes
       : null;
   const frozenHeld = new Set<string>();
   if (robust !== null) {
-    const index = buildIndex(req.model);
+    const index = buildIndex(req.model, req.sourcing);
     for (const [key, entry] of currentEntry) {
       if (!solverOwned.has(entry.swimmerId) || !robust.absent.has(key) || !builtIds.has(eventId(entry.eventKey, entry.gender))) continue;
       const lineup: Lineup = { payloadVersion: 1, meetKey: req.lineup.meetKey, entries: [entry] };
@@ -324,8 +324,8 @@ export class Space {
     const started = clock?.();
     this.evaluateMs = clock === undefined ? null : 0;
     const { req, support } = problem;
-    this.sources = buildLegSources(req.model);
-    this.index = buildIndex(req.model);
+    this.sources = buildLegSources(req.model, req.sourcing);
+    this.index = buildIndex(req.model, req.sourcing);
     // Slice A9: a swappable scorer is a free swimmer to the evaluator: a scorer when he is a column member, and a non-scorer beside a column he is not in.
     const swappable = problem.swap.size > 0;
     this.evaluator = new Evaluator({
@@ -411,7 +411,7 @@ export class Space {
     }
     const lineup: Lineup = { payloadVersion: 1, meetKey: problem.req.lineup.meetKey, entries };
     const out = new Map<string, number | null>();
-    for (const r of resolveLineup(problem.req.model, lineup, buildIndex(problem.req.model)).resolved) {
+    for (const r of resolveLineup(problem.req.model, lineup, buildIndex(problem.req.model, problem.req.sourcing)).resolved) {
       out.set(pairKey(r.entry.kind === 'individual' ? r.entry.swimmerId : '', r.entry.eventKey) + r.gender, r.value);
     }
     return out;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BUILTIN_SESSION_PRESETS, parseSessionPreset, sessionLoad, scoreMeet, entryKey } from '../packages/engine/src/index';
-import type { CompleteRulePreset, ConversionSettings, Lineup, LineupEntry, MeetEvent, MeetModel, MeetSwim, RelaySplit, ScorerTag } from '../packages/engine/src/index';
+import type { CompleteRulePreset, SourcingSettings, Lineup, LineupEntry, MeetEvent, MeetModel, MeetSwim, RelaySplit, ScorerTag } from '../packages/engine/src/index';
 import type { Results } from '../packages/engine/src/model/results';
 import type { LoadPreference, SessionPreset } from '../packages/engine/src/planner/types';
 import { completeNsisc, set, TEST_PROVENANCE } from './engineTestPresets';
@@ -26,7 +26,7 @@ const resultsFor = (entries: Lineup['entries'], unscheduled: Results['violations
 const pref: LoadPreference = { mode: 'respect', maxRacesPerSession: { state: 'set', value: 2, provenance: { kind: 'engine-neutral', reason: 'test' } }, diving: { state: 'set', value: 'excluded', provenance: { kind: 'engine-neutral', reason: 'test' } } };
 const lineup = (entries: Lineup['entries']): Lineup => ({ payloadVersion: 1, meetKey: 'm', entries });
 const emptyModel = model;
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 
 function plannerRules(changes: Partial<CompleteRulePreset['scoring']> = {}): CompleteRulePreset {
   const base = completeNsisc();

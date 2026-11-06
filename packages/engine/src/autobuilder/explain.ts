@@ -254,7 +254,7 @@ export function explain(problem: Problem, proposal: AutoBuildProposal, context: 
   const { model } = req;
   const budget = new Budget(context.workLimit ?? Number.POSITIVE_INFINITY, context.expired);
   const results = proposal.evaluation.results;
-  const index = buildIndex(model);
+  const index = buildIndex(model, req.sourcing);
   const swimmerOf = new Map(model.swimmers.map((s) => [s.swimmerId, s]));
   const swimsOf = new Map<string, MeetSwim[]>();
   for (const s of model.swims) {

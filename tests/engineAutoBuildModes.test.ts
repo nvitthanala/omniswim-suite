@@ -17,7 +17,7 @@ import type {
   AutoBuildRequest,
   AutoBuildResult,
   CompleteRulePreset,
-  ConversionSettings,
+  SourcingSettings,
   Lineup,
   LineupEntry,
   LoadPreference,
@@ -52,7 +52,7 @@ vi.mock('../packages/engine/src/autobuilder/gate', async (importOriginal) => {
   };
 });
 
-const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
+const SOURCING: SourcingSettings = { includeConvertedSwims: false, lcmToScy: null, flyover: { state: 'unset' } };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
 const FREE = '100 Freestyle';
 const BACK = '100 Backstroke';
