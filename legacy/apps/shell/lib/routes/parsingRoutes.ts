@@ -1,0 +1,279 @@
+/**
+ * PDF/psych-sheet/athlete-history parsing routes. The Python subprocess
+ * pipelines behind them live in the sibling `parsingPipeline.ts`, split out
+ * purely to keep this function under the repo's line-count ceiling.
+ *
+ * Extracted from `server.ts`'s `startServer` (H2, code-health refactor,
+ * 2026-09-25) with no behavior change: same paths, methods, subprocess
+ * invocation order and fallbacks, and error handling as before.
+ */
+import type { Express } from 'express';
+import { apiError } from '../middleware/apiError.ts';
+import { randomUUID } from 'node:crypto';
+import fs from 'fs';
+import path from 'path';
+import { Gender, SwimmerResult } from '../../../../../packages/core/src/types.ts';
+import { parseSwimCloudPasteDetailed } from '../../../../../packages/core/src/lib/athleteHistory.ts';
+import {
+  parsePdfSchema,
+  parsePsychPdfSchema,
+  parseAthleteHistorySchema,
+} from '../../../../../packages/core/src/schemas/workspace.ts';
+import {
+  runPythonScript,
+  mapPsychRows,
+  parsePsychPdfFile,
+  parseMeetUnified,
+  parseMeetLegacy,
+  ParsedRowError,
+  MeetPipelineError,
+  type MeetPipelineErrorCode,
+  type MeetWarningRollup,
+} from './parsingPipeline.ts';
+
+export interface ParsingRoutesDeps {
+  projectRoot: string;
+  dataDir: string;
+  pdfParserScript: string;
+  parseMeetScript: string;
+  parsePsychScript: string;
+  pointCalculatorScript: string;
+  teamRankingsScript: string;
+  aiEnabled: boolean;
+}
+
+/** Status and headline for each tagged failure the Python meet pipeline can end on. */
+const MEET_PIPELINE_RESPONSES: Record<MeetPipelineErrorCode, { status: number; error: string }> = {
+  rankings_extraction_failed: { status: 422, error: 'Team Rankings could not be read' },
+  scoring_settings_missing: { status: 500, error: 'Scoring settings are missing' },
+  points_on_status_clock: { status: 422, error: 'Place points sit beside an NT, DQ, NS, SCR or DNF time' },
+};
+
+/** The roll-up entry added when the legacy pipeline produced the rows. `rows` is every row in the response. */
+export const LEGACY_FALLBACK_WARNING_CODE = 'unified_pipeline_failed_legacy_used';
+
+function legacyFallbackWarning(unifiedErr: unknown, rowCount: number): MeetWarningRollup {
+  const reason = (unifiedErr instanceof Error ? unifiedErr.message : String(unifiedErr)).slice(0, 300);
+  return {
+    code: LEGACY_FALLBACK_WARNING_CODE,
+    rows: rowCount,
+    examples: [
+      `The main PDF parser failed, so the older fallback parser read this file. Relay splits and some warnings may differ. Reason: ${reason}`,
+    ],
+  };
+}
+
+export function createParsingTempFilePath(projectRoot: string, prefix = 'temp'): string {
+  return path.join(projectRoot, `${prefix}_${randomUUID()}.pdf`);
+}
+
+export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): void {
+  const {
+    projectRoot: PROJECT_ROOT,
+    parsePsychScript: PARSE_PSYCH_SCRIPT,
+    aiEnabled: AI_ENABLED,
+  } = deps;
+
+  app.post('/api/parse-pdf', async (req, res) => {
+    const parsed = parsePdfSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return apiError(res, 400, 'INVALID_PDF_PAYLOAD', 'Invalid PDF payload', parsed.error.issues);
+    }
+    const { base64, format } = parsed.data;
+    const tempFile = createParsingTempFilePath(PROJECT_ROOT);
+    try {
+      fs.writeFileSync(tempFile, Buffer.from(base64, 'base64'));
+      const fmt = format || 'auto';
+      let payload;
+      try {
+        payload = { ...(await parseMeetUnified(deps, tempFile, fmt)), pipeline: 'unified' as const };
+      } catch (unifiedErr) {
+        // Final failures: retrying the legacy pipeline cannot help and could hurt.
+        // Unusable rows would be mapped the same way. An unread Team Rankings page,
+        // missing settings or a status-clock contradiction would let legacy score
+        // without the event cutoff or settings, or from the same drifted columns.
+        // Only untagged failures fall back.
+        if (unifiedErr instanceof ParsedRowError || unifiedErr instanceof MeetPipelineError) throw unifiedErr;
+        console.warn('Unified parse_meet failed, falling back to legacy pipeline:', unifiedErr);
+        const legacy = await parseMeetLegacy(deps, tempFile, fmt);
+        // The fallback is visible: the response says which pipeline produced the rows,
+        // and the roll-up leads with a warning that names why the unified one failed.
+        payload = {
+          ...legacy,
+          pipeline: 'legacy' as const,
+          warnings: [legacyFallbackWarning(unifiedErr, legacy.results.length), ...legacy.warnings],
+        };
+      }
+      res.json(payload);
+    } catch (error) {
+      if (error instanceof ParsedRowError) {
+        return apiError(
+          res,
+          422,
+          'PDF_ROWS_UNREADABLE',
+          'PDF rows could not be read without guessing',
+          error.message,
+          { rows: error.problems }
+        );
+      }
+      if (error instanceof MeetPipelineError) {
+        const final = MEET_PIPELINE_RESPONSES[error.code];
+        return apiError(
+          res,
+          final.status,
+          error.code,
+          final.error,
+          error.message,
+          error.code === 'points_on_status_clock' ? { rows: error.rows } : undefined
+        );
+      }
+      apiError(res, 500, 'PDF_PARSE_FAILED', 'Failed to parse PDF', String(error));
+    } finally {
+      try { fs.unlinkSync(tempFile); } catch { /* absent or already removed */ }
+    }
+  });
+
+  app.post('/api/parse-psych-pdf', async (req, res) => {
+    const parsed = parsePsychPdfSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return apiError(res, 400, 'INVALID_PSYCH_PAYLOAD', 'Invalid psych PDF payload', parsed.error.issues);
+    }
+    const { base64, format } = parsed.data;
+    if (!base64?.trim()) {
+      return apiError(res, 400, 'NO_PDF_DATA', 'No PDF data in request');
+    }
+    const tempFile = createParsingTempFilePath(PROJECT_ROOT, 'temp_psych');
+    try {
+      fs.writeFileSync(tempFile, Buffer.from(base64, 'base64'));
+      const fmt = format || 'auto';
+      let results: SwimmerResult[];
+      try {
+        results = await parsePsychPdfFile(deps, tempFile, fmt);
+      } catch (primaryErr) {
+        // Unusable rows are a data defect: psych_parser.py would hand back the same rows.
+        if (primaryErr instanceof ParsedRowError) throw primaryErr;
+        console.warn('Psych parse via pdf_parser failed, trying psych_parser.py:', primaryErr);
+        const output = await runPythonScript(deps, PARSE_PSYCH_SCRIPT, [tempFile, fmt]);
+        const trimmed = output.trim();
+        if (!trimmed) {
+          throw new Error('Psych parser returned empty output');
+        }
+        const parsedJson = JSON.parse(trimmed) as { error?: string; results?: Record<string, unknown>[] };
+        if (parsedJson.error) {
+          // The script's own error text is not for the caller in production.
+          return apiError(res, 500, 'PSYCH_PARSE_FAILED', 'Failed to parse psych PDF', parsedJson.error);
+        }
+        const rawRows = Array.isArray(parsedJson.results) ? parsedJson.results : [];
+        results = mapPsychRows(rawRows);
+      }
+      if (results.length === 0) {
+        return apiError(
+          res,
+          422,
+          'PSYCH_NO_ENTRIES',
+          'No individual psych entries found',
+          'Try Regular List or Divided (2-Col) format from the dropdown.'
+        );
+      }
+      return res.json({ results });
+    } catch (error) {
+      if (error instanceof ParsedRowError) {
+        return apiError(
+          res,
+          422,
+          'PSYCH_ROWS_UNREADABLE',
+          'Psych sheet rows could not be read without guessing',
+          error.message,
+          { rows: error.problems }
+        );
+      }
+      return apiError(res, 500, 'PSYCH_PARSE_FAILED', 'Failed to parse psych PDF', String(error));
+    } finally {
+      try { fs.unlinkSync(tempFile); } catch { /* absent or already removed */ }
+    }
+  });
+
+  app.post('/api/parse-athlete-history', async (req, res) => {
+    const validated = parseAthleteHistorySchema.safeParse(req.body ?? {});
+    if (!validated.success) {
+      return apiError(res, 400, 'INVALID_HISTORY_PAYLOAD', 'Invalid request', validated.error.issues);
+    }
+    try {
+      const { text, imageBase64, team, gender, swimmerName, division } = validated.data;
+      const g = gender === Gender.WOMEN || gender === 'Women' ? Gender.WOMEN : Gender.MEN;
+      const teamName = typeof team === 'string' && team.trim() ? team.trim() : 'Unknown';
+      // A missing or unrecognised division is absent, not D1: passed explicitly it would
+      // stop the parser looking the team up, and an unmapped team would be judged against
+      // the strictest table. Undefined lets the team's own division decide, and an
+      // unmapped team stays unknown.
+      const div = division === 'D1' || division === 'D2' || division === 'D3' || division === 'NAIA' ? division : undefined;
+      if (typeof text === 'string' && text.trim()) {
+        const result = parseSwimCloudPasteDetailed(text, {
+          team: teamName,
+          gender: g,
+          swimmerName: typeof swimmerName === 'string' ? swimmerName : undefined,
+          division: div,
+        });
+        return res.json(result);
+      }
+      if (typeof imageBase64 === 'string' && imageBase64.trim() && AI_ENABLED && process.env.GEMINI_API_KEY) {
+
+        let GoogleGenAI: any;
+        try {
+          // @ts-expect-error — @google/genai is an optional runtime dep; omitted from package.json intentionally
+          ({ GoogleGenAI } = await import('@google/genai'));
+        } catch {
+          return apiError(res, 501, 'AI_NOT_INSTALLED', 'AI image parsing is not installed in this build');
+        }
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.0-flash',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: 'Extract swimmer rows as JSON array: [{name, event, time}]. No markdown.' },
+                { inlineData: { mimeType: 'image/png', data: imageBase64 } },
+              ],
+            },
+          ],
+        });
+        const raw = response.text ?? '[]';
+        const jsonMatch = raw.match(/\[[\s\S]*\]/);
+        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : '[]');
+        const swims = (Array.isArray(parsed) ? parsed : []).map((row: Record<string, string>) => ({
+          name: String(row.name ?? ''),
+          team: teamName,
+          gender: g,
+          event: String(row.event ?? ''),
+          time: String(row.time ?? ''),
+          source: 'ocr' as const,
+        }));
+        return res.json({ swims: swims.filter((s: { name: string; event: string }) => s.name && s.event) });
+      }
+      return apiError(
+        res,
+        400,
+        'NO_HISTORY_INPUT',
+        AI_ENABLED
+          ? 'Provide pasted text, or imageBase64 with GEMINI_API_KEY'
+          : 'Image parsing is disabled. Provide pasted text or set OMNI_AI_ENABLED=true with GEMINI_API_KEY.'
+      );
+    } catch (err) {
+      return apiError(res, 500, 'HISTORY_PARSE_FAILED', 'Parse failed', String(err));
+    }
+  });
+
+  // No upload middleware is mounted: the handler returns 501 and does nothing
+  // with a file, but multer writes to disk BEFORE the handler runs, so mounting
+  // it accepted an unauthenticated write from anyone who could reach the port.
+  // Re-enable via createVideoUpload() when the feature is actually implemented.
+  app.post('/api/analyze-video', async (_req, res) => {
+    apiError(
+      res,
+      501,
+      'VIDEO_ANALYSIS_UNAVAILABLE',
+      'Gemini video analysis reserved for a future release. Use local metrics in the Metrics applet.'
+    );
+  });
+}

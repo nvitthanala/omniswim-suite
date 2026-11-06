@@ -8,6 +8,9 @@ const bannedPatterns: readonly RegExp[] = [
   /\?\?\s*1\b/,
   /\bMath\.(?!(?:abs|min|max|round)\b)/,
   /fatigue/,
+  // Race analysis is pure (D2 E5): no UI, Node or filesystem import, in any import form
+  // (`from`, bare `import`, dynamic `import()`, `require()`).
+  /(?:from\s*|import\s*\(?\s*|require\s*\(\s*)['"](?:react(?:-dom)?|fs|path|node:[^'"]+)(?:\/[^'"]*)?['"]/,
 ];
 
 function tsFilesUnder(directory: string): string[] {
@@ -27,8 +30,14 @@ function tsFilesUnder(directory: string): string[] {
 
 describe('raceAnalysis purity', () => {
   it('does not contain prohibited fallback constants or synthetic velocity helpers', () => {
-    const root = join(process.cwd(), 'packages/core/src/lib/raceAnalysis');
+    const root = join(process.cwd(), 'packages/engine/src/lib/raceAnalysis');
     const offenders: string[] = [];
+
+    // A shim left behind in core would hold two lines and no named export. Scanning it would pass
+    // for the wrong reason, so prove the scan reads the real implementation.
+    const metrics = readFileSync(join(root, 'metrics.ts'), 'utf8');
+    expect(metrics.length).toBeGreaterThan(1024);
+    expect(metrics).toMatch(/export function /);
 
     for (const file of tsFilesUnder(root)) {
       const text = readFileSync(file, 'utf8');

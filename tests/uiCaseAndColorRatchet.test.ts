@@ -29,8 +29,8 @@ const UPPERCASE_START_OF_PHASE_6 = 161;
 /** After the Phase 6 sweep. Lower it when more labels move to sentence case. */
 const UPPERCASE_BASELINE = 14;
 
-const HEX_DIRS = ['packages/manager', 'packages/matrix', 'packages/ui', 'apps/shell/src'];
-const UPPERCASE_DIRS = [...HEX_DIRS, 'packages/metrics'];
+const HEX_DIRS = ['legacy/packages/manager', 'legacy/packages/matrix', 'legacy/packages/ui', 'legacy/apps/shell/src'];
+const UPPERCASE_DIRS = [...HEX_DIRS, 'legacy/packages/metrics'];
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.vite', 'coverage']);
 
 function tsxFiles(dir: string): string[] {
@@ -79,8 +79,8 @@ describe('hex colour ratchet', () => {
   it('scans the four package folders', () => {
     const files = filesIn(HEX_DIRS);
     expect(files.length).toBeGreaterThan(100);
-    expect(files.some(f => f.replace(/\\/g, '/').endsWith('packages/matrix/src/components/TeamCard.tsx'))).toBe(true);
-    expect(files.some(f => f.replace(/\\/g, '/').endsWith('apps/shell/src/App.tsx'))).toBe(true);
+    expect(files.some(f => f.replace(/\\/g, '/').endsWith('legacy/packages/matrix/src/components/TeamCard.tsx'))).toBe(true);
+    expect(files.some(f => f.replace(/\\/g, '/').endsWith('legacy/apps/shell/src/App.tsx'))).toBe(true);
   });
 
   it(`finds no more than ${HEX_LITERAL_BASELINE} hex literals in *.tsx`, () => {

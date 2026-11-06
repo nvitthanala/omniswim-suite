@@ -5,6 +5,12 @@ orchestrator briefs you through Orca. Follow your brief first. This file holds
 the rules that always apply. `CLAUDE.md` holds the full project rules; read it
 for anything not covered here.
 
+## 0. Current initiative
+
+The Chrome extension redesign (2026-10-25). Plan: `plans/2026-10-25/`.
+State: `docs/reference/REDESIGN_2026-10-25_STATE.json`. Code under `legacy/` is
+frozen: fix paths only, never add features there.
+
 ## 1. Read the Obsidian vault before you read code cold
 
 The project knowledge base is at:

@@ -17,14 +17,16 @@
     "paths": {
       "@omniswim/core": ["./packages/core/src/index.ts"],
       "@omniswim/core/*": ["./packages/core/src/*"],
-      "@omniswim/ui": ["./packages/ui/src/index.ts"],
-      "@omniswim/ui/*": ["./packages/ui/src/*"],
+      "@omniswim/engine": ["./packages/engine/src/index.ts"],
+      "@omniswim/engine/*": ["./packages/engine/src/*"],
+      "@omniswim/ui": ["./legacy/packages/ui/src/index.ts"],
+      "@omniswim/ui/*": ["./legacy/packages/ui/src/*"],
       "@omniswim/swimcloud": ["./packages/swimcloud/src/index.ts"],
       "@omniswim/swimcloud/*": ["./packages/swimcloud/src/*"],
-      "@omniswim/manager": ["./packages/manager/src/ManagerApp.tsx"],
-      "@omniswim/matrix": ["./packages/matrix/src/MatrixApp.tsx"],
-      "@omniswim/matrix/*": ["./packages/matrix/src/*"],
-      "@omniswim/metrics": ["./packages/metrics/src/MetricsApp.tsx"]
+      "@omniswim/manager": ["./legacy/packages/manager/src/ManagerApp.tsx"],
+      "@omniswim/matrix": ["./legacy/packages/matrix/src/MatrixApp.tsx"],
+      "@omniswim/matrix/*": ["./legacy/packages/matrix/src/*"],
+      "@omniswim/metrics": ["./legacy/packages/metrics/src/MetricsApp.tsx"]
     }
   }
 }

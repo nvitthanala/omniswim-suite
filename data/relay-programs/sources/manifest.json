@@ -1,6 +1,6 @@
 {
-  "description": "Primary-source conference championship documents (event order and relay list). Every entry in packages/core/src/data/relayPrograms.ts traces to one of these by sourceId + sha256. Hand-maintained: no fetch script yet. Same fields as data/cutlines/sources/manifest.json.",
-  "generatedAt": "2026-10-15T02:59:53Z",
+  "description": "Primary-source conference championship documents (event order and relay list). Every entry in packages/core/src/data/relayPrograms.ts traces to one of these by sourceId + sha256; the NSISC entry confirms the event order of the engine session schedule nsisc-table-c (no code cites it). Hand-maintained: no fetch script yet. Same fields as data/cutlines/sources/manifest.json.",
+  "generatedAt": "2026-11-06T03:28:17Z",
   "sources": [
     {
       "id": "glvc-swim-dive-2025-26-complete-results",
@@ -26,6 +26,33 @@
         "tool": "xpdf pdftotext",
         "toolVersion": "4.00",
         "command": "pdftotext -eol unix 2026-GLVC-Swimming-Diving-Complete_Results.pdf 2026-GLVC-Swimming-Diving-Complete_Results.txt",
+        "pageSeparator": "form feed (U+000C) after each page"
+      }
+    },
+    {
+      "id": "nsisc-swim-dive-2025-26-final-results",
+      "conference": "New South Intercollegiate Swim Conference (NSISC)",
+      "season": "2025-2026",
+      "genders": "MW",
+      "kind": "results-as-run",
+      "meetDates": "2026-02-17 to 2026-02-21",
+      "url": "https://s3.us-east-2.amazonaws.com/sidearm.nextgen.sites/obu.sidearmsports.com/documents/2026/2/21/2026_NSISC_Championships_Final_Results.pdf",
+      "linkedFrom": "Web search result titled \"2026 NSISC Championships Final Results\", on Ouachita Baptist University athletics (obu.sidearmsports.com) document storage. User decision R94 (2026-11-05) approved the download.",
+      "filename": "2026-NSISC-Championships-Final-Results.pdf",
+      "sha256": "d02c0b4c83d4719d247ebdcc47866ad2fd552aa335806f989a2fb303df6e46d4",
+      "bytes": 339590,
+      "pageCount": 76,
+      "lastModifiedHeader": "Sun, 22 Feb 2026 03:48:27 GMT",
+      "retrievedAt": "2026-11-06T03:28:17Z",
+      "note": "HY-TEK Meet Manager 7.0 results, printed 2026-02-21. Scored events 1 to 42 run in the order of Table C (plans/2026-10-25/00-USER-PLAN.md lines 55-76), which packages/engine/src/planner/builtins.ts nsisc-table-c v1 copies. No 100 Yard IM was swum (0 occurrences). Events 100 to 939 are time trials and exhibition swims, not championship events. The document prints no session times, so it does not settle the small-field 1650 session (R94: stays pending).",
+      "extractedText": {
+        "filename": "2026-NSISC-Championships-Final-Results.txt",
+        "sha256": "f6a939b05a7c14edcabe41f9d48643041568a3d658af49c7dbe8bd3c69ca8957",
+        "bytes": 215120,
+        "pdfSha256": "d02c0b4c83d4719d247ebdcc47866ad2fd552aa335806f989a2fb303df6e46d4",
+        "tool": "xpdf pdftotext",
+        "toolVersion": "4.00",
+        "command": "pdftotext -eol unix 2026-NSISC-Championships-Final-Results.pdf 2026-NSISC-Championships-Final-Results.txt",
         "pageSeparator": "form feed (U+000C) after each page"
       }
     }

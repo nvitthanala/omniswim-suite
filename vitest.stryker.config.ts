@@ -12,6 +12,10 @@ export default mergeConfig(
   base,
   defineConfig({
     test: {
+      // The base config runs tests/ only. The legacy move (2026-10-25) put many
+      // scoring tests under legacy/tests because they import a legacy package;
+      // they still guard packages/core, so mutation runs keep them.
+      include: ['legacy/tests/**/*.test.ts'],
       exclude: [
         ...configDefaults.exclude,
         'tests/swimcloud*',
@@ -30,6 +34,22 @@ export default mergeConfig(
         'tests/dataLossGuard*',
         'tests/parsePdfGuard*',
         'tests/*Routes.test.ts',
+        'legacy/tests/swimcloud*',
+        'legacy/tests/swimCloud*',
+        'legacy/tests/backup*',
+        'legacy/tests/restoreLastBackup*',
+        'legacy/tests/workspaceSave*',
+        'legacy/tests/optimizeWorkerClient*',
+        'legacy/tests/serverRefusesNewerSchema*',
+        'legacy/tests/schemaVersionGuard*',
+        'legacy/tests/parsing*',
+        'legacy/tests/apiErrorShape*',
+        'legacy/tests/backendDiagnostics*',
+        'legacy/tests/authHardening*',
+        'legacy/tests/hostOriginGuard*',
+        'legacy/tests/dataLossGuard*',
+        'legacy/tests/parsePdfGuard*',
+        'legacy/tests/*Routes.test.ts',
       ],
     },
   })

@@ -684,14 +684,18 @@ function walk(dir, out = []) {
   return out;
 }
 {
-  const target = path.join(repoRoot, 'packages/core/src/cutlines.ts');
+  const target = path.join(repoRoot, 'packages/engine/src/cutlines.ts');
   const src = fs.readFileSync(target, 'utf-8');
+  // The real loader, not the core shim: a shim holds two lines and would pass every scan below.
+  if (src.length <= 1024 || !/export function publishedCutlines/.test(src)) {
+    fail('packages/engine/src/cutlines.ts is not the real cutlines loader (under 1 KB or no publishedCutlines export)');
+  }
   const clockLiterals = src.match(/['"]\d{1,3}:\d{2}\.\d{2}['"]/g);
   if (clockLiterals) fail(`cutlines.ts contains competition-time literals: ${clockLiterals.join(', ')}`);
   if (/proj_2[6-9]_2[7-9]/.test(src)) fail('cutlines.ts still references projection columns');
   if (/D1_CUTLINE_ROWS/.test(src)) fail('cutlines.ts still declares the hardcoded D1_CUTLINE_ROWS array');
 }
-for (const file of walk(path.join(repoRoot, 'packages/core/src'))) {
+for (const file of [...walk(path.join(repoRoot, 'packages/engine/src')), ...walk(path.join(repoRoot, 'packages/core/src'))]) {
   const src = fs.readFileSync(file, 'utf-8');
   if (/proj_2[6-9]_2[7-9]/.test(src)) {
     fail(`${path.relative(repoRoot, file)} references a fabricated projection column`);

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dirs = [
   path.join(root, 'node_modules', '.vite'),
-  path.join(root, 'apps', 'shell', 'node_modules', '.vite'),
+  path.join(root, 'legacy', 'apps', 'shell', 'node_modules', '.vite'),
 ];
 
 let cleared = 0;

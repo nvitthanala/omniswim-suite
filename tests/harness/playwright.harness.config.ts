@@ -19,6 +19,8 @@ function dataDir(): string {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
     cpSync(join(root, 'data'), dir, { recursive: true, filter: src => !/[\\/]data[\\/]backups([\\/]|$)/.test(src) });
+    // The settings file moved to legacy/data; the server reads it from OMNI_DATA_DIR.
+    cpSync(join(root, 'legacy', 'data', 'scoring_settings.json'), join(dir, 'scoring_settings.json'));
   }
   return dir;
 }
@@ -36,7 +38,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: { baseURL: `http://127.0.0.1:${PORT}`, actionTimeout: 15_000 },
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run dev --workspace legacy/apps/shell',
     cwd: root,
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: false,

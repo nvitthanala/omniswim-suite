@@ -17,7 +17,8 @@
     "./captureStore": "./src/captureStore.ts",
     "./crawlPlan": "./src/crawlPlan.ts",
     "./teamSeasons": "./src/teamSeasons.ts",
-    "./targetUrls": "./src/targetUrls.ts"
+    "./targetUrls": "./src/targetUrls.ts",
+    "./browser": "./src/browser/index.ts"
   },
   "scripts": {
     "lint": "tsc --noEmit -p tsconfig.json"

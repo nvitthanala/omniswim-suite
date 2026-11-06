@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { chromium, expect, type APIRequestContext, type BrowserContext, type Page, type Worker } from '@playwright/test';
 import { FAKE_ORIGIN, FakeSwimCloud } from './fakeSwimCloud';
 
-export const EXTENSION_DIR = join(import.meta.dirname, '..', '..', 'extensions', 'swimcloud-companion');
+export const EXTENSION_DIR = join(import.meta.dirname, '..', '..', 'legacy', 'extensions', 'swimcloud-companion');
 export const APP_PORT = Number(process.env.HARNESS_PORT ?? 3711);
 export const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
 const TOKEN_KEY = 'omniswimPairingToken';

@@ -1,0 +1,1531 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * Phase 4: athlete history index. Test: npx tsx scripts/test_athlete_history.mjs
+ */
+
+import {
+  Gender,
+  HistoricalSwim,
+  NcaaDivision,
+  ScoringSettings,
+  SwimmerResult,
+  SwimCloudBadge,
+  Workspace,
+  AthleteEventProfile,
+  type AthleteEventBest,
+  type PlannedSwimEntry,
+} from '../types';
+import { divisionForTeamOrNull } from '../data/teamDivisions';
+import { cutlineTableCourseForSwim } from './cutlineUtils';
+import { computedCutForTeamSwim } from './cutlineTags';
+import { isUnconfirmedProgramSwim } from './programSwim';
+import { itemAt, regexGroup } from './indexedAccess';
+import { mergeScoringSettings } from './scoringDefaults';
+import {
+  convertSwimToSCYDetailed,
+  convertTimeToSeconds,
+  hasConversionFactorForCourse,
+  isDivingEvent,
+  isRelayResult,
+  normalizeSwimmerName,
+  scyConversionProvenance,
+  stripEventGenderMarker,
+} from './utils';
+import { parseSwimCloudMultiProfile } from './swimCloudMultiProfile';
+import {
+  findSwimsNotSwumInCourse,
+  swimEventNotSwumInCourse,
+  type EventNotSwumInCourse,
+} from './courseEvents';
+import {
+  aliasNameKey,
+  buildAliasResolver,
+  IDENTITY_ALIAS_RESOLVER,
+  type AthleteAliasResolver,
+} from './athleteAliases';
+import type { CatalogAthlete, CatalogEventTime, CatalogTeamRoster } from './rosterCatalog';
+import { bestTimesByEvent, bestTimesByEventInLane } from './rosterCatalog';
+import {
+  bestTimeLane,
+  isRankableSwim,
+  readSwimCloudStamp,
+  swimEventIdentity,
+  type SwimCloudStampReading,
+} from './bestTimeEligibility';
+import {
+  meetPlaceFieldForWorkspace,
+  profileRankingFields,
+  rankEventsByStrength,
+  sameSwimmerPredicate,
+  type MeetPlaceField,
+} from './eventStrength';
+
+// The event ranking lives in eventStrength.ts, one module for every reader.
+// Re-exported here because this is where callers already import it from.
+export { rankEventsByQuality, type EventQualityRanking } from './eventStrength';
+
+// The best-time rules live in one leaf module so every reader shares them.
+// Re-exported here because this is where callers already import them from.
+export {
+  bestTimeLane,
+  isExtractedSplitSwim,
+  isRankableSwim,
+  isRankableSwimCloudStamp,
+  isSameSwimEvent,
+  isUserInputtedSwim,
+  readSwimCloudStamp,
+  SWIMCLOUD_CUT_CHIP_LABELS,
+  swimEventIdentity,
+  type BestTimeLane,
+  type BestTimeProvenance,
+  type SwimCloudStampReading,
+} from './bestTimeEligibility';
+
+function swimKey(name: string, team: string, gender: Gender, event: string): string {
+  return `${normalizeSwimmerName(name)}|${team}|${gender}|${event}`;
+}
+
+export function historicalSwimFromResult(r: SwimmerResult, meetLabel?: string): HistoricalSwim | null {
+  if (isRelayResult(r) && r.name !== r.team) return null;
+  if (r.isRelay && r.name === r.team) return null;
+  return {
+    name: r.name,
+    team: String(r.team ?? '').trim(),
+    gender: (r.gender ?? Gender.MEN) as Gender,
+    event: r.event,
+    time: r.time,
+    source: 'pdf',
+    classYear: String(r.classYear ?? ''),
+    meetLabel,
+    // A SwimCloud meet import flags a time trial by event number, not label.
+    ...(r.isTimeTrial === true ? { isTimeTrial: true as const } : {}),
+    // A swims-list row nobody confirmed as a program swim: kept in the history,
+    // never a best, a ranked event or a cut tag (`isRankableSwim`).
+    ...(isUnconfirmedProgramSwim(r) ? { programUnconfirmed: true as const } : {}),
+  };
+}
+
+export function buildHistoryFromWorkspace(workspace: Workspace): HistoricalSwim[] {
+  const label = workspace.loadedMeet?.pdfFilename ?? workspace.name;
+  const out: HistoricalSwim[] = [];
+  for (const r of [...(workspace.menResults ?? []), ...(workspace.womenResults ?? [])]) {
+    const h = historicalSwimFromResult(r, label);
+    if (h) out.push(h);
+  }
+  return out;
+}
+
+/**
+ * The marks a profile best carries onto a planned entry or recruit row written
+ * from it: `convertedFrom` (the time is an SCY estimate from a metric swim) and
+ * `isAltitudeAdjusted`. Empty for an ordinary yards best. Spread it into
+ * `createPlannedEntry` so an estimate never lands in a plan unmarked.
+ */
+export function eventBestTimeMarks(
+  best: AthleteEventBest | undefined
+): Pick<PlannedSwimEntry, 'convertedFrom' | 'isAltitudeAdjusted'> {
+  if (!best) return {};
+  return {
+    ...(best.convertedFrom ? { convertedFrom: best.convertedFrom } : {}),
+    ...(best.altitudeAdjusted === true ? { isAltitudeAdjusted: true as const } : {}),
+  };
+}
+
+/**
+ * The history-merge key suffix for a swim's lane. A result keys with no
+ * suffix, as it always has. A time trial keys apart from the program swim of
+ * the same label (see `HistoricalSwim.isTimeTrial`).
+ */
+function mergeLaneSuffix(swim: HistoricalSwim): string {
+  const lane = bestTimeLane(swim);
+  const laneSuffix = lane === 'result' ? '' : `|${lane}`;
+  const trialSuffix = swim.isTimeTrial === true ? `${laneSuffix}|time_trial` : laneSuffix;
+  // An unconfirmed row keys apart from a confirmed swim of the same label, so it
+  // can never displace one.
+  return swim.programUnconfirmed === true ? `${trialSuffix}|unconfirmed` : trialSuffix;
+}
+
+export function mergeHistoryIndex(
+  existing: HistoricalSwim[],
+  incoming: HistoricalSwim[]
+): HistoricalSwim[] {
+  const best = new Map<string, HistoricalSwim>();
+  for (const s of [...existing, ...incoming]) {
+    // Best per event PER COURSE: an actual SCY swim and its LCM/SCM counterparts are
+    // distinct facts — the cross-course arbitrage view needs both to compare.
+    // A self-reported time and an extracted split each keep their own lane on
+    // top of that. Neither is a result, so neither may evict a slower real swim
+    // (which would leave the swimmer with no best at all), and a real swim must
+    // not evict either (both stay stored and visible). Every other swim keys
+    // exactly as before.
+    //
+    // The event half of the key is still the raw label, on purpose: this is a
+    // store, not a best picker. Every reader that picks a best folds labels
+    // itself (see swimEventIdentity), so keeping both a HyTek meet row and a
+    // history row of one event loses nothing, and folding here would drop
+    // whichever row a reader could not yet read.
+    const lane = mergeLaneSuffix(s);
+    const key = `${swimKey(s.name, s.team, s.gender, s.event)}|${s.timeType ?? 'SCY'}${lane}`;
+    // Raw seconds, deliberately: the key already pins both the event and the
+    // course, so every swim compared here shares one conversion factor and the
+    // conversion cancels out of the ordering. Converting first would also drag
+    // non-program events (25s, 100 IM) through a factor table that does not
+    // publish them, for a comparison that does not need it.
+    const prev = best.get(key);
+    if (!prev) {
+      best.set(key, s);
+      continue;
+    }
+    if (isBetterStoredMark(s, prev)) best.set(key, s);
+  }
+  return [...best.values()];
+}
+
+/**
+ * True when `candidate` should replace `held` under one merge key.
+ *
+ * A swim keeps the lower time. A dive keeps the higher score: its `time`
+ * holds the judged points (`'318.05'`), and more points is the better dive.
+ * Keeping the lower number, as this merge used to, kept a diver's worst dive.
+ * A value that is not a number (`DQ`, `NS`) never replaces a real one.
+ */
+function isBetterStoredMark(candidate: HistoricalSwim, held: HistoricalSwim): boolean {
+  const next = convertTimeToSeconds(candidate.time);
+  const prev = convertTimeToSeconds(held.time);
+  if (!isDivingEvent(candidate.event)) return next < prev;
+  if (!Number.isFinite(next)) return false;
+  return !Number.isFinite(prev) || next > prev;
+}
+
+export function relayEventsForAthlete(
+  results: SwimmerResult[],
+  team: string,
+  gender: Gender,
+  name: string,
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
+): string[] {
+  const nameKey = normalizeSwimmerName(resolver.resolveAthleteName(name, team, gender));
+  const events = new Set<string>();
+  for (const r of results) {
+    if (r.gender != null && r.gender !== gender) continue;
+    if (String(r.team ?? '').trim() !== team) continue;
+    if (normalizeSwimmerName(resolver.resolveAthleteName(r.name, team, gender)) !== nameKey) continue;
+    if (isRelayResult(r) && r.name !== r.team) {
+      events.add(r.event);
+    }
+  }
+  return [...events];
+}
+
+/** A best-per-event record that folds every label of one event onto one entry. */
+type EventBestRecord<T extends { timeSec: number }> = {
+  /**
+   * Keep `value` under `label` when it is faster than the entry already held
+   * for the same event. A tie keeps the incumbent. A winner recorded under a
+   * different label replaces the old key, so the record never holds two
+   * labels of one event.
+   */
+  offer(label: string, value: T): void;
+};
+
+function eventBestRecord<T extends { timeSec: number }>(record: Record<string, T>): EventBestRecord<T> {
+  const labelByIdentity = new Map<string, string>();
+  return {
+    offer(label, value) {
+      const identity = swimEventIdentity(label);
+      const heldLabel = labelByIdentity.get(identity);
+      const held = heldLabel === undefined ? undefined : record[heldLabel];
+      if (held && value.timeSec >= held.timeSec) return;
+      if (heldLabel !== undefined && heldLabel !== label) delete record[heldLabel];
+      record[label] = value;
+      labelByIdentity.set(identity, label);
+    },
+  };
+}
+
+export function categorizeBestEvents(
+  history: HistoricalSwim[],
+  team: string,
+  gender: Gender,
+  name: string,
+  settings: ScoringSettings,
+  relayEvents: string[] = [],
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER,
+  /**
+   * Canonical events this profile may offer. Pass the loaded meet's program (see
+   * {@link meetProgramEvents}) so an athlete is only ever proposed for an event
+   * the meet actually contests. `null` falls back to the standard SCY
+   * championship program, for recruit-driven workspaces with no meet loaded.
+   */
+  allowedEvents: ReadonlySet<string> | null = null,
+  /**
+   * The loaded meet's scored fields (see {@link meetPlaceFieldForWorkspace}).
+   * When given, events rank by the place the swimmer's time would take in that
+   * meet (rule 1 of `rankEventsByStrength`). `null`: no meet is loaded, and
+   * events rank by distance to the division cut.
+   */
+  meetField: MeetPlaceField | null = null,
+  /**
+   * The season label the swims were captured for (`'2025-2026'`), when one was stated. It picks the
+   * division for a school whose division changed ({@link divisionForTeamInSeason}). Absent: a school
+   * with a division history has no division, and events rank on raw time. Never defaulted.
+   */
+  swimSeason?: string
+): AthleteEventProfile {
+  const merged = mergeScoringSettings(settings);
+  const indCap = merged.maxIndividualEntriesPerSwimmer ?? 3;
+  const relayCap = merged.maxRelayEntriesPerSwimmer ?? 4;
+  const nameKey = normalizeSwimmerName(resolver.resolveAthleteName(name, team, gender));
+
+  const bestByEvent: AthleteEventProfile['bestByEvent'] = {};
+  // Kept apart from bestByEvent on purpose. An extracted time was taken out of
+  // a longer swim's splits, so it is not a result at this distance and must
+  // never be ranked, cut-tagged or planned as an entry. It is still the best
+  // available estimate of what the swimmer would split on a relay leg, which
+  // is the one place it is read. See HistoricalSwim.isExtractedSplit.
+  const extractedByEvent: AthleteEventProfile['extractedByEvent'] = {};
+  // Self-reported times: listed, never a best, never a relay-leg stand-in.
+  // See HistoricalSwim.isUserInputted.
+  const userInputtedByEvent: NonNullable<AthleteEventProfile['userInputtedByEvent']> = {};
+  // One best per event, not per label: '50 Free SCY' (SwimCloud JSON) and
+  // '50 Freestyle' (paste) are one event. Each lane folds on the event
+  // identity and keys its entry under the label of the swim that holds it.
+  const bests = eventBestRecord(bestByEvent);
+  const extracted = eventBestRecord(extractedByEvent);
+  const userInputted = eventBestRecord(userInputtedByEvent);
+  for (const s of history) {
+    if (s.gender !== gender || s.team !== team) continue;
+    if (normalizeSwimmerName(resolver.resolveAthleteName(s.name, team, gender)) !== nameKey) continue;
+    if (s.event.toLowerCase().includes('relay')) continue;
+    // A time trial is not the program event. A HyTek label says so and
+    // `isEventOffered` refuses it; a SwimCloud meet import says so only
+    // through the flag.
+    if (s.isTimeTrial === true) continue;
+    // An unconfirmed swims-list row may be a time trial too. Not a best until
+    // the user confirms it is a program swim.
+    if (s.programUnconfirmed === true) continue;
+    // An event its course does not swim (a 1000 Freestyle recorded SCM, a 400
+    // Freestyle recorded SCY) is in no lane: not a best, not a split, not a
+    // self-reported time. It stays in athleteHistory. See courseEvents.ts.
+    if (swimEventNotSwumInCourse(s)) continue;
+    // A metric swim in an event with no published conversion factor cannot be
+    // stated in SCY. Skip it rather than let it into the ranking under another
+    // event's factor.
+    if (!hasConversionFactorForCourse(s.event, s.timeType ?? 'SCY')) continue;
+
+    // Key on the SCY *program* event, not the raw history label: a 400 Free LCM
+    // competes in the 500 Free slot (800→1000, 1500→1650). Keying on the raw
+    // label left "400 Freestyle" and "1500 Freestyle" sitting in the profile as
+    // if they were events a meet could enter you in.
+    // An SCM swim converts with the NCAA table of this team's division.
+    const conversion = convertSwimToSCYDetailed(
+      s.event,
+      s.time,
+      s.gender,
+      s.timeType ?? 'SCY',
+      { team }
+    );
+    const { event: programEvent, time: programTime } = conversion;
+    if (!isEventOffered(programEvent, allowedEvents)) continue;
+
+    const sec = convertTimeToSeconds(programTime);
+    if (!Number.isFinite(sec) || sec <= 0) continue;
+    const lane = bestTimeLane(s);
+    if (lane !== 'result') {
+      const record = lane === 'extracted_split' ? extracted : userInputted;
+      record.offer(programEvent, { time: programTime, timeSec: sec, source: s.source });
+      continue;
+    }
+    // A converted best says so, and an altitude-adjusted one says so, so a UI
+    // can mark either. Neither changes the time that ranks.
+    const convertedFrom = scyConversionProvenance({ event: s.event, time: s.time }, conversion);
+    bests.offer(programEvent, {
+      time: programTime,
+      timeSec: sec,
+      source: s.source,
+      ...(convertedFrom ? { convertedFrom } : {}),
+      ...(s.isAltitudeAdjusted === true ? { altitudeAdjusted: true as const } : {}),
+    });
+  }
+
+  // Strongest first: place in the loaded meet, then distance to the division
+  // cut, then raw seconds. An event with no place and no published cut stays
+  // eligible — it fills the cap only after every judged event has, so an
+  // athlete whose events lack published standards still gets a lineup, and the
+  // caller can see which picks were unjudged via `unrankedEvents` and
+  // `strengthByEvent`.
+  const ranking = rankEventsByStrength(bestByEvent, gender, team, {
+    meetField,
+    isSameSwimmer: sameSwimmerPredicate(name, team, gender, resolver),
+    swimSeason,
+  });
+  const primaryEvents = ranking.order.slice(0, indCap);
+  const relayList = relayEvents.slice(0, relayCap);
+
+  return {
+    name,
+    team,
+    gender,
+    bestByEvent,
+    extractedByEvent,
+    userInputtedByEvent,
+    primaryEvents,
+    relayEvents: relayList,
+    ...profileRankingFields(ranking),
+  };
+}
+
+export type SwimCloudPasteFormat = 'personal_bests' | 'roster' | 'multi_profile' | 'unknown';
+
+const TIME_RE = /^(\d{1,2}:)?\d{1,2}\.\d{2}$/;
+const EVENT_COL_RE =
+  /^\d+\s*(?:Yard\s*)?(?:Free|Fly|Back|Breast|IM|Individual Medley|Diving|Medley)/i;
+const DATE_RE = /^[A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4}$/;
+
+/**
+ * A hometown line in a SwimCloud profile header.
+ *
+ * SwimCloud prints "City, ST" for US athletes and "City, CCC" with a 3-letter
+ * country code for international ones. The 2-letter-only form this replaces
+ * matched "Nevada, TX" but not "Volgograd, RUS" or "Tárnok, HUN" — both real
+ * rows in `oburoster202627.txt` — so those fell through to the person-name test
+ * and opened a phantom athlete block.
+ *
+ * The `[^\t]` head is a deliberate narrowing: a tab-separated data row can reach
+ * this regex, and `\s*` would otherwise let a tab stand in for the space after
+ * the comma.
+ */
+const LOCATION_RE = /^[^\t]+,\s*[A-Z]{2,3}$/;
+
+/** A hometown line reduced to just the country code ("HUN", Stefan DUCA-MIRCEA's row). */
+const BARE_REGION_CODE_RE = /^[A-Z]{2,3}$/;
+
+/**
+ * Club / school / program lines, which sit between the name and the personal-bests
+ * table in a profile paste.
+ *
+ * Vocabulary taken from the lines that actually appear in this repo's two roster
+ * exports and the Blaise Vera fixture: "Metroplex Aquatics", "Northwest Arkansas
+ * Aquatics", "Bison Aquatic Club", "Mansfield Aquatic Club", "CHRISTUS Louisiana
+ * Aquatic Club", "Razorback Aquatic Club Aquahawgs", "Opelika Swim Team", "Spring
+ * Swim Team", "City of Richardson Swim Team", "Florida Elite Swimming",
+ * "Nacogdoches High School", "Mountain Home Senior High School", "Ouachita Baptist
+ * University", "University of Pittsburgh". (`racing` is the one word here not drawn
+ * from those files; it is common club vocabulary and collides with no surname.)
+ *
+ * Deliberately NOT exhaustive, and not trusted to be. A club can be named for a
+ * mascot with no give-away noun at all — "Arkansas Dolphins" appears twice in the
+ * OBU export — and no keyword list reaches that case. {@link splitMultiProfileBlocks}
+ * is what makes those safe; this regex is the cheap first line of defence.
+ */
+const ORG_LINE_RE = /\b(?:universit(?:y|ies)|college|academy|school|swimming|swim|aquatics?|club|team|racing)\b/i;
+
+/**
+ * The social-handle line SwimCloud appends under a profile header: "AJ Alfeo on
+ * Instagram", "Jeronimo Quintero on X", "Tyler Steffan on Facebook Tyler Steffan
+ * on Instagram". Shaped as a real name plus a suffix, so a word-count test alone
+ * reads the short ones as a second athlete.
+ */
+const SOCIAL_HANDLE_RE = /\bon\s+(?:instagram|facebook|x|twitter|tiktok|youtube|linkedin)\b/i;
+
+/** A profile-header hometown line, in either the "City, CC(C)" or bare-code form. */
+function isLocationLine(line: string): boolean {
+  const t = line.trim();
+  if (!t || t.includes('\t')) return false;
+  return LOCATION_RE.test(t) || BARE_REGION_CODE_RE.test(t);
+}
+const SKIP_LINE_RE =
+  /^(personal bests|event progression|course|season|sort by|stamp link|event|time|meet|date|name|swimmer)$/i;
+
+function splitRow(line: string): string[] {
+  if (line.includes('\t')) {
+    return line.split('\t').map(c => c.trim());
+  }
+  return line.split(/\s{2,}/).map(c => c.trim()).filter(Boolean);
+}
+
+function isTimeToken(s: string): boolean {
+  return TIME_RE.test(s.trim());
+}
+
+function isEventToken(s: string): boolean {
+  return EVENT_COL_RE.test(s.trim());
+}
+
+function parseStampToken(raw: string): SwimCloudBadge | null {
+  return readSwimCloudStamp(raw)?.badge ?? null;
+}
+
+function parseCourseFromEvent(raw: string): 'SCY' | 'LCM' | 'SCM' | undefined {
+  if (/\bLCM\b/i.test(raw)) return 'LCM';
+  if (/\bSCM\b/i.test(raw)) return 'SCM';
+  if (/\bSCY\b/i.test(raw)) return 'SCY';
+  return undefined;
+}
+
+export function normalizeEventLabel(raw: string): string {
+  let e = raw.replace(/\s+/g, ' ').trim();
+  e = e.replace(/\b(SCY|LCM|SCM)\b/gi, '').trim();
+  if (/\bfly\b/i.test(e) && !/butterfly/i.test(e)) {
+    e = e.replace(/\bfly\b/i, 'Butterfly');
+  }
+  if (/\bback\b/i.test(e) && !/backstroke/i.test(e)) {
+    e = e.replace(/\bback\b/i, 'Backstroke');
+  }
+  if (/\bbreast\b/i.test(e) && !/breaststroke/i.test(e)) {
+    e = e.replace(/\bbreast\b/i, 'Breaststroke');
+  }
+  if (/\bfree\b/i.test(e) && !/freestyle/i.test(e)) {
+    e = e.replace(/\bfree\b/i, 'Freestyle');
+  }
+  if (/\bIM\b/.test(e) && !/individual medley/i.test(e)) {
+    e = e.replace(/\bIM\b/, 'Individual Medley');
+  }
+  return e.replace(/\s+/g, ' ').trim();
+}
+
+/** Canonical SCY championship individual program events (normalized labels). */
+const CHAMPIONSHIP_PROGRAM_EVENTS = new Set<string>([
+  '50 Freestyle',
+  '100 Freestyle',
+  '200 Freestyle',
+  '500 Freestyle',
+  '1000 Freestyle',
+  '1650 Freestyle',
+  '100 Backstroke',
+  '200 Backstroke',
+  '100 Breaststroke',
+  '200 Breaststroke',
+  '100 Butterfly',
+  '200 Butterfly',
+  '200 Individual Medley',
+  '400 Individual Medley',
+]);
+
+/**
+ * True only for events that can be scored as championship lineup entries: the standard
+ * SCY individual program (50/100/200/500/1000/1650 Free, 100/200 stroke, 200/400 IM) and
+ * relays. Excludes 25s, 100 IM, diving, and odd metric distances so they are never picked
+ * as lineup entries (their swims are still retained in athleteHistory).
+ *
+ * This is the *fallback* program, used only when no meet is loaded. When a meet is
+ * loaded, the program comes from the meet — see {@link meetProgramEvents}. A
+ * conference that contests 100 IM is served by the meet-derived set, not by this
+ * constant.
+ */
+export function isChampionshipProgramEvent(event: string): boolean {
+  if (/\brelay\b/i.test(event)) return true;
+  return CHAMPIONSHIP_PROGRAM_EVENTS.has(normalizeEventLabel(event));
+}
+
+/**
+ * Canonical individual-event label for an arbitrary meet event string, WITHOUT
+ * the championship whitelist. Handles HyTek labels
+ * ("Event 24 Men 100 Yard Backstroke" -> "100 Backstroke").
+ *
+ * Deliberately unfiltered: the loaded meet defines its own program. NSISC does not
+ * contest the 100 IM, but another conference may, and a hardcoded list cannot know
+ * that. Relays and diving return null — neither is an individual entry candidate.
+ */
+export function canonicalMeetEventLabel(raw: string): string | null {
+  if (!raw) return null;
+  if (/\brelay\b/i.test(raw)) return null;
+  if (isDivingEvent(raw)) return null;
+  let e = stripEventGenderMarker(raw);
+  e = e.replace(/\bEvent\s+\d+\b/gi, ' ');
+  e = e.replace(/\b(Yards?|Meters?|mtr|SCY|SCM|LCM)\b/gi, ' ');
+  e = e.replace(/\s{2,}/g, ' ').trim();
+  if (!e) return null;
+  const norm = normalizeEventLabel(e);
+  return norm || null;
+}
+
+/**
+ * The individual events a loaded meet actually contests, as canonical labels.
+ *
+ * This is the authority for "what can this athlete be entered in". Pass the FROZEN
+ * source results (`getSourceResults`) rather than the working copy, so planned
+ * entries cannot widen the program that is supposed to constrain them.
+ *
+ * Time trials are excluded: they are swum at the meet but score nothing, so they
+ * are not an opportunity to gain points. Returns an empty set when no meet is
+ * loaded; callers treat empty as "fall back to the championship program".
+ */
+export function meetProgramEvents(results: SwimmerResult[] | undefined): Set<string> {
+  const set = new Set<string>();
+  for (const r of results ?? []) {
+    if (isRelayResult(r)) continue;
+    if (r.isTimeTrial) continue;
+    const canon = canonicalMeetEventLabel(r.event);
+    if (canon) set.add(canon);
+  }
+  return set;
+}
+
+/**
+ * Is `event` one this profile may offer, given the meet program (or the fallback)?
+ *
+ * The label is read with {@link canonicalMeetEventLabel}, the same reader
+ * {@link meetProgramEvents} builds the program with. It used to be read with
+ * `normalizeEventLabel`, which leaves a HyTek label's scaffolding in place:
+ * `Event 4 Men 1000 Yard Freestyle` never equalled the program's
+ * `1000 Freestyle`, so no swim from a loaded meet ever reached a profile.
+ *
+ * Still refused: a relay or a dive (the reader returns `null`), and a time
+ * trial, whose label keeps its `Time Trial` words and so names no program
+ * event. {@link meetProgramEvents} leaves time trials out of the program.
+ */
+function isEventOffered(event: string, allowed: ReadonlySet<string> | null): boolean {
+  const canonical = canonicalMeetEventLabel(event);
+  if (!canonical) return false;
+  if (allowed && allowed.size > 0) return allowed.has(canonical);
+  return isChampionshipProgramEvent(canonical) && !/\brelay\b/i.test(canonical);
+}
+
+function looksLikePersonName(line: string): boolean {
+  const t = line.trim();
+  if (!t || t.includes('\t')) return false;
+  if (SKIP_LINE_RE.test(t)) return false;
+  if (isLocationLine(t)) return false;
+  if (isEventToken(t) || isTimeToken(t)) return false;
+  // The old form required >2 words before the org test would fire, which let
+  // every two-word club through — "Metroplex Aquatics" was read as a swimmer.
+  // No name on either roster contains one of these words, so the word-count
+  // guard bought nothing and cost the common case.
+  if (ORG_LINE_RE.test(t)) return false;
+  if (SOCIAL_HANDLE_RE.test(t)) return false;
+  const parts = t.split(/\s+/);
+  return parts.length >= 2 && parts.length <= 5 && /^[A-Za-z]/.test(itemAt(parts, 0));
+}
+
+export function extractSwimmerNameFromPaste(text: string): string | undefined {
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t) continue;
+    if (looksLikePersonName(t)) return t;
+  }
+  return undefined;
+}
+
+function isHeaderOrJunkLine(line: string): boolean {
+  const t = line.trim();
+  if (!t) return true;
+  if (SKIP_LINE_RE.test(t)) return true;
+  if (/^event\s+time/i.test(t)) return true;
+  if (isLocationLine(t)) return true;
+  if (/^(personal bests|event progression)$/i.test(t)) return true;
+  return false;
+}
+
+/** A bare name line in a multi-profile paste (no tab, not an event/time/header row). */
+export function isProfileNameLine(line: string): boolean {
+  const t = line.trim();
+  if (!t || t.includes('\t')) return false;
+  if (isHeaderOrJunkLine(t)) return false;
+  return looksLikePersonName(t);
+}
+
+/** A row shaped like a personal-bests entry: event label in column 0, time in column 1. */
+function isSwimDataRow(trimmedLine: string): boolean {
+  const cols = splitRow(trimmedLine);
+  return cols.length >= 2 && isEventToken(itemAt(cols, 0)) && isTimeToken(itemAt(cols, 1));
+}
+
+/** One athlete's slice of a multi-profile paste. */
+export type MultiProfileBlock = {
+  /** The name line that opened this block, exactly as pasted (diacritics preserved). */
+  name: string;
+  /** Every line after the name, raw and untrimmed, header/junk rows included. */
+  lines: string[];
+  /**
+   * Name-shaped lines folded into this block's header rather than treated as a new
+   * athlete — hometown, club, social handle. Exposed so a caller can say what it
+   * absorbed instead of the lines disappearing silently.
+   */
+  absorbed: string[];
+  /** True once a row shaped `event + time` has been seen inside this block. */
+  hasDataRow: boolean;
+};
+
+export type MultiProfileSplit = {
+  blocks: MultiProfileBlock[];
+  /** Non-blank lines that appeared before any name line, in paste order. */
+  orphanLines: string[];
+};
+
+/**
+ * Split a multi-profile paste into one block per athlete.
+ *
+ * Lexical name detection alone cannot do this. A SwimCloud profile header is
+ * `name / hometown / club / social handle`, and the club line is frequently
+ * indistinguishable from a person — "Arkansas Dolphins" and "Metroplex Aquatics"
+ * have exactly the shape of a two-word name. Splitting on every name-shaped line
+ * turned the 38-athlete OBU export into 37 blocks, 19 of them titled with a club
+ * or an Instagram suffix, with real swims filed under those fake names. Nothing
+ * threw; the import was simply wrong.
+ *
+ * So the paste's own structure decides, not the words. A name-shaped line opens a
+ * NEW athlete only when the paste says a new athlete has started:
+ *
+ *  - nothing is open yet, or
+ *  - the block already open has produced at least one swim row (its table is
+ *    finished, so the next name is the next athlete), or
+ *  - a blank line separated them — SwimCloud emits exactly one between profiles
+ *    and none inside a header, in every export in this repo.
+ *
+ * Any other name-shaped line is header metadata for the block already open. It is
+ * recorded in `absorbed` rather than dropped, so "what happened to that line" is
+ * always answerable.
+ *
+ * A block still yields nothing when it genuinely holds no rows; that stays the
+ * caller's warning to raise. This function never invents a block and never
+ * silently discards a line — every input line lands in `lines`, `absorbed`, or
+ * `orphanLines`.
+ */
+export function splitMultiProfileBlocks(text: string): MultiProfileSplit {
+  const blocks: MultiProfileBlock[] = [];
+  const orphanLines: string[] = [];
+  let current: MultiProfileBlock | null = null;
+  // Start of input behaves like a separator, so the first name always opens a block.
+  let prevWasBlank = true;
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const t = rawLine.trim();
+    if (!t) {
+      prevWasBlank = true;
+      continue;
+    }
+    const dataRow = isSwimDataRow(t);
+    if (!dataRow && isProfileNameLine(t)) {
+      if (!current || current.hasDataRow || prevWasBlank) {
+        current = { name: t, lines: [], absorbed: [], hasDataRow: false };
+        blocks.push(current);
+      } else {
+        current.absorbed.push(t);
+        current.lines.push(rawLine);
+      }
+      prevWasBlank = false;
+      continue;
+    }
+    prevWasBlank = false;
+    if (!current) {
+      orphanLines.push(rawLine);
+      continue;
+    }
+    current.lines.push(rawLine);
+    if (dataRow) current.hasDataRow = true;
+  }
+
+  return { blocks, orphanLines };
+}
+
+/** Count athlete blocks that actually carry >=1 personal-bests row. */
+function countProfileBlocks(text: string): number {
+  return splitMultiProfileBlocks(text).blocks.filter(b => b.hasDataRow).length;
+}
+
+export function detectSwimCloudPasteFormat(text: string): SwimCloudPasteFormat {
+  if (countProfileBlocks(text) >= 2) return 'multi_profile';
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || isHeaderOrJunkLine(t)) continue;
+    const cols = splitRow(t);
+    if (cols.length < 2) continue;
+    if (isEventToken(itemAt(cols, 0)) && isTimeToken(itemAt(cols, 1))) return 'personal_bests';
+    if (looksLikePersonName(itemAt(cols, 0))) return 'roster';
+    break;
+  }
+  return 'unknown';
+}
+
+/**
+ * Stamp each swim with the cut it achieved, judged against **its own team's**
+ * division table. These values become the cut badges a coach reads.
+ *
+ * `division` follows the same three-state contract as
+ * {@link rankEventsByQuality}: `undefined` means "resolve it from the team",
+ * `null` means the caller has already established it is unresolvable, and a
+ * division wins outright.
+ *
+ * This resolved through the deprecated `divisionForTeam`, which answers `D1` for
+ * every team it does not recognise. D1 publishes the fastest standards, so an
+ * unmapped D2/D3/NAIA program had its cuts silently under-reported — and a swim
+ * quick enough for the D1 mark was stamped with a badge from a table that never
+ * applied to it. Neither failure throws; both render as a plausible badge.
+ * `divisionForTeamOrNull` returns the honest answer, and `compareTimeToCutline`
+ * reports the same case as `status: 'no_table_for_division'`.
+ *
+ * One consequence to carry downstream: `computedCut: null` is under-determined
+ * on its own — it covers "we hold no table", "missed every published
+ * standard" and "not a result" (an extracted split or a self-reported time,
+ * which are never judged). Per `CutlineLookupStatus`, only `status: 'ok'` licenses the
+ * statement "did not achieve a cut", so a caller rendering that phrase must
+ * re-check `divisionForTeamOrNull(team)` (or the lookup status) first rather
+ * than reading a null here as a miss.
+ *
+ * A badge is also withheld when the cut tag would refuse the swim for its
+ * program: a school that does not sponsor the swim's gender (UWF has no men's
+ * team) or that dropped the sport. `computedCutForTeamSwim` makes that call, so
+ * a stored badge never sits beside a tag that says `gender_not_sponsored`.
+ *
+ * A metric swim is judged in its own course when its division publishes a
+ * table there: an NAIA team's SCM swim is judged against the NAIA SCM column
+ * (`computedCutInOwnCourse`). Before 2026-09-25 every metric swim was skipped
+ * here, so an NAIA SCM swim that cleared the NAIA standard carried no badge,
+ * while its cut tag (`buildCutlineTag`) said it did.
+ */
+function enrichWithComputedCut(
+  swims: HistoricalSwim[],
+  team: string,
+  division?: NcaaDivision | null
+): HistoricalSwim[] {
+  const div = division !== undefined ? division : divisionForTeamOrNull(team);
+  return swims.map(s => {
+    // An extracted split or a self-reported time is not a result, so it is
+    // never judged: no cut, and no miss either. See isRankableSwim.
+    if (!isRankableSwim(s)) return { ...s, computedCut: null };
+    const course = s.timeType ?? 'SCY';
+    // A swim whose division did not resolve (an unknown team, or a school whose
+    // division depends on a season nobody stated) has no standard. A badge it
+    // already carries was judged against some table, and nothing here proves it
+    // was the right one, so it is dropped, not kept (E8: a D2 badge must not
+    // outlive the question of which division the swim belongs to).
+    if (!div) return { ...s, computedCut: null };
+    // A metric swim whose division publishes no table in its course (every NCAA
+    // metric swim, an NAIA LCM swim) gets no verdict here; a value the caller
+    // arrived with is theirs to keep.
+    if (course !== 'SCY' && cutlineTableCourseForSwim(s.gender, s.event, div, course) !== course) {
+      return { ...s, computedCut: s.computedCut ?? null };
+    }
+    // Gated by the cut tag, so a program the school does not field for this
+    // gender (UWF men) or has dropped carries no badge, as its tag says.
+    const achieved = computedCutForTeamSwim({
+      team,
+      seconds: convertTimeToSeconds(s.time),
+      gender: s.gender,
+      event: s.event,
+      division: div,
+      swimCourse: course,
+    });
+    return { ...s, computedCut: achieved };
+  });
+}
+
+export function parseSwimCloudStampBadge(raw: string): SwimCloudBadge {
+  return parseStampToken(raw) ?? 'none';
+}
+
+// ===================== Parse-boundary plausibility gate =====================
+
+/**
+ * Every distance a swimming race is contested over, in yards or metres.
+ *
+ * This is deliberately the *sanctioned* list, not the *familiar* list. A 50
+ * Butterfly, a 100 IM and a 25 Backstroke are all real races that NSISC simply
+ * does not contest, and all three appear in these rosters' age-group history —
+ * they belong here. The program filter (see {@link isChampionshipProgramEvent}
+ * and {@link meetProgramEvents}) is what decides whether an event can be *entered*;
+ * this list only decides whether it can *exist*.
+ */
+export const SANCTIONED_SWIM_DISTANCES: readonly number[] = [
+  25, 50, 100, 200, 400, 500, 800, 1000, 1500, 1650,
+];
+
+const SANCTIONED_SWIM_DISTANCE_SET: ReadonlySet<number> = new Set(SANCTIONED_SWIM_DISTANCES);
+
+/**
+ * The distance an event label leads with, or `null` when it leads with no number.
+ * Reads the label as-is; callers pass a {@link normalizeEventLabel} output so the
+ * course suffix ("375 Free SCY") is already gone.
+ */
+export function swimEventDistance(event: string): number | null {
+  const m = /^\s*(\d+)(?!\d)/.exec(event ?? '');
+  if (!m) return null;
+  const n = Number.parseInt(regexGroup(m, 1), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * False only for an event whose distance is provably not a swimming distance.
+ *
+ * Motivating defect: both live workspaces held a `375 Freestyle`, parsed from the
+ * SwimCloud row `375 Free SCY\t3:47.04\tR\t61st Annual Hendrix Relays`. 375 yards
+ * is not swum at any level; the row is a novelty-relay artefact that the parser
+ * accepted because the event column merely had to start with a number and a
+ * stroke. It then sat in history looking like a real personal best.
+ *
+ * Two deliberate non-rejections, because over-rejecting is the worse failure here:
+ *
+ *  - **Diving is exempt outright.** A diving label carries no distance. It leads
+ *    with a BOARD HEIGHT (`1 mtr Diving`, `3 mtr Diving`) or with no number at all
+ *    (`Platform Diving`), so reading its leading integer as a race distance would
+ *    see 1 and 3, find neither in the sanctioned set, and throw out every dive on
+ *    the board. The question this gate asks — "is that a real race distance" — does
+ *    not apply to a dive, so it is not asked.
+ *  - **An unreadable label passes.** With no leading number there is no distance to
+ *    disprove. This gate rejects what it can prove impossible, never what it merely
+ *    fails to recognise.
+ */
+export function isPlausibleSwimEvent(event: string): boolean {
+  if (isDivingEvent(event)) return true;
+  const distance = swimEventDistance(event);
+  if (distance == null) return true;
+  return SANCTIONED_SWIM_DISTANCE_SET.has(distance);
+}
+
+/** A paste row the plausibility gate refused to turn into a {@link HistoricalSwim}. */
+export type RejectedSwimRow = {
+  /** The paste line verbatim (trimmed), so an operator can find it in the source. */
+  raw: string;
+  /** Normalized event label that failed the gate. */
+  event: string;
+  /** Distance read off the label, or `null` if none was readable. */
+  distance: number | null;
+};
+
+/**
+ * A pasted row whose event does not exist in its recorded course (a "1000
+ * Free SCM"). The row is kept, unlike an implausible one: the swim may be
+ * real and only mislabelled. It is never ranked, converted or cut-tagged.
+ * See `courseEvents.ts`.
+ */
+export function courseMismatchSwimRowWarning(swim: HistoricalSwim, mismatch: EventNotSwumInCourse): string {
+  return (
+    `Kept, never ranked — ${swim.name}: ${swim.event} ${mismatch.course} ${swim.time}. ` +
+    `There is no ${mismatch.event} in ${mismatch.course}; that course swims the ${mismatch.courseEvent}. ` +
+    `Check the event and course.`
+  );
+}
+
+/** One {@link courseMismatchSwimRowWarning} per kept swim whose event its course does not swim. */
+function courseMismatchWarnings(swims: readonly HistoricalSwim[]): string[] {
+  return findSwimsNotSwumInCourse(swims).map(({ swim, mismatch }) =>
+    courseMismatchSwimRowWarning(swim, mismatch)
+  );
+}
+
+/** Operator-facing text for one rejected row. Names the raw row, never just the count. */
+export function implausibleSwimRowWarning(row: RejectedSwimRow): string {
+  const which = row.distance == null ? 'it carries no readable distance' : `${row.distance} is not a swimming distance`;
+  return (
+    `Dropped row — "${row.event}" is not a swimming event: ${which} ` +
+    `(sanctioned: ${SANCTIONED_SWIM_DISTANCES.join('/')} yards or metres). Raw row: ${row.raw}`
+  );
+}
+
+/**
+ * A pasted row whose stamp column held text {@link readSwimCloudStamp} could
+ * not read. The row is still imported (its meet and date come from their own
+ * columns), with `swimcloudBadge: 'other'` and no flag. Reported because the
+ * stamp may carry an `X` or `U` chip the reader could not split off.
+ */
+export type UnreadSwimCloudStampRow = {
+  /** The paste line verbatim (trimmed). */
+  raw: string;
+  /** The stamp column's text, verbatim. */
+  stamp: string;
+  /** Normalized event label of the row. */
+  event: string;
+};
+
+/** Operator-facing text for one unread stamp. Names the stamp and the raw row. */
+export function unreadSwimCloudStampWarning(row: UnreadSwimCloudStampRow): string {
+  return (
+    `Unrecognized SwimCloud stamp "${row.stamp}" on ${row.event} — imported as a result. ` +
+    `If the stamp ends in an X (extracted split) or U (self-reported) chip, mark the swim by hand. Raw row: ${row.raw}`
+  );
+}
+
+/**
+ * A paste parse split into what was kept and what the plausibility gate refused.
+ *
+ * `rejected` is never dropped on the floor: `parseSwimCloudPasteDetailed` and
+ * `parseSwimCloudMultiProfile` turn each entry into a warning the import panels
+ * display. One bad row must not discard the other 850 — "fails loudly" here means
+ * reported, not fatal.
+ */
+export type ParseSwimRowsResult = {
+  swims: HistoricalSwim[];
+  rejected: RejectedSwimRow[];
+  /**
+   * Kept rows whose stamp column the reader could not read, one per row.
+   * Set by the personal-bests parser; absent from the roster parser, whose
+   * rows carry no stamp column.
+   */
+  unreadStamps?: UnreadSwimCloudStampRow[];
+};
+
+/** The meet, date and stamp columns of one pasted personal-bests row. */
+type PastedRowColumns = { stamp: string; meet: string; date: string };
+
+/**
+ * The stamp, meet and date columns of a row in SwimCloud's own tab layout
+ * (`Event \t Time \t Stamp \t Meet \t Date \t`), or `null` for any other
+ * shape.
+ *
+ * Read by position, because the column says what the text is. A cut chip
+ * (`D2 B`, `WIN JRS`) and a meet name are both free text, and the reader
+ * this replaces told them apart by length, so a multi-word chip became the
+ * meet name and the real one was lost. The date column anchors the layout: a
+ * row whose fifth column is not a date (or empty) is left to the text-based
+ * reader.
+ */
+function pastedRowColumns(line: string, cols: string[]): PastedRowColumns | null {
+  if (!line.includes('\t') || cols.length < 5) return null;
+  // `cols.length >= 5` above bounds all three reads.
+  const stamp = itemAt(cols, 2);
+  const meet = itemAt(cols, 3);
+  const date = itemAt(cols, 4);
+  if (date !== '' && !DATE_RE.test(date)) return null;
+  if (DATE_RE.test(stamp) || DATE_RE.test(meet)) return null;
+  return { stamp, meet, date };
+}
+
+/** The stamp fields a row gets from a reading. */
+function stampFields(
+  stamp: SwimCloudStampReading
+): Pick<HistoricalSwim, 'swimcloudBadge' | 'isExtractedSplit' | 'isUserInputted'> {
+  return {
+    swimcloudBadge: stamp.badge,
+    // The same facts the JSON bridge records from the chip tooltips. A pasted
+    // row carries only the chip letters, so the stamp reading is the one
+    // source here. See HistoricalSwim.isExtractedSplit/isUserInputted.
+    ...(stamp.extractedSplit ? { isExtractedSplit: true } : {}),
+    ...(stamp.userInputted ? { isUserInputted: true as const } : {}),
+  };
+}
+
+/**
+ * Stamp, meet and date of a row that is not in the tab layout, read by text
+ * as before: a leading stamp token, then the first date, then the first
+ * longer text as the meet.
+ */
+function textRowFields(
+  rest: string[]
+): { stampFields: ReturnType<typeof stampFields>; meetLabel: string; date: string } {
+  let fields: ReturnType<typeof stampFields> = { swimcloudBadge: 'none' };
+  let remaining = rest;
+  if (remaining.length > 0) {
+    const stamp = readSwimCloudStamp(remaining[0]);
+    if (stamp) {
+      fields = stampFields(stamp);
+      remaining = remaining.slice(1);
+    }
+  }
+  let meetLabel = '';
+  let date = '';
+  for (const c of remaining) {
+    if (!date && DATE_RE.test(c)) {
+      date = c;
+    } else if (!meetLabel && c.length > 3 && !DATE_RE.test(c)) {
+      meetLabel = c;
+    }
+  }
+  return { stampFields: fields, meetLabel, date };
+}
+
+/**
+ * `division` may be passed `null` to state outright that the team's division is
+ * unknown; omitting it resolves from the team. Either way an unresolved division
+ * yields `computedCut: null` rather than a verdict from the D1 table.
+ *
+ * Rows failing {@link isPlausibleSwimEvent} are dropped and reported in `rejected`.
+ */
+export function parseSwimCloudPersonalBestsDetailed(
+  text: string,
+  swimmerName: string,
+  team: string,
+  gender: Gender,
+  division?: NcaaDivision | null
+): ParseSwimRowsResult {
+  const out: HistoricalSwim[] = [];
+  const rejected: RejectedSwimRow[] = [];
+  const unreadStamps: UnreadSwimCloudStampRow[] = [];
+  const name = swimmerName.trim();
+  if (!name) return { swims: out, rejected, unreadStamps };
+
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || isHeaderOrJunkLine(t)) continue;
+    const cols = splitRow(t);
+    if (cols.length < 2) continue;
+    const rawEvent = itemAt(cols, 0);
+    const time = itemAt(cols, 1);
+    if (!isEventToken(rawEvent) || !isTimeToken(time)) continue;
+
+    const event = normalizeEventLabel(rawEvent);
+    // Gate here, at the one point where a row's event string becomes a stored
+    // swim: the raw line is still in hand, so the warning can name exactly what
+    // was dropped.
+    if (!isPlausibleSwimEvent(event)) {
+      rejected.push({ raw: t, event, distance: swimEventDistance(event) });
+      continue;
+    }
+    const timeType = parseCourseFromEvent(rawEvent) ?? 'SCY';
+
+    let fields: ReturnType<typeof stampFields>;
+    let meetLabel: string;
+    let date: string;
+    const columns = pastedRowColumns(t, cols);
+    if (columns) {
+      // SwimCloud's own layout: each column is what its header says.
+      meetLabel = columns.meet;
+      date = columns.date;
+      fields = { swimcloudBadge: 'none' };
+      if (columns.stamp) {
+        const stamp = readSwimCloudStamp(columns.stamp);
+        if (stamp) {
+          fields = stampFields(stamp);
+        } else {
+          fields = { swimcloudBadge: 'other' };
+          unreadStamps.push({ raw: t, stamp: columns.stamp, event });
+        }
+      }
+    } else {
+      ({ stampFields: fields, meetLabel, date } = textRowFields(cols.slice(2).filter(c => c.length > 0)));
+    }
+
+    out.push({
+      name,
+      team,
+      gender,
+      event,
+      time,
+      timeType,
+      meetLabel: meetLabel || undefined,
+      date: date || undefined,
+      source: 'paste',
+      ...fields,
+    });
+  }
+
+  return { swims: enrichWithComputedCut(out, team, division), rejected, unreadStamps };
+}
+
+/**
+ * Kept-rows-only view of {@link parseSwimCloudPersonalBestsDetailed}. Existing
+ * callers keep their exact signature; use the detailed form when you can surface
+ * the rejected rows to an operator.
+ */
+export function parseSwimCloudPersonalBests(
+  text: string,
+  swimmerName: string,
+  team: string,
+  gender: Gender,
+  division?: NcaaDivision | null
+): HistoricalSwim[] {
+  return parseSwimCloudPersonalBestsDetailed(text, swimmerName, team, gender, division).swims;
+}
+
+/**
+ * `division` takes the same three states as {@link parseSwimCloudPersonalBests}.
+ * Rows failing {@link isPlausibleSwimEvent} are dropped and reported in `rejected`.
+ */
+export function parseSwimCloudRosterPasteDetailed(
+  text: string,
+  team: string,
+  gender: Gender,
+  division?: NcaaDivision | null
+): ParseSwimRowsResult {
+  const eventRe =
+    /(\d+\s*(?:Yard\s*)?(?:Freestyle|Backstroke|Breaststroke|Butterfly|IM|Individual Medley|Diving)[^\t]*)/i;
+  const timeRe = /(\d{1,2}:)?\d{1,2}\.\d{2}/;
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const out: HistoricalSwim[] = [];
+  const rejected: RejectedSwimRow[] = [];
+
+  for (const line of lines) {
+    const cols = line.split(/\t+|\s{2,}/).map(c => c.trim()).filter(Boolean);
+    if (cols.length < 2) continue;
+    const swimmer = cols[0];
+    if (!swimmer || /^(name|swimmer|event)/i.test(swimmer)) continue;
+    let event = '';
+    let time = '';
+    for (const c of cols.slice(1)) {
+      if (!event && eventRe.test(c)) event = c.replace(/\s+/g, ' ').trim();
+      else if (!time && timeRe.test(c)) time = c.match(timeRe)![0];
+    }
+    if (!event || !time) continue;
+    // Same gate, same place: the last point before the row becomes a stored swim.
+    const normalized = normalizeEventLabel(event);
+    if (!isPlausibleSwimEvent(normalized)) {
+      rejected.push({ raw: line, event: normalized, distance: swimEventDistance(normalized) });
+      continue;
+    }
+    out.push({
+      name: swimmer,
+      team,
+      gender,
+      event: normalized,
+      time,
+      source: 'paste',
+      swimcloudBadge: 'none',
+    });
+  }
+
+  return { swims: enrichWithComputedCut(out, team, division), rejected };
+}
+
+/** Kept-rows-only view of {@link parseSwimCloudRosterPasteDetailed}. */
+export function parseSwimCloudRosterPaste(
+  text: string,
+  team: string,
+  gender: Gender,
+  division?: NcaaDivision | null
+): HistoricalSwim[] {
+  return parseSwimCloudRosterPasteDetailed(text, team, gender, division).swims;
+}
+
+export type ParseSwimCloudOptions = {
+  team: string;
+  gender: Gender;
+  swimmerName?: string;
+  format?: 'auto' | 'personal_bests' | 'roster' | 'multi_profile';
+  division?: NcaaDivision;
+};
+
+export type ParseSwimCloudResult = {
+  swims: HistoricalSwim[];
+  format: SwimCloudPasteFormat;
+  warnings: string[];
+  detectedName?: string;
+};
+
+export function parseSwimCloudPaste(
+  text: string,
+  teamOrOpts: string | ParseSwimCloudOptions,
+  genderArg?: Gender
+): HistoricalSwim[] | ParseSwimCloudResult {
+  const opts: ParseSwimCloudOptions =
+    typeof teamOrOpts === 'string'
+      ? { team: teamOrOpts, gender: genderArg ?? Gender.MEN, format: 'auto' }
+      : teamOrOpts;
+
+  const result = parseSwimCloudPasteDetailed(text, opts);
+  if (typeof teamOrOpts === 'string') {
+    return result.swims;
+  }
+  return result;
+}
+
+export function parseSwimCloudPasteDetailed(
+  text: string,
+  opts: ParseSwimCloudOptions
+): ParseSwimCloudResult {
+  const warnings: string[] = [];
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { swims: [], format: 'unknown', warnings: ['Paste is empty'] };
+  }
+
+  const detectedName = extractSwimmerNameFromPaste(trimmed);
+  let format = opts.format === 'auto' || !opts.format ? detectSwimCloudPasteFormat(trimmed) : opts.format;
+
+  if (format === 'unknown') {
+    warnings.push('Could not detect paste format; tried personal bests layout');
+    format = 'personal_bests';
+  }
+
+  let swims: HistoricalSwim[] = [];
+  if (format === 'multi_profile') {
+    const multi = parseSwimCloudMultiProfile(trimmed, {
+      team: opts.team,
+      gender: opts.gender,
+      division: opts.division,
+    });
+    swims = multi.athletes.flatMap(a => a.swims);
+    // multi.warnings already carries one implausible-row warning per rejected row.
+    warnings.push(...multi.warnings);
+    warnings.push(...courseMismatchWarnings(swims));
+    warnings.push(`Multi-profile paste: ${multi.athletes.length} athlete(s) parsed`);
+    if (swims.some(s => s.timeType === 'LCM' || s.timeType === 'SCM')) {
+      warnings.push('LCM/SCM times included — cut comparison uses SCY conversion where applicable');
+    }
+    if (swims.length === 0) {
+      warnings.push('No swim rows parsed — check copy includes the Personal Bests tables');
+    }
+    return { swims, format, warnings, detectedName };
+  }
+  if (format === 'personal_bests') {
+    const swimmerName = (opts.swimmerName ?? detectedName ?? '').trim();
+    if (!swimmerName) {
+      warnings.push('Swimmer name required for personal bests paste');
+      return { swims: [], format, warnings, detectedName };
+    }
+    const parsed = parseSwimCloudPersonalBestsDetailed(
+      trimmed,
+      swimmerName,
+      opts.team,
+      opts.gender,
+      opts.division
+    );
+    swims = parsed.swims;
+    // One warning per rejected row, so the count an operator sees is the count of
+    // rows that were actually dropped.
+    warnings.push(...parsed.rejected.map(implausibleSwimRowWarning));
+    warnings.push(...(parsed.unreadStamps ?? []).map(unreadSwimCloudStampWarning));
+    if (swims.some(s => s.timeType === 'LCM' || s.timeType === 'SCM')) {
+      warnings.push('LCM/SCM times included — cut comparison uses SCY conversion where applicable');
+    }
+    if (swims.some(s => s.swimcloudBadge === 'user_input')) {
+      warnings.push('Some rows are user-entered (U) — not from official meet files');
+    }
+  } else {
+    const parsed = parseSwimCloudRosterPasteDetailed(trimmed, opts.team, opts.gender, opts.division);
+    swims = parsed.swims;
+    warnings.push(...parsed.rejected.map(implausibleSwimRowWarning));
+  }
+  warnings.push(...courseMismatchWarnings(swims));
+
+  if (swims.length === 0) {
+    warnings.push('No swim rows parsed — check copy includes the Personal Bests table');
+  }
+
+  return { swims, format, warnings, detectedName };
+}
+
+/**
+ * Confidence for a roster name that equals the import name after identity
+ * folding (case, whitespace, comma order, diacritics).
+ *
+ * Not a heuristic guess. {@link aliasNameKey} is how this codebase *defines*
+ * athlete identity — `AthleteAliasResolver.areLinked` is literally an
+ * `aliasNameKey` comparison, and every downstream identity grouping keys on it.
+ * Two roster/import spellings that share the key are the same athlete by the
+ * repo's own rule, so this ranks just under a byte-exact hit.
+ */
+export const ROSTER_MATCH_FOLDED_CONFIDENCE = 0.95;
+
+/** Confidence for a one-sided containment hit ("Smith" inside "Smith, John"). */
+export const ROSTER_MATCH_CONTAINMENT_CONFIDENCE = 0.7;
+
+/** Either normalized name contains the other. */
+function namesContainEachOther(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  return a.includes(b) || b.includes(a);
+}
+
+/**
+ * Find the roster name that denotes the same athlete as `name`.
+ *
+ * Four tiers, tried in order, each strictly weaker than the last. The order is
+ * load-bearing: a stronger relation must win the roster name it points at, so a
+ * later, looser tier can never steal the answer from an earlier one.
+ *
+ *  1. `1`    — equal after case/whitespace normalization.
+ *  2. `0.95` — equal after identity folding (see
+ *              {@link ROSTER_MATCH_FOLDED_CONFIDENCE}). This is the tier that
+ *              recognizes "Oliver Pozvai" as the rostered "Olivér Pózvai" and
+ *              "John Smith" as the rostered "Smith, John".
+ *  3. `0.7`  — raw containment. Kept verbatim, and kept ahead of tier 4, so no
+ *              pair that matched before this tier existed can change its answer.
+ *  4. `0.7`  — containment after identity folding.
+ *
+ * A name that relates to a roster name but reaches no tier here returns
+ * `{ match: null }` — deliberately. Anything weaker (a shared surname, a
+ * first-name variant, a token subset like "Alan Gonzalez" inside "Alan Alejan
+ * Gonzalez Mujica") is a *possible* athlete, not a proven one, and this function
+ * must never silently resolve it. Those surface through
+ * `rosterReviewCandidates` in `historyImportRoster` for a human to confirm.
+ */
+export function matchAthleteToRoster(
+  name: string,
+  rosterNames: string[]
+): { match: string | null; confidence: number } {
+  const key = normalizeSwimmerName(name);
+  for (const r of rosterNames) {
+    if (normalizeSwimmerName(r) === key) return { match: r, confidence: 1 };
+  }
+  const foldedKey = aliasNameKey(name);
+  if (foldedKey) {
+    for (const r of rosterNames) {
+      if (aliasNameKey(r) === foldedKey) {
+        return { match: r, confidence: ROSTER_MATCH_FOLDED_CONFIDENCE };
+      }
+    }
+  }
+  for (const r of rosterNames) {
+    if (namesContainEachOther(normalizeSwimmerName(r), key)) {
+      return { match: r, confidence: ROSTER_MATCH_CONTAINMENT_CONFIDENCE };
+    }
+  }
+  for (const r of rosterNames) {
+    if (namesContainEachOther(aliasNameKey(r), foldedKey)) {
+      return { match: r, confidence: ROSTER_MATCH_CONTAINMENT_CONFIDENCE };
+    }
+  }
+  return { match: null, confidence: 0 };
+}
+
+export function getAthleteProfile(
+  workspace: Workspace,
+  team: string,
+  gender: Gender,
+  name: string,
+  settings: ScoringSettings,
+  resolver?: AthleteAliasResolver,
+  // Rebuilding the merged history index is O(workspace history size), and a
+  // roster panel calls this once per visible row — recruit-heavy workspaces
+  // with hundreds of imported SwimCloud history rows were redoing that full
+  // rebuild for every row, on every render. Callers that render many
+  // athletes against the same workspace should build it once (via
+  // `buildHistoryFromWorkspace` + `mergeHistoryIndex`) and pass it here.
+  precomputedMergedHistory?: HistoricalSwim[]
+): AthleteEventProfile {
+  const alias = resolver ?? buildAliasResolver(workspace);
+  const merged =
+    precomputedMergedHistory ??
+    mergeHistoryIndex(buildHistoryFromWorkspace(workspace), workspace.athleteHistory ?? []);
+  const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
+  const relays = relayEventsForAthlete(results, team, gender, name, alias);
+  // Constrain the profile to what the loaded meet actually contests, read from the
+  // FROZEN source copy so planned entries cannot widen their own constraint. An
+  // empty set (no meet loaded) falls back to the standard championship program.
+  const sourceResults =
+    gender === Gender.MEN
+      ? workspace.sourceMenResults ?? workspace.menResults
+      : workspace.sourceWomenResults ?? workspace.womenResults;
+  const program = meetProgramEvents(sourceResults);
+  return categorizeBestEvents(
+    merged,
+    team,
+    gender,
+    name,
+    settings,
+    relays,
+    alias,
+    program.size > 0 ? program : null,
+    // Same frozen copy: the events rank by place in the meet as it was swum.
+    meetPlaceFieldForWorkspace(workspace, gender)
+  );
+}
+// ===================== Catalog-backed helpers =====================
+
+/**
+ * Build an `AthleteEventProfile` strictly from a catalog roster (no
+ * `Workspace.athleteHistory` mixing). Used by the Manager UI to render the
+ * athlete's effective best times from the long-lived catalog.
+ */
+export function buildEventProfileFromCatalog(
+  roster: CatalogTeamRoster | undefined,
+  teamName: string,
+  gender: Gender,
+  fullName: string,
+  settings: ScoringSettings,
+  /** Loaded meet's program; see {@link meetProgramEvents}. Null falls back to the championship program. */
+  allowedEvents: ReadonlySet<string> | null = null,
+  /** Loaded meet's scored fields; see {@link categorizeBestEvents}. Null: no meet loaded. */
+  meetField: MeetPlaceField | null = null
+): AthleteEventProfile | null {
+  if (!roster) return null;
+  const merged = mergeScoringSettings(settings);
+  const indCap = merged.maxIndividualEntriesPerSwimmer ?? 3;
+  const relayCap = merged.maxRelayEntriesPerSwimmer ?? 4;
+  const athlete = roster.athletes.find(
+    a =>
+      normalizeSwimmerName(a.fullName) === normalizeSwimmerName(fullName) &&
+      (a.gender === (gender === Gender.WOMEN ? 'Women' : 'Men'))
+  );
+  if (!athlete) return null;
+  void teamName;
+
+  // `bestTimesByEvent` holds results only: a time stamped `U` (self-reported)
+  // or `X` (an extracted split) is never a best. Those two are listed apart,
+  // exactly as the history-backed profile lists them.
+  const bestByEvent: AthleteEventProfile['bestByEvent'] = {};
+  const extractedByEvent: AthleteEventProfile['extractedByEvent'] = {};
+  const userInputtedByEvent: NonNullable<AthleteEventProfile['userInputtedByEvent']> = {};
+  const lanes: [Record<string, AthleteEventBest>, Map<string, CatalogEventTime>][] = [
+    [bestByEvent, bestTimesByEvent(athlete.times)],
+    [extractedByEvent, bestTimesByEventInLane(athlete.times, 'extracted_split')],
+    [userInputtedByEvent, bestTimesByEventInLane(athlete.times, 'user_inputted')],
+  ];
+  for (const [record, bestMap] of lanes) {
+    for (const [event, t] of bestMap.entries()) {
+      if (event.toLowerCase().includes('relay')) continue;
+      // Same gate as the history-backed profile: only events the loaded meet
+      // contests (or the championship program when no meet is loaded). Without it
+      // a catalog 50 Butterfly became a scoring "opportunity" in a meet that
+      // contests no 50s of stroke.
+      if (!isEventOffered(event, allowedEvents)) continue;
+      record[event] = {
+        time: t.timeText,
+        timeSec: t.timeSecondsScy,
+        source: t.source,
+      };
+    }
+  }
+  // Same strength ranking as the history-backed profile — raw seconds here would
+  // have ordered a catalog athlete's events by length just as it did there.
+  const ranking = rankEventsByStrength(bestByEvent, gender, roster.team.name, {
+    meetField,
+    isSameSwimmer: sameSwimmerPredicate(athlete.fullName, roster.team.name, gender),
+  });
+  const primaryEvents = ranking.order.slice(0, indCap);
+
+  const relayEvents: string[] = [];
+  for (const t of athlete.times) {
+    if (t.event.toLowerCase().includes('relay') && t.isEligible) {
+      relayEvents.push(t.event);
+    }
+  }
+  const dedupedRelays = [...new Set(relayEvents)].slice(0, relayCap);
+
+  return {
+    name: athlete.fullName,
+    team: roster.team.name,
+    gender,
+    bestByEvent,
+    // Read from each time's stored SwimCloud stamp (`X`/`U`, or the paste's
+    // `extracted`/`user_input`). A time with no stamp is a result: the catalog
+    // cannot say more than its stamp does.
+    extractedByEvent,
+    userInputtedByEvent,
+    primaryEvents,
+    relayEvents: dedupedRelays,
+    ...profileRankingFields(ranking),
+  };
+}
+
+/** Toggle a single time's eligibility inside a roster (immutable update). */
+export function toggleSwimEligibility(
+  roster: CatalogTeamRoster,
+  athleteId: string,
+  timeId: string,
+  isEligible: boolean
+): CatalogTeamRoster {
+  return {
+    ...roster,
+    athletes: roster.athletes.map((a: CatalogAthlete & { times: CatalogEventTime[] }) =>
+      a.id === athleteId
+        ? {
+            ...a,
+            times: a.times.map((t: CatalogEventTime) =>
+              t.id === timeId ? { ...t, isEligible, updatedAt: Date.now() } : t
+            ),
+          }
+        : a
+    ),
+  };
+}
+
+/** Search the roster for an athlete by name; returns the strongest match. */
+export function findAthleteInRoster(
+  roster: CatalogTeamRoster | undefined,
+  fullName: string,
+  gender: Gender
+): CatalogAthlete | undefined {
+  if (!roster) return undefined;
+  const candidates = roster.athletes.filter(
+    a => a.gender === (gender === Gender.WOMEN ? 'Women' : 'Men')
+  );
+  const exact = candidates.find(
+    a => normalizeSwimmerName(a.fullName) === normalizeSwimmerName(fullName)
+  );
+  if (exact) return exact;
+  return candidates.find(a =>
+    normalizeSwimmerName(a.fullName).includes(normalizeSwimmerName(fullName)) ||
+    normalizeSwimmerName(fullName).includes(normalizeSwimmerName(a.fullName))
+  );
+}

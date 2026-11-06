@@ -1,0 +1,26 @@
+# U-a dashboard shell review
+
+Read-only review of the uncommitted U-a diff against D6 sections 0, 1 and 5, amendments 1 and 2, and D4. `git diff --stat tests/fixtures/extension-db` is empty: the frozen fixtures match HEAD.
+
+## Findings
+
+- **MEDIUM — D6 §1 scope is incomplete** — `apps/extension/src/dashboard/main.tsx:70-75`, `apps/extension/src/dashboard/tabHost.tsx:90-108,183-228`. Save has snapshot only: there is no lineup save or Undo control; Meets lists lineups but only snapshots open into reports; no saved-record diff/chart is exposed. Settings omits cut threshold, storage estimate and backup export/import. Scenario: a coach opens Settings to change the cut threshold or export a backup, or selects a saved lineup expecting its diff/report; those planned workflows are unavailable. Undo is explicitly deferred to U-c in Amendment 2, so that omission is planned; the others are unimplemented relative to §1.
+- **MEDIUM — no settings change-bus refresh in the tab host** — `apps/extension/src/dashboard/tabHost.tsx:186-201`. The docked page watches settings changes, but `SettingsView` only refreshes on mount and after its own writes. Scenario: another extension context changes the rival or theme while Settings remains mounted; the selection remains stale and can mislead the coach until a local refresh/remount (though main.tsx updates the applied theme).
+- **MEDIUM — snapshot write can succeed after the docked port disconnects** — `apps/extension/src/dashboard/main.tsx:116-117,248`. `latestPanelPort` is never cleared on disconnect, and `SaveTab` holds a repo and can finish its asynchronous build/write without checking that the live panel is still connected. Scenario: disconnect/unmount the iframe after clicking Save while opponent suggestions are solving; the old view can still write a snapshot, with no live panel to show the result. Snapshot identity itself remains internally consistent because the operation uses its captured `view.snapshot` throughout.
+- **LOW — missing point totals become fabricated zeroes in the chart** — `apps/extension/src/dashboard/ScoreChart.tsx:58-64,119-120,138`. The `?? 0` fallbacks mask absent team values. Scenario: a malformed/incomplete `Progression` omits a team's total in one event; the chart plots zero and may imply a real zero-point result instead of surfacing absence. Engine-generated progressions currently include all teams, but this UI boundary silently hides violations of that invariant.
+- **LOW — rival tie behavior adds a rule beyond F1** — `apps/extension/src/dashboard/rival.ts:16`. F1 specifies nearest final points, then the team above on a tie; this adds rank and team ID tie breakers. Scenario: two teams have equal points and rank, with IDs in reverse standings order; ID order picks the rival, though F1 does not authorize that extra preference. The primary tie rule is correct.
+- **LOW — short label can exceed its requested character budget** — `apps/extension/src/dashboard/ScoreChart.tsx:37-41`. `maxChars=0` still yields one character plus ellipsis. Scenario: a caller computes zero available characters in a narrow chart; the result is `A…` and still overflows. Current chart widths yield a positive budget.
+
+## Checks and coverage gaps
+
+- Dive validation is keyed to individual diving entries and enforces exactly two decimals (`validate.ts:297-345`). Swim `75.00` is rejected; 1-decimal dive text and an unmatched dive-like key are rejected; relay entries are not included in the allowed dive-key set. A 3-decimal dive case is not tested, though the anchored regex rejects it. Ordinary time text under an unmatched key is accepted by design as time-shaped display data; if “key not in entries” must always fail, this validator does not enforce that membership.
+- Suggested-tag `source` removal is acceptable: `tags.suggested` carries the category, and the current tag schema does not allow a source field (`snapshotSave.ts:57-58`). No simulator entry writes were found; writes remain settings-only per D4.
+- Theme messages are validated structurally and the docked port name binds to the iframe nonce (`panelPort.ts:35-58`; `dockedPanel.ts:91-112`). The separate parity `window.message` path checks exact source and extension origin (`overlay/main.ts:45-51`). I found no route for another page's stale theme-state or panel-size message to reach this overlay.
+- Tests that can pass with broken integration: `extensionShell.test.ts` validates protocol predicates and `mountPagePanel` directly, but never wires an actual nonce-bound port to the overlay; its theme test checks the host theme attribute, not accent tokens inside the closed shadow root. `extensionTabHost.test.ts` only changes settings through the same component, so it misses cross-context updates. No supplied test races save against a disconnect or snapshot update.
+
+## Acceptance
+
+- `npm run build:extension` — passed.
+- `npm run lint` — passed (types and ESLint).
+- `SKIP_BUDGET_ENV=local npx vitest run tests/extensionShell.test.ts tests/extensionTabHost.test.ts tests/extensionDashboardData.test.ts tests/extensionStorageValidate.test.ts tests/extensionScoreChart.test.ts` — passed, 5 files / 81 tests.
+- `git diff --stat tests/fixtures/extension-db` — empty.

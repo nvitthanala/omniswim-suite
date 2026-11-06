@@ -18,11 +18,11 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = join(import.meta.dirname, '..');
-const DIRS = ['packages/manager', 'packages/matrix', 'packages/metrics', 'packages/ui', 'apps/shell/src'];
+const DIRS = ['legacy/packages/manager', 'legacy/packages/matrix', 'legacy/packages/metrics', 'legacy/packages/ui', 'legacy/apps/shell/src'];
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.vite', 'coverage']);
 const HEX_ALLOWLIST = new Set([
-  'apps/shell/src/pages/SettingsPage.tsx',
-  'packages/metrics/src/components/TagTimeline.tsx',
+  'legacy/apps/shell/src/pages/SettingsPage.tsx',
+  'legacy/packages/metrics/src/components/TagTimeline.tsx',
 ]);
 
 const AMBER_CLASS = /\bamber-\d{2,3}\b/g;
@@ -56,7 +56,7 @@ function offenders(): Record<string, number> {
 describe('amber ratchet', () => {
   it('scans the UI packages', () => {
     expect(FILES.length).toBeGreaterThan(100);
-    expect(FILES.map(rel)).toContain('packages/manager/src/components/RelayGroupCard.tsx');
+    expect(FILES.map(rel)).toContain('legacy/packages/manager/src/components/RelayGroupCard.tsx');
   });
 
   it('finds no fixed amber class or hex (baseline 0)', () => {
@@ -71,7 +71,7 @@ describe('amber ratchet', () => {
 });
 
 describe('warning-tone utilities follow the theme', () => {
-  const css = readFileSync(join(ROOT, 'packages/ui/src/index.css'), 'utf8');
+  const css = readFileSync(join(ROOT, 'legacy/packages/ui/src/index.css'), 'utf8');
   const defined = new Set([...css.matchAll(/@utility\s+([\w-]+)\s*\{/g)].map(m => m[1]));
 
   it('defines --color-warning for Dark (:root) and Light', () => {

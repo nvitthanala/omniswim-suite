@@ -1,0 +1,75 @@
+/* SYNTHETIC. Styles for the hand-written fixture page. Not SwimCloud's stylesheet. */
+body {
+  margin: 0;
+  background-color: rgb(250, 250, 250);
+  color: rgb(34, 34, 34);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.c-header {
+  padding: 8px 16px;
+  background-color: rgb(20, 60, 110);
+  color: rgb(255, 255, 255);
+}
+
+.c-title {
+  margin: 12px 16px 4px;
+  font-size: 28px;
+  font-weight: 700;
+  color: rgb(20, 60, 110);
+  letter-spacing: 0.5px;
+}
+
+.c-simulator {
+  margin: 8px 16px;
+  padding: 12px;
+  border: 1px solid rgb(200, 200, 200);
+  background-color: rgb(255, 255, 255);
+}
+
+.c-table-clean {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.c-table-clean th,
+.c-table-clean td {
+  padding: 4px 8px;
+  border-bottom: 1px solid rgb(220, 220, 220);
+  text-align: left;
+}
+
+.c-btn {
+  margin-top: 8px;
+  padding: 6px 12px;
+  background-color: rgb(30, 120, 80);
+  color: rgb(255, 255, 255);
+  border: 0;
+  border-radius: 3px;
+}
+
+/*
+ * Imitates the geometry of SwimCloud's narrow-layout "Options" button (.btn-fab.u-is-hidden@md):
+ * fixed, bottom 15px, right 10px, z-index 1040, hidden from 992px up. Measured live on 2026-10-26
+ * from computed style; this is not SwimCloud's stylesheet. Text size and padding imitate .btn.
+ */
+.c-fab {
+  position: fixed;
+  bottom: 15px;
+  right: 10px;
+  z-index: 1040;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 0;
+  border-radius: 4px;
+  display: none;
+}
+
+@media (max-width: 991.98px) {
+  .c-fab {
+    display: inline-block;
+  }
+}

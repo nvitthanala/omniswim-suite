@@ -1,0 +1,25 @@
+{
+  "name": "@omniswim/extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "lint": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "highs": "1.15.4",
+    "idb": "^8.0.4",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "0.28.2",
+    "fake-indexeddb": "^6.2.6"
+  }
+}

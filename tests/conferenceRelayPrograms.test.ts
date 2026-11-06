@@ -153,3 +153,19 @@ describe('conference relay programs: GLVC 2025-26', () => {
     }
   });
 });
+
+describe('the relay-programs source manifest', () => {
+  // Every archived file present in this clone must match its manifest sha256, for every source, not only the one a program cites.
+  // A clone without the gitignored files checks only the tracked fields, so this never skips.
+  it('records each source with a url, a retrieval time and its hashes, and matches every archived file present', () => {
+    const sources = loadManifest();
+    expect(sources.length).toBeGreaterThan(1);
+    for (const source of sources) {
+      expect(source.url, source.filename).toMatch(/^https:\/\//);
+      expect(source.retrievedAt, source.filename).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(source.extractedText.pdfSha256, source.filename).toBe(source.sha256);
+      if (existsSync(path.join(SOURCES_DIR, source.filename))) expect(sha256(source.filename), source.filename).toBe(source.sha256);
+      if (existsSync(path.join(SOURCES_DIR, source.extractedText.filename))) expect(sha256(source.extractedText.filename), source.extractedText.filename).toBe(source.extractedText.sha256);
+    }
+  });
+});

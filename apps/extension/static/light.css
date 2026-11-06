@@ -1,0 +1,12 @@
+/*
+ * The only OmniSwim CSS injected into the SwimCloud page (D3 section 4).
+ * Every selector begins with .osx- or [data-osx (T-B9). No rule touches :root,
+ * html, body or a SwimCloud class. Light-DOM additions follow SwimCloud's theme.
+ */
+.osx-hidden {
+  display: none !important;
+}
+
+[data-osx-hidden] {
+  display: none !important;
+}

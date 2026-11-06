@@ -1,0 +1,227 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * Compare known PDF relay splits vs calculated splits from individual bests / history.
+ */
+
+import { Gender, RelayLegStroke, SwimmerResult, Workspace } from '../types';
+import { getAthleteProfile } from './athleteHistory';
+import { swimEventIdentity } from './bestTimeEligibility';
+import { mergeScoringSettings } from './scoringDefaults';
+import { itemAt } from './indexedAccess';
+import {
+  relayLegRequirements,
+  relayLegMatchSettings,
+  suggestBestRelayLegFill,
+  upsertRelayLegOverride,
+  stableRelayEntryKey,
+  relayTemplateFromLeg,
+} from './relayLegMatching';
+import { convertTimeToSeconds, isRelayResult, normalizeSwimmerName } from './utils';
+import { displayTimeForRelayLeg, relayLegTimeView } from './relaySplits';
+import { relayLegHistoryCandidates } from './relayLegHistoryCandidates';
+
+export type RelaySplitComparison = {
+  legIndex: number;
+  swimmerName: string;
+  knownSplit: string | null;
+  calculatedSplit: string | null;
+  deltaSec: number | null;
+  /**
+   * Where the calculated split came from.
+   *
+   * `'extracted-split'` is a **placeholder**, not a result: the swimmer has no
+   * standalone time at the leg distance, so the best available estimate is a
+   * time SwimCloud took out of a longer swim's splits. Named separately from
+   * `'history'` so a coach can see which legs rest on an estimate.
+   */
+  source: 'pdf' | 'history' | 'lineup' | 'extracted-split' | 'estimate' | 'none';
+  /**
+   * `true` when `knownSplit` is a theoretical meet's estimate, not a split (`relayLegTimeView`). Then
+   * `source` is `'estimate'`. Absent on every row of a real meet.
+   */
+  knownIsEstimate?: true;
+};
+
+/**
+ * A leg's time from what the swimmer has already done, in order of authority.
+ *
+ * 1. A real standalone swim at the leg distance (`'history'`).
+ * 2. A time the meet's entry plan already commits them to (`'lineup'`).
+ * 3. A time extracted from a longer swim's splits (`'extracted-split'`).
+ *
+ * Three is last and is a placeholder. It is offered at all because a measured
+ * half of a 100 is a far better estimate of what a swimmer splits on a relay
+ * leg than an empty cell — and because it is the only thing many swimmers have
+ * at 50 yards. It is never allowed to look like the first two: it carries its
+ * own source so the caller can mark it, and it never enters
+ * `bestByEvent`, so it is never ranked, cut-tagged or planned as an entry.
+ */
+const LEG_STROKE_EVENT: Record<RelayLegStroke, string> = {
+  back: 'Backstroke',
+  breast: 'Breaststroke',
+  fly: 'Butterfly',
+  free: 'Freestyle',
+};
+
+/**
+ * True when `event` is the individual event one leg swims: the leg's own
+ * distance and stroke.
+ *
+ * Compared by event identity, not by substring. The substring test this
+ * replaces read `1000 Freestyle` as a 100 free leg and `500 Free SCY` as a
+ * 50 free leg, because `"1000"` contains `"100"` and `"500"` contains `"50"`.
+ * A HyTek label (`Event 4 Men 1000 Yard Freestyle`) failed the same way.
+ */
+function isLegEvent(event: string, legDistance: number, stroke: RelayLegStroke): boolean {
+  return swimEventIdentity(event) === swimEventIdentity(`${legDistance} ${LEG_STROKE_EVENT[stroke]}`);
+}
+
+function findCalculatedSplit(
+  workspace: Workspace,
+  team: string,
+  gender: Gender,
+  name: string,
+  relayEvent: string,
+  legIndex: number
+): { time: string; source: 'history' | 'lineup' | 'extracted-split' } | null {
+  const req = relayLegRequirements(relayEvent, legIndex);
+  // A relay label that names no distance has no leg event to calculate from.
+  const legDistance = req.legDistanceYards;
+  if (legDistance == null) return null;
+  // `relayLegRequirements` threw for an index that names no leg; this one has a stroke.
+  const legStroke = req.stroke;
+  const isThisLeg = (event: string) => isLegEvent(event, legDistance, legStroke);
+  const settings = mergeScoringSettings(workspace.scoringSettings, {
+    conference: workspace.conference,
+  });
+  const profile = getAthleteProfile(workspace, team, gender, name, settings);
+  const matchEvent = Object.keys(profile.bestByEvent).find(isThisLeg);
+  if (matchEvent && profile.bestByEvent[matchEvent]) {
+    return { time: profile.bestByEvent[matchEvent].time, source: 'history' };
+  }
+  const plan = (workspace.meetEntryPlans ?? []).find(
+    p =>
+      p.team === team &&
+      p.gender === gender &&
+      normalizeSwimmerName(p.name) === normalizeSwimmerName(name) &&
+      isThisLeg(p.event)
+  );
+  if (plan) return { time: plan.time, source: 'lineup' };
+
+  // Last resort. Matched exactly as bestByEvent is, so a leg only ever takes a
+  // placeholder at its own distance and stroke.
+  const extractedEvent = Object.keys(profile.extractedByEvent).find(isThisLeg);
+  if (extractedEvent && profile.extractedByEvent[extractedEvent]) {
+    return { time: profile.extractedByEvent[extractedEvent].time, source: 'extracted-split' };
+  }
+  return null;
+}
+
+export function compareRelayLegSplits(
+  workspace: Workspace,
+  gender: Gender,
+  legs: SwimmerResult[],
+  relayEvent: string,
+  team: string
+): RelaySplitComparison[] {
+  return [0, 1, 2, 3].map(legIndex => {
+    const leg = legs.find(l => (l.relayLegIndex ?? -1) === legIndex) ?? legs[legIndex];
+    const view = leg && !leg.relayLegVacant ? relayLegTimeView(leg) : null;
+    const knownIsEstimate = view?.kind === 'estimate';
+    const known =
+      leg && !leg.relayLegVacant
+        ? knownIsEstimate
+          ? view.time
+          : displayTimeForRelayLeg(leg) || leg.relayLegSplit || null
+        : null;
+    const name = leg && !leg.relayLegVacant ? leg.name : '';
+    const calc =
+      name && team
+        ? findCalculatedSplit(workspace, team, gender, name, relayEvent, legIndex)
+        : null;
+    let deltaSec: number | null = null;
+    if (known && calc) {
+      deltaSec = convertTimeToSeconds(calc.time) - convertTimeToSeconds(known);
+    }
+    return {
+      legIndex,
+      swimmerName: name || '—',
+      knownSplit: known,
+      calculatedSplit: calc?.time ?? null,
+      deltaSec,
+      source: known ? (knownIsEstimate ? 'estimate' : 'pdf') : calc?.source ?? 'none',
+      ...(knownIsEstimate ? { knownIsEstimate: true as const } : {}),
+    };
+  });
+}
+
+/**
+ * Propose relay leg fills from active individual lineup (meetEntryPlans) first,
+ * then fall back to fastest eligible roster swimmers. A roster swimmer with no
+ * swim at a leg's event in the pool may still fill it from athlete history
+ * (`relayLegHistoryCandidates`, R1 e); a pool swim at the event always wins.
+ */
+export function buildRelaysFromIndividualLineup(
+  workspace: Workspace,
+  gender: Gender,
+  team: string,
+  activeSwimmers: SwimmerResult[],
+  relayLegs: SwimmerResult[]
+): NonNullable<Workspace['relayLegOverrides']> {
+  const plans = (workspace.meetEntryPlans ?? []).filter(
+    p => p.team === team && p.gender === gender && p.active !== false
+  );
+  const planAsSwimmers: SwimmerResult[] = plans.map(p => ({
+    id: p.id,
+    rank: 0,
+    name: p.name,
+    classYear: p.classYear ?? 'UNKNOWN',
+    team: p.team,
+    time: p.time,
+    points: 0,
+    event: p.event,
+    gender: p.gender,
+  }));
+  const lineupPool = [...planAsSwimmers, ...activeSwimmers];
+  const pool = [...lineupPool, ...relayLegHistoryCandidates(workspace, lineupPool, gender)];
+  const teamRelayLegs = relayLegs.filter(
+    r => isRelayResult(r) && String(r.team ?? '').trim() === team
+  );
+
+  let overrides = [...(workspace.relayLegOverrides ?? [])];
+  const byRelay = new Map<string, SwimmerResult[]>();
+  for (const leg of teamRelayLegs) {
+    const key = stableRelayEntryKey(teamRelayLegs, leg);
+    const list = byRelay.get(key) ?? [];
+    list.push(leg);
+    byRelay.set(key, list);
+  }
+
+  const exclude = new Set<string>();
+  for (const [, legs] of byRelay) {
+    const template = relayTemplateFromLeg(teamRelayLegs, itemAt(legs, 0));
+    const assigned = new Set(
+      legs
+        .filter(l => !l.relayLegVacant && l.name)
+        .map(l => normalizeSwimmerName(l.name))
+    );
+    for (let legIndex = 0; legIndex < 4; legIndex++) {
+      const leg = legs.find(l => (l.relayLegIndex ?? -1) === legIndex) ?? legs[legIndex];
+      if (leg && !leg.relayLegVacant) continue;
+      const suggestion = suggestBestRelayLegFill(
+        pool,
+        template,
+        legIndex,
+        assigned,
+        exclude,
+        relayLegMatchSettings(workspace),
+        teamRelayLegs
+      );
+      if (!suggestion) continue;
+      assigned.add(normalizeSwimmerName(suggestion.swimmer.name));
+      overrides = upsertRelayLegOverride(overrides, suggestion.override);
+    }
+  }
+  return overrides;
+}

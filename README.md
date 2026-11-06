@@ -122,8 +122,11 @@ npm run test:harness
 # Type-check all workspaces and the extension, then run ESLint
 npm run lint
 
-# Rebuild the SwimCloud companion extension bundles (crawler.js, background.js)
+# Build the OmniSwim Chrome extension into apps/extension/dist (load that folder unpacked)
 npm run build:extension
+
+# Rebuild the frozen legacy SwimCloud companion extension (crawler.js, background.js)
+npm run build:extension:legacy
 
 # Migrate JSON data to SQLite
 npm run migrate:sqlite

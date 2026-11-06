@@ -1,0 +1,1153 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Machinery shared by two or more of the four arbitrage analyses
+ * (crossCourseTable.ts, exactSwaps.ts, dropAdd.ts, relayLegSwaps.ts). Nothing
+ * here is part of the public surface on its own — lib/crossCourseArbitrage.ts
+ * is the barrel that re-exports what callers may use.
+ *
+ * The pieces, in the order they appear:
+ *
+ *   1. Recency window + best-time picking (teamHistoryWindow, pickRecencyBest).
+ *   2. The history → SCY projection prefix (convertedHistorySwims) that every
+ *      analysis starts from, and the cross-course table row types it feeds.
+ *   3. Conversion-confidence banding (buildEventTimeIndex, conversionConfidence).
+ *   4. Full re-score helpers (teamTotal / scoreWorkspaceRows / sumTeamPoints).
+ *   5. The droppable-entry union (collectDroppableEntries).
+ *   6. The incremental fast-rescore context (buildFastSwapContext) used by the
+ *      swap, drop-only and add-only rankings.
+ *
+ * PROJECTION NOTE. Two analyses project an athlete's history onto the meet's
+ * program, and they classify the projected swim DIFFERENTLY on purpose:
+ *   * buildCrossCourseTable keys by `canonicalProgramEvent` (the 14 championship
+ *     SCY individual events; rejects 25s / 100 IM / off-program distances).
+ *   * buildRelayLegTimeIndex keys by `individualStrokeDistance` (distance+stroke
+ *     for a relay leg; rejects IM/medley, but accepts any distance).
+ * Everything BEFORE the classifier is identical, and only that identical prefix
+ * is shared here (convertedHistorySwims). The classifiers are deliberately NOT
+ * unified — they answer different questions.
+ */
+
+import {
+  Gender,
+  HistoricalSwim,
+  PlannedSwimEntry,
+  ScorerRosterOverride,
+  ScoringSettings,
+  SwimmerResult,
+  Workspace,
+  type ScyConversionProvenance,
+} from '../../types';
+import { buildMeetEventLabelIndex, programEventOrNull } from '../eventIdentity';
+import { isUserInputtedSwim } from '../athleteHistory';
+import { isUnconfirmedProgramSwim } from '../programSwim';
+import { itemAt } from '../indexedAccess';
+import { swimEventNotSwumInCourse } from '../courseEvents';
+import { effectivePdfPlacePointsMode } from '../scoringDefaults';
+import { buildScorerRosterLookup, usesScorerRoster, type ScorerRosterLookup } from '../scorerRoster';
+import {
+  buildWhatIfProjection,
+  buildWhatIfResults,
+  planToResult,
+  projectRanksInField,
+} from '../whatIfProjection';
+import {
+  calculatePoints,
+  classifyRoundTier,
+  convertSwimToSCYDetailed,
+  convertTimeToSeconds,
+  convertToSCY,
+  eventMeetSortKey,
+  hasConversionFactorForCourse,
+  isDivingEvent,
+  isRelayResult,
+  normalizeSwimmerName,
+  parseRankInt,
+  sortEventsByMeetOrder,
+  type ScyConversion,
+  type ScyConversionBasis,
+} from '../utils';
+
+// --- recency window ---------------------------------------------------------
+
+/** Default recency window (months) for candidate-time selection. */
+export const DEFAULT_RECENCY_MONTHS = 24;
+
+/** Lenient date parse: ms since epoch, or null when absent/unparseable. */
+function parseSwimDateMs(date?: string): number | null {
+  if (!date) return null;
+  const t = Date.parse(date);
+  return Number.isNaN(t) ? null : t;
+}
+
+/** Newest dated swim across the WHOLE workspace history (recency anchor). */
+function newestHistoryDateMs(history: HistoricalSwim[]): number | null {
+  let max: number | null = null;
+  for (const s of history) {
+    const t = parseSwimDateMs(s.date);
+    if (t != null && (max == null || t > max)) max = t;
+  }
+  return max;
+}
+
+/** Recency cutoff: `months` calendar months before the anchor. */
+function recencyCutoffMs(anchorMs: number, months: number): number {
+  const d = new Date(anchorMs);
+  d.setMonth(d.getMonth() - months);
+  return d.getTime();
+}
+
+/**
+ * Fastest ref within the recency window (undated/unparseable rows count as
+ * recent). If every ref is stale, keep the fastest but flag it `stale`.
+ * cutoffMs null (no dated swims at all) disables filtering.
+ */
+export function pickRecencyBest<T extends CrossCourseTimeRef>(
+  refs: T[],
+  cutoffMs: number | null
+): T | undefined {
+  if (refs.length === 0) return undefined;
+  if (cutoffMs == null) return pickFastest(refs);
+  const recent = refs.filter(r => {
+    const t = parseSwimDateMs(r.date);
+    return t == null || t >= cutoffMs;
+  });
+  if (recent.length > 0) return pickFastest(recent);
+  const best = pickFastest(refs);
+  return best ? { ...best, stale: true } : undefined;
+}
+
+function pickFastest<T extends { timeSec: number }>(refs: T[]): T | undefined {
+  let best: T | undefined;
+  for (const r of refs) {
+    if (!best || r.timeSec < best.timeSec) best = r;
+  }
+  return best;
+}
+
+/** The team+gender history slice plus the recency cutoff derived from it. */
+export type TeamHistoryWindow = {
+  /** Rows of workspace.athleteHistory for this team+gender. */
+  history: HistoricalSwim[];
+  /** Recency cutoff in ms, or null when the workspace has no dated swim at all. */
+  cutoffMs: number | null;
+};
+
+/**
+ * Team+gender history slice and its recency cutoff — the identical preamble
+ * buildCrossCourseTable and buildRelayLegTimeIndex both open with.
+ */
+export function teamHistoryWindow(
+  workspace: Workspace,
+  opts: { team: string; gender: Gender; recencyMonths?: number }
+): TeamHistoryWindow {
+  const team = opts.team.trim();
+  const allHistory = workspace.athleteHistory ?? [];
+  const history = allHistory.filter(
+    s => s.gender === opts.gender && String(s.team ?? '').trim() === team
+  );
+
+  // Recency anchor is the newest dated swim across the WHOLE workspace history,
+  // so old files (with old "newest" dates) still surface their own recent bests.
+  const recencyMonths = opts.recencyMonths ?? DEFAULT_RECENCY_MONTHS;
+  const anchorMs = newestHistoryDateMs(allHistory);
+  const cutoffMs = anchorMs == null ? null : recencyCutoffMs(anchorMs, recencyMonths);
+  return { history, cutoffMs };
+}
+
+// --- history → SCY projection prefix ----------------------------------------
+
+/** One history row projected onto SCY, before any event classification. */
+export type ProjectedHistorySwim = {
+  /** The original history row (never mutated). */
+  swim: HistoricalSwim;
+  /** Course as recorded, defaulted to SCY. */
+  timeType: 'SCY' | 'LCM' | 'SCM';
+  /**
+   * convertSwimToSCYDetailed output — SCY event label + SCY time, plus the
+   * conversion `basis` (factor, NCAA SCM table, and why that table). Identity
+   * for SCY rows; for LCM/SCM this also remaps distance identity (400→500,
+   * 800→1000, 1500→1650). Still readable as `{ event, time }`.
+   */
+  converted: ScyConversion;
+};
+
+/**
+ * The projection prefix every history-driven analysis shares: drop relays, drop
+ * courses with no published conversion factor, then convert to SCY. The CALLER
+ * classifies the converted event (canonical program event vs relay-leg
+ * distance+stroke) — those classifiers differ by design, see the module header.
+ *
+ * An SCM swim converts with the NCAA table of the swim's own team's division
+ * (`{ team: s.team }`), so a D2 roster is not projected on the D1 table.
+ */
+export function* convertedHistorySwims(
+  history: HistoricalSwim[]
+): Generator<ProjectedHistorySwim> {
+  for (const s of history) {
+    if (/\brelay\b/i.test(s.event)) continue;
+    // A self-reported time is never a best, so it is never projected: not as
+    // an event best and not as a relay-leg time. See HistoricalSwim.isUserInputted.
+    // An extracted split IS projected, because a relay leg may fall back on it;
+    // every best-picking caller drops it with `isRankableSwim`.
+    if (isUserInputtedSwim(s)) continue;
+    // An event its course does not swim (a 1000 Free SCM) has no SCY
+    // equivalent and is no relay-leg time either. See courseEvents.ts.
+    if (swimEventNotSwumInCourse(s)) continue;
+    const timeType = s.timeType ?? 'SCY';
+    // No published factor → the swim has no SCY equivalent: diving, and an LCM
+    // swim outside CONVERSION_FACTORS (an LCM 25 or 100 IM). An SCM 25 or 100 IM
+    // converts on the NCAA "All other events" row since 2026-09-24; the caller's
+    // classifier still rejects it as a non-program event. SwimCloud labels
+    // ("50 Free LCM") resolve since 2026-09-22.
+    if (!hasConversionFactorForCourse(s.event, timeType)) continue;
+    const converted = convertSwimToSCYDetailed(s.event, s.time, s.gender, timeType, {
+      team: s.team,
+    });
+    yield { swim: s, timeType, converted };
+  }
+}
+
+// --- cross-course table row types -------------------------------------------
+
+export type CrossCourseTimeRef = {
+  time: string;
+  timeSec: number;
+  meetLabel?: string;
+  date?: string;
+  /** True when this best is older than the recency window (kept as a fallback). */
+  stale?: boolean;
+  /**
+   * The swim's time is altitude-adjusted (`HistoricalSwim.isAltitudeAdjusted`).
+   * Display only: the adjusted time is the one the NCAA enters, so it ranks as is.
+   */
+  altitudeAdjusted?: true;
+};
+
+export type CrossCourseConvertedRef = CrossCourseTimeRef & {
+  /** Original (un-converted) time as swum. */
+  sourceTime: string;
+  sourceCourse: 'LCM' | 'SCM';
+  /** Original event as swum (e.g. "400 Freestyle" for a 500 Free SCY slot). */
+  sourceEvent: string;
+  /**
+   * How the time reached SCY: the factor, and for SCM the NCAA table and why
+   * it was chosen (e.g. `reason: 'division_unknown'`). Optional so existing
+   * constructors keep compiling; `buildCrossCourseTable` always sets it.
+   */
+  basis?: ScyConversionBasis;
+};
+
+export type CrossCourseRow = {
+  athlete: string;
+  /** SCY program event slot. */
+  event: string;
+  scyBest?: CrossCourseTimeRef;
+  convertedBest?: CrossCourseConvertedRef;
+  /** Which of the two is faster (drives the recommended time). */
+  effectiveBest: 'scy' | 'converted';
+  /** Seconds the converted time beats the actual SCY time by (only when it does). */
+  convertedWinsBy?: number;
+};
+
+export type CrossCourseTable = { rows: CrossCourseRow[] };
+
+/** Effective-best ref carried through swap/add candidate enumeration. */
+export type EffectiveBestRef = {
+  time: string;
+  timeSec: number;
+  stale?: boolean;
+  /** True when the effective best came from a converted LCM/SCM swim. */
+  converted?: boolean;
+  /**
+   * The recorded metric swim behind a converted best, so a plan written from
+   * it stays marked as an estimate. Set whenever `converted` is and the table
+   * row carries its conversion basis (`buildCrossCourseTable` always does).
+   */
+  convertedFrom?: ScyConversionProvenance;
+  /** The effective best's swim was altitude-adjusted. Display only. */
+  altitudeAdjusted?: true;
+};
+
+/** The provenance of a converted cross-course best, or undefined without a basis. */
+function crossCourseProvenance(ref: CrossCourseConvertedRef): ScyConversionProvenance | undefined {
+  if (!ref.basis) return undefined;
+  return {
+    sourceCourse: ref.sourceCourse,
+    sourceEvent: ref.sourceEvent,
+    sourceTime: ref.sourceTime,
+    scyTime: ref.time,
+    basis: ref.basis,
+  };
+}
+
+/** effective (recommended) SCY best per (athlete, program event) from a table. */
+export function effectiveBestIndex(
+  table: CrossCourseTable
+): Map<string, Map<string, EffectiveBestRef>> {
+  const out = new Map<string, Map<string, EffectiveBestRef>>();
+  for (const row of table.rows) {
+    const ref = row.effectiveBest === 'converted' ? row.convertedBest : row.scyBest;
+    if (!ref) continue;
+    const key = normalizeSwimmerName(row.athlete);
+    let m = out.get(key);
+    if (!m) {
+      m = new Map();
+      out.set(key, m);
+    }
+    const convertedFrom =
+      row.effectiveBest === 'converted' && row.convertedBest
+        ? crossCourseProvenance(row.convertedBest)
+        : undefined;
+    m.set(row.event, {
+      time: ref.time,
+      timeSec: ref.timeSec,
+      stale: ref.stale,
+      converted: row.effectiveBest === 'converted' ? true : undefined,
+      ...(convertedFrom ? { convertedFrom } : {}),
+      ...(ref.altitudeAdjusted === true ? { altitudeAdjusted: true as const } : {}),
+    });
+  }
+  return out;
+}
+
+// --- conversion confidence bands --------------------------------------------
+
+/**
+ * Additive confidence tag for swap/add rows: 'verify' means the row's outcome
+ * hinges on a converted (LCM/SCM→SCY) time whose winning margin against the
+ * field is within ~1% of the converted time — i.e. inside conversion-factor
+ * noise, so the projected points should be verified in practice.
+ */
+export type EntryConfidence = 'verify';
+
+/**
+ * Winning-margin threshold, as a fraction of the converted time, under which a
+ * converted-time swap/add row is tagged `confidence: 'verify'`.
+ */
+export const CONVERSION_VERIFY_MARGIN = 0.01;
+
+export type EventTimeRef = { nameKey: string; timeSec: number };
+
+/**
+ * Per canonical program event: every individual competitor time in the current
+ * field (loaded results minus exhibitions/time trials, active plans, recruits —
+ * all teams). Used only to measure how close a converted candidate time sits to
+ * its nearest competitor (the margin that decides placements).
+ */
+export function buildEventTimeIndex(
+  workspace: Workspace,
+  gender: Gender
+): Map<string, EventTimeRef[]> {
+  const out = new Map<string, EventTimeRef[]>();
+  const push = (event: string, name: string, timeSec: number) => {
+    if (!Number.isFinite(timeSec) || timeSec <= 0) return;
+    const canon = programEventOrNull(event);
+    if (!canon) return;
+    let arr = out.get(canon);
+    if (!arr) {
+      arr = [];
+      out.set(canon, arr);
+    }
+    arr.push({ nameKey: normalizeSwimmerName(name), timeSec });
+  };
+
+  const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
+  for (const r of results) {
+    if (r.gender != null && r.gender !== gender) continue;
+    if (isRelayResult(r) || r.isExhibition || r.isTimeTrial) continue;
+    // A swims-list row nobody confirmed as a program swim may be a time trial: no competitor.
+    if (isUnconfirmedProgramSwim(r)) continue;
+    push(r.event, r.name, convertTimeToSeconds(r.time));
+  }
+  // A stored row in an event its course does not swim (a hand-entered 1000
+  // Freestyle SCM recruit) has no SCY time and is no competitor. Skipped, not
+  // converted: the converter would refuse it.
+  for (const p of workspace.meetEntryPlans ?? []) {
+    if (p.gender !== gender || !planIsActive(p, workspace.activeEntryIds)) continue;
+    if (swimEventNotSwumInCourse(p)) continue;
+    push(
+      p.event,
+      p.name,
+      convertTimeToSeconds(
+        convertToSCY(p.time, p.event, p.gender, p.timeType ?? 'SCY', { team: p.team })
+      )
+    );
+  }
+  for (const rec of workspace.recruits ?? []) {
+    if (rec.gender !== gender) continue;
+    if (swimEventNotSwumInCourse(rec)) continue;
+    push(
+      rec.event,
+      rec.name,
+      convertTimeToSeconds(
+        convertToSCY(rec.time, rec.event, rec.gender, rec.timeType, { team: rec.team })
+      )
+    );
+  }
+  return out;
+}
+
+/**
+ * 'verify' when the nearest OTHER-athlete field time in `event` is within
+ * CONVERSION_VERIFY_MARGIN of `timeSec` (both faster and slower neighbors
+ * count — conversion error can flip the placement either way). Undefined when
+ * the margin is comfortable or the event has no field times.
+ */
+export function conversionConfidence(
+  index: Map<string, EventTimeRef[]>,
+  event: string,
+  athlete: string,
+  timeSec: number
+): EntryConfidence | undefined {
+  if (!Number.isFinite(timeSec) || timeSec <= 0) return undefined;
+  const rows = index.get(event);
+  if (!rows || rows.length === 0) return undefined;
+  const nameKey = normalizeSwimmerName(athlete);
+  let minGap = Infinity;
+  for (const r of rows) {
+    if (r.nameKey === nameKey) continue;
+    const gap = Math.abs(r.timeSec - timeSec);
+    if (gap < minGap) minGap = gap;
+  }
+  return minGap <= timeSec * CONVERSION_VERIFY_MARGIN ? 'verify' : undefined;
+}
+
+export function planIsActive(entry: PlannedSwimEntry, activeIds?: string[]): boolean {
+  if (entry.active === false) return false;
+  if (activeIds && activeIds.length > 0) return activeIds.includes(entry.id);
+  return true;
+}
+
+// --- full re-score helpers --------------------------------------------------
+
+/**
+ * Team total via full re-score of a workspace clone (mirrors teamTotal in
+ * rosterArbitrage.ts). The caller passes a workspace already carrying whatever
+ * drop/add it is simulating (filtered results/recruits + overlay plans); this
+ * just scores it. buildWhatIfResults reads currentResults/recruits/plans from
+ * the passed workspace, so a filtered clone flows through end to end.
+ */
+export function teamTotal(
+  ws: Workspace,
+  gender: Gender,
+  team: string,
+  settings: ScoringSettings
+): number {
+  return sumTeamPoints(scoreWorkspaceRows(ws, gender, settings), team, gender);
+}
+
+/** Full re-score of a workspace, rows retained (exact teamTotal pipeline). */
+export function scoreWorkspaceRows(
+  ws: Workspace,
+  gender: Gender,
+  settings: ScoringSettings
+): SwimmerResult[] {
+  const results = buildWhatIfResults({ workspace: ws, gender, removeSeniors: false });
+  return calculatePoints(results, settings, {
+    scorerRosterOverrides: ws.scorerRosterOverrides ?? [],
+    conferenceForMerge: ws.conference,
+    resultsForPdfHint: [...(ws.menResults ?? []), ...(ws.womenResults ?? [])],
+  });
+}
+
+/** Team points over scored rows (same filter teamTotal always used). */
+export function sumTeamPoints(scored: SwimmerResult[], team: string, gender: Gender): number {
+  return scored
+    .filter(r => String(r.team ?? '').trim() === team && (r.gender === gender || r.gender == null))
+    .reduce((s, r) => s + (typeof r.points === 'number' ? r.points : 0), 0);
+}
+
+/** Shared guided reason when the scoring field cannot produce meaningful deltas. */
+export function fieldNotMeaningfulReason(teamsWithResults: Set<string>, gender: Gender): string {
+  return teamsWithResults.size === 0
+    ? `No ${gender === Gender.MEN ? 'men' : 'women'}'s individual results to score against — showing cross-course times only.`
+    : `Scoring field has only ${[...teamsWithResults][0]} — point deltas need at least two teams. Showing cross-course times only.`;
+}
+
+/** Distinct teams that have at least one scoring-eligible individual result row. */
+export function distinctIndividualResultTeams(
+  results: SwimmerResult[],
+  gender: Gender
+): Set<string> {
+  const teams = new Set<string>();
+  for (const r of results) {
+    if (r.gender != null && r.gender !== gender) continue;
+    if (isRelayResult(r)) continue;
+    if (r.isExhibition || r.isTimeTrial) continue;
+    if (isUnconfirmedProgramSwim(r)) continue;
+    const t = String(r.team ?? '').trim();
+    if (t) teams.add(t);
+  }
+  return teams;
+}
+
+/**
+ * The shared "field not meaningful" early-out for `rankDropOnly`, `rankAddOnly`
+ * and `rankExactSwaps`: with fewer than two teams carrying individual results,
+ * point deltas are not meaningful and enumeration never starts. Returns the
+ * reason string to report when that is the case, `null` when the field is
+ * meaningful and the caller should proceed.
+ */
+export function fieldMeaningfulnessGuard(
+  results: SwimmerResult[],
+  gender: Gender
+): string | null {
+  const teamsWithResults = distinctIndividualResultTeams(results, gender);
+  if (teamsWithResults.size >= 2) return null;
+  return fieldNotMeaningfulReason(teamsWithResults, gender);
+}
+
+// --- droppable current entries ----------------------------------------------
+
+/** One currently-entered individual entry an athlete could drop in a 1-for-1 swap. */
+export type DroppableEntry = {
+  source: 'plan' | 'result' | 'recruit';
+  id: string;
+  /** Canonical SCY program event. */
+  event: string;
+  /** Display name (for the created replacement entry). */
+  name: string;
+  classYear?: string;
+  /** Time as swum on the dropped entry (for reporting). */
+  time?: string;
+};
+
+/** Source priority when the same athlete+event appears more than once (lower wins). */
+const DROP_SOURCE_PRIORITY: Record<DroppableEntry['source'], number> = {
+  plan: 0,
+  result: 1,
+  recruit: 2,
+};
+
+/** An exhibition, a time trial, or a swims-list row nobody confirmed as a program swim. */
+function isOutsideProgramRow(r: SwimmerResult): boolean {
+  return r.isExhibition === true || r.isTimeTrial === true || isUnconfirmedProgramSwim(r);
+}
+
+/**
+ * Every current individual entry the team's athletes hold, grouped by athlete
+ * (normalized name) then by canonical program event. Union of three sources:
+ *   - active individual plan entries (dropSource 'plan'),
+ *   - individual program-event result rows in men/womenResults (dropSource
+ *     'result'), skipping relays / exhibitions / time trials,
+ *   - recruit rows for the team (dropSource 'recruit').
+ * When an event appears from more than one source for the same athlete, the
+ * higher-priority source is kept (plan > result > recruit) so a single event is
+ * never double-counted as two separate drops.
+ */
+export function collectDroppableEntries(
+  workspace: Workspace,
+  team: string,
+  gender: Gender
+): Map<string, { display: string; byEvent: Map<string, DroppableEntry> }> {
+  const byAthlete = new Map<string, { display: string; byEvent: Map<string, DroppableEntry> }>();
+
+  const consider = (nameKey: string, display: string, entry: DroppableEntry) => {
+    let a = byAthlete.get(nameKey);
+    if (!a) {
+      a = { display, byEvent: new Map() };
+      byAthlete.set(nameKey, a);
+    }
+    const existing = a.byEvent.get(entry.event);
+    if (!existing || DROP_SOURCE_PRIORITY[entry.source] < DROP_SOURCE_PRIORITY[existing.source]) {
+      a.byEvent.set(entry.event, entry);
+    }
+  };
+
+  // 1. Active individual plan entries.
+  const activePlans = (workspace.meetEntryPlans ?? []).filter(
+    p =>
+      p.gender === gender &&
+      String(p.team ?? '').trim() === team &&
+      planIsActive(p, workspace.activeEntryIds)
+  );
+  for (const p of activePlans) {
+    const event = programEventOrNull(p.event);
+    if (!event) continue;
+    consider(normalizeSwimmerName(p.name), p.name, {
+      source: 'plan',
+      id: p.id,
+      event,
+      name: p.name,
+      classYear: p.classYear == null ? undefined : String(p.classYear),
+      time: p.time,
+    });
+  }
+
+  // 2. Individual result rows (loaded meet PDF / paste) for this team+gender.
+  const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
+  for (const r of results) {
+    if (r.gender != null && r.gender !== gender) continue;
+    if (isRelayResult(r)) continue;
+    if (isOutsideProgramRow(r)) continue;
+    if (String(r.team ?? '').trim() !== team) continue;
+    const event = programEventOrNull(r.event);
+    if (!event) continue;
+    consider(normalizeSwimmerName(r.name), r.name, {
+      source: 'result',
+      id: r.id,
+      event,
+      name: r.name,
+      classYear: r.classYear == null ? undefined : String(r.classYear),
+      time: r.time,
+    });
+  }
+
+  // 3. Recruit rows for this team+gender (they become what-if results too).
+  for (const rec of workspace.recruits ?? []) {
+    if (rec.gender !== gender) continue;
+    if (String(rec.team ?? '').trim() !== team) continue;
+    const event = programEventOrNull(rec.event);
+    if (!event) continue;
+    consider(normalizeSwimmerName(rec.name), rec.name, {
+      source: 'recruit',
+      id: rec.id,
+      event,
+      name: rec.name,
+      classYear: rec.classYear == null ? undefined : String(rec.classYear),
+      time: rec.time,
+    });
+  }
+
+  return byAthlete;
+}
+
+// --- incremental (fast) swap re-scoring ------------------------------------
+//
+// The full re-score above runs buildWhatIfResults + calculatePoints per swap
+// candidate (~3.5 ms each; seconds on a realistic merged workspace). The fast
+// path re-uses a single baseline scoring and, per candidate, re-scores ONLY the
+// two events a 1-for-1 swap touches — reproducing calculatePoints' exact result.
+//
+// INVARIANCE ANALYSIS (1-for-1 same-swimmer swap X: drop event D, add event A).
+// team T's total = T's relay points + T's individual points. The fast path is
+// applied behind a gate; anything it cannot prove invariant falls back.
+//
+//  * PDF place-points mode (effectivePdfPlacePointsMode): points come straight
+//    from row.pdfPoints, an entirely different code path — FALL BACK.
+//  * relayEligibleFromScorerPool: relay eligibility would couple to the shared
+//    individual scorer pool across events — FALL BACK.
+//  * entryPlanMode 'plan_sheet': different pool-assembly pipeline — FALL BACK.
+//  * Per-event individual cap (scorerCapScope !== 'meet' with a finite cap):
+//    the sweep below models the meet-wide pool; a per-event cap is a different
+//    rule — FALL BACK. (An unbounded cap, >=999, blocks no one, and the sweep
+//    degenerates to "everyone eligible scores", which is exactly correct.)
+//  * Roster eligibility (usesScorerRoster): the auto/override scorer flag is per
+//    swimmer. Only X's own flag can change (its added entry is an optimizer =
+//    recruit row, always a scorer). To keep every other event invariant we
+//    REQUIRE X to already be a baseline scorer; otherwise X's untouched result
+//    rows in other events could newly score — FALL BACK for that candidate.
+//    With X already a scorer the roster lookup is identical before/after, so
+//    T's relay points and T's individual points outside {A,D} are unchanged.
+//  * Meet-wide individual scorer pool (scorerCapScope 'meet'): genuinely couples
+//    events in meet order. Rather than prove it away, the fast path REPRODUCES
+//    it with an explicit pool sweep and SELF-VALIDATES: it re-derives the
+//    baseline team total two ways (real calculatePoints vs. the sweep) and only
+//    trusts the fast deltas when they agree to the cent; otherwise FALL BACK.
+//
+// Only events {A, D} change placements under the swap (projectRanksInField
+// re-ranks by time, per event); every other event's per-row placement points
+// are identical to baseline, so the sweep re-uses cached baseline groups for
+// them and re-scores only the two touched events (no-pool) per candidate.
+
+/** One distinct swimmer within a tie group — one pool slot, one points figure. */
+type TeamScoreGroupMember = {
+  /** Normalized swimmer key. One pool slot per key. */
+  key: string;
+  /**
+   * Team points THIS swimmer's rows earn at this placement — summed over ROWS,
+   * not one per name. scoreIndividualsInEvent awards `each` to every member row
+   * while consuming pool weight only per distinct name, so the two counts
+   * diverge whenever a team holds more rows than distinct swimmers at one
+   * placement (e.g. an athlete carried as BOTH a recruit row and an active
+   * optimizer plan for the same event). Counting per name under-counted those
+   * groups and broke the self-validation below, disabling the fast path.
+   */
+  points: number;
+};
+
+/** One scored tie-group for a single team, in meet+rank order (pool sweep unit). */
+type TeamScoreGroup = {
+  /**
+   * The distinct swimmers sharing this placement, PRE-ORDERED the way
+   * `admitTieGroupToMeetPool` admits them: fastest first, name as tiebreak.
+   * Admission is per member and accumulates, so a group can score partially —
+   * it is no longer all-or-none. See the sweep below.
+   */
+  members: TeamScoreGroupMember[];
+  /** Pool weight each NEW swimmer consumes (diving events weigh less). */
+  weight: number;
+};
+
+export type FastSwapContext = {
+  /** Returns the exact modWs team total for a swap, or null to fall back. */
+  newTotalFor: (drop: DroppableEntry, newEntry: PlannedSwimEntry, addEvent: string) => number | null;
+  /**
+   * Exact team total after dropping ONE entry alone (no add), or null to fall
+   * back. Only the drop's own event is re-scored; the overlay is valid only
+   * when the projection regime is unchanged by the drop and (in roster mode)
+   * scorer flags cannot shift — both gated inside, else null.
+   */
+  dropOnlyTotalFor: (drop: DroppableEntry) => number | null;
+  /**
+   * Exact team total after adding ONE optimizer plan alone (no drop), or null
+   * to fall back. The added optimizer plan always forces field projection —
+   * the same regime the baseline context is built in — so only the add event
+   * needs re-scoring. Roster mode requires the athlete to already be a scorer
+   * (same invariance gate as swaps), else null.
+   */
+  addOnlyTotalFor: (newEntry: PlannedSwimEntry) => number | null;
+};
+
+/**
+ * Meet-wide scorer-pool sweep for ONE team, mirroring `admitTieGroupToMeetPool`
+ * in utils.ts: groups are offered in meet+rank order, and within a group each
+ * swimmer is admitted individually, fastest first, against the pool AS IT
+ * STANDS AFTER the earlier members of that same group.
+ *
+ * This tracked the engine's old `every(...)` gate — all-or-none, and every
+ * member weighed against the same pre-group pool — until that gate was replaced
+ * (2026-08-30). The two must agree: this sweep is validated against a real
+ * `calculatePoints` baseline before the fast path is allowed to run, and
+ * scripts/test_cross_course_arbitrage.mjs checks fast === full per swap. If you
+ * change the admission rule in utils.ts, change it here in the same commit.
+ *
+ * An unbounded cap never blocks, short-circuited exactly as canAddSwimmerToPool
+ * does, so a large field cannot accumulate past 999 and start refusing.
+ */
+function sweepTeamIndividualTotal(
+  eventsOrder: string[],
+  groupsByEvent: Map<string, TeamScoreGroup[]>,
+  cap: number
+): number {
+  const unbounded = cap >= 999;
+  const pool = new Set<string>();
+  let weightHeld = 0;
+  let total = 0;
+  for (const ev of eventsOrder) {
+    const groups = groupsByEvent.get(ev);
+    if (!groups) continue;
+    for (const grp of groups) {
+      for (const m of grp.members) {
+        if (pool.has(m.key)) {
+          total += m.points;
+          continue;
+        }
+        if (!unbounded && weightHeld + grp.weight > cap + 1e-9) continue;
+        pool.add(m.key);
+        weightHeld += grp.weight;
+        total += m.points;
+      }
+    }
+  }
+  return total;
+}
+
+/** Group a team's scored (no-pool) individual rows into ordered pool-sweep units. */
+function buildTeamGroupsForEvent(
+  rows: SwimmerResult[],
+  event: string,
+  diverEventPattern: string[] | undefined,
+  diverWeight: number
+): TeamScoreGroup[] {
+  const scoring = rows.filter(r => Number(r.points ?? 0) > 0);
+  if (scoring.length === 0) return [];
+  const byKey = new Map<string, SwimmerResult[]>();
+  for (const r of scoring) {
+    const key = `${(r.roundSwam ?? '').trim()}|${parseRankInt(r.rank) ?? 0}`;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key)!.push(r);
+  }
+  const weight = isDivingEvent(event, diverEventPattern) ? diverWeight : 1;
+  const keys = [...byKey.keys()].sort((a, b) => {
+    const ga = itemAt(byKey.get(a)!, 0);
+    const gb = itemAt(byKey.get(b)!, 0);
+    const tw = roundTierSortForSweep(ga.roundSwam) - roundTierSortForSweep(gb.roundSwam);
+    if (tw !== 0) return tw;
+    return (parseRankInt(ga.rank) ?? 9999) - (parseRankInt(gb.rank) ?? 9999);
+  });
+  return keys.map(k => {
+    const rs = byKey.get(k)!;
+    // Points are per ROW (see TeamScoreGroupMember.points); pool weight is per
+    // NAME — so rows are folded onto one entry per distinct swimmer key.
+    const agg = new Map<string, { key: string; points: number; time: number; label: string }>();
+    for (const r of rs) {
+      const key = normalizeSwimmerName(r.name);
+      const raw = convertTimeToSeconds(r.time);
+      const time = Number.isFinite(raw) ? raw : Number.POSITIVE_INFINITY;
+      const points = Number(r.points ?? 0);
+      const cur = agg.get(key);
+      if (!cur) {
+        agg.set(key, { key, points, time, label: r.name });
+      } else {
+        cur.points += points;
+        if (time < cur.time) cur.time = time;
+        // The engine breaks a time tie on the raw name. Two raw spellings can
+        // fold into one key here, so the lowest raw spelling stands in for the
+        // group; where that diverges the self-validation gate below fails the
+        // fast path closed rather than returning a wrong number.
+        if (r.name.localeCompare(cur.label) < 0) cur.label = r.name;
+      }
+    }
+    const members = [...agg.values()]
+      .sort((a, b) => a.time - b.time || a.label.localeCompare(b.label))
+      .map(m => ({ key: m.key, points: m.points }));
+    return { members, weight };
+  });
+}
+
+/** Mirror of utils' roundTierSort (kept local; only ordering matters for the sweep). */
+function roundTierSortForSweep(roundSwam: string | undefined): number {
+  const t = classifyRoundTier(roundSwam);
+  const order: Record<string, number> = { A: 1, FIN: 1, UNK: 1, B: 2, PRE: 3, C: 8, D: 8, TT: 9 };
+  return order[t] ?? 5;
+}
+
+/**
+ * Gate: unsupported scoring regimes fall back wholesale to a full re-score.
+ * `cap` is threaded in rather than recomputed so the caller can reuse the
+ * same value the sweep is built against.
+ */
+function isFastSwapRegimeSupported(
+  workspace: Workspace,
+  merged: ScoringSettings,
+  hint: SwimmerResult[],
+  cap: number
+): boolean {
+  if (effectivePdfPlacePointsMode(merged, hint)) return false;
+  if (merged.relayEligibleFromScorerPool === true) return false;
+  if ((workspace.entryPlanMode ?? 'overlay') === 'plan_sheet') return false;
+  // pdf_only excludes the added optimizer plan from scoring; the incremental add
+  // model assumes the added row scores, so fall back to a full re-score.
+  if ((workspace.scoringView ?? 'merged') === 'pdf_only') return false;
+  const capBinds = cap < 999;
+  if (capBinds && merged.scorerCapScope !== 'meet') return false;
+  return true;
+}
+
+/**
+ * A shadowed row would resurface when its shadower is dropped.
+ * `buildWhatIfProjection` collapses one athlete's duplicate entries in an
+ * event down to the most explicit plane, so a plan can be hiding a recruit
+ * row for the same event. The incremental model here prices a DROP as
+ * "remove this row's points from its event group" — it has no way to know
+ * the hidden row comes back, and would under-count the drop. Fail closed:
+ * the caller's full re-score rebuilds the projection and gets it right.
+ */
+function hasShadowedRowForTeam(collapsed: SwimmerResult[], team: string, gender: Gender): boolean {
+  return collapsed.some(r => String(r.team ?? '').trim() === team && (r.gender === gender || r.gender == null));
+}
+
+/** Team individual/relay point totals from a fully scored result set. */
+function sumTeamPointsBySwimType(
+  scored: SwimmerResult[],
+  isTeam: (r: SwimmerResult) => boolean
+): { individual: number; relay: number } {
+  let individual = 0;
+  let relay = 0;
+  for (const r of scored) {
+    if (!isTeam(r)) continue;
+    if (isRelayResult(r)) relay += Number(r.points ?? 0);
+    else individual += Number(r.points ?? 0);
+  }
+  return { individual, relay };
+}
+
+/**
+ * Event insertion order exactly as `calculatePoints` sees it: non-recruit
+ * rows first, then recruit rows, deduped; then sorted by meet order (stable).
+ * `seen` is returned too — callers below re-use it to tell an already-seen
+ * event apart from a brand-new canonical add-event.
+ */
+function buildFastSwapEventOrder(R: SwimmerResult[]): { eventsOrder: string[]; seen: Set<string> } {
+  const insertionOrder: string[] = [];
+  const seen = new Set<string>();
+  for (const r of R) {
+    if (r.isRecruit) continue;
+    if (!seen.has(r.event)) {
+      seen.add(r.event);
+      insertionOrder.push(r.event);
+    }
+  }
+  for (const r of R) {
+    if (!r.isRecruit) continue;
+    if (!seen.has(r.event)) {
+      seen.add(r.event);
+      insertionOrder.push(r.event);
+    }
+  }
+  return { eventsOrder: sortEventsByMeetOrder(insertionOrder), seen };
+}
+
+/** The team's own individual rows from no-pool scoring, grouped per event. */
+function groupNoPoolTeamRowsByEvent(
+  npScored: SwimmerResult[],
+  isTeam: (r: SwimmerResult) => boolean
+): Map<string, SwimmerResult[]> {
+  const npTeamByEvent = new Map<string, SwimmerResult[]>();
+  for (const r of npScored) {
+    if (isRelayResult(r) || !isTeam(r)) continue;
+    if (!npTeamByEvent.has(r.event)) npTeamByEvent.set(r.event, []);
+    npTeamByEvent.get(r.event)!.push(r);
+  }
+  return npTeamByEvent;
+}
+
+/** Baseline team pool-sweep groups per event, from the no-pool scoring. */
+function buildBaseGroupsByEvent(
+  npTeamByEvent: Map<string, SwimmerResult[]>,
+  diverPattern: string[] | undefined,
+  diverWeight: number
+): Map<string, TeamScoreGroup[]> {
+  const baseGroupsByEvent = new Map<string, TeamScoreGroup[]>();
+  for (const [ev, rows] of npTeamByEvent) {
+    baseGroupsByEvent.set(ev, buildTeamGroupsForEvent(rows, ev, diverPattern, diverWeight));
+  }
+  return baseGroupsByEvent;
+}
+
+/** All projected rows grouped by event — fast subset assembly for a drop/add candidate. */
+function groupRowsByEvent(R: SwimmerResult[]): Map<string, SwimmerResult[]> {
+  const rRowsByEvent = new Map<string, SwimmerResult[]>();
+  for (const r of R) {
+    if (!rRowsByEvent.has(r.event)) rRowsByEvent.set(r.event, []);
+    rRowsByEvent.get(r.event)!.push(r);
+  }
+  return rRowsByEvent;
+}
+
+/**
+ * Build the fast (incremental) swap scorer for a workspace/gender/team, or null
+ * when the regime is unsupported (falls back to full re-score). See the
+ * invariance analysis above.
+ */
+export function buildFastSwapContext(
+  workspace: Workspace,
+  team: string,
+  gender: Gender,
+  merged: ScoringSettings,
+  hint: SwimmerResult[]
+): FastSwapContext | null {
+  const cap = merged.maxIndividualScorersPerTeam ?? 999;
+  if (!isFastSwapRegimeSupported(workspace, merged, hint, cap)) return null;
+
+  const overrides = workspace.scorerRosterOverrides ?? [];
+  const diverWeight = merged.diverScorerWeight ?? 1;
+  const diverPattern = merged.diverEventPattern;
+
+  // Merged remap: the added optimizer plan carries a canonical add-event label,
+  // but buildWhatIfResults remaps imported/planned rows onto the loaded meet's
+  // real event label. Mirror that here so the fast add-event group matches the
+  // full re-score's grouping exactly. Empty index (roster-only) => identity.
+  const genderResults = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
+  const labelIndex = buildMeetEventLabelIndex(genderResults);
+  const remapEvent = (event: string): string => {
+    if (labelIndex.size === 0) return event;
+    const canon = programEventOrNull(event);
+    if (!canon) return event;
+    return labelIndex.get(canon) ?? event;
+  };
+
+  // Baseline scored once, in the SAME projection regime every swap produces
+  // (an added optimizer plan always forces projectRanksInField).
+  const projection = buildWhatIfProjection({ workspace, gender, removeSeniors: false });
+
+  // --- gate: a shadowed row would resurface when its shadower is dropped.
+  if (hasShadowedRowForTeam(projection.collapsed, team, gender)) return null;
+
+  const R = projectRanksInField(projection.rows);
+  const realScored = calculatePoints(R, merged, {
+    scorerRosterOverrides: overrides,
+    conferenceForMerge: workspace.conference,
+    resultsForPdfHint: hint,
+  });
+
+  const isTeam = (r: SwimmerResult) =>
+    String(r.team ?? '').trim() === team && (r.gender === gender || r.gender == null);
+  const { individual: realIndivT, relay: baseRelayT } = sumTeamPointsBySwimType(realScored, isTeam);
+
+  // No-pool scoring => per-row "points if the pool allowed it". conference is
+  // dropped so the NSISC merge cannot re-force the meet cap we just lifted.
+  const noPoolSettings: ScoringSettings = {
+    ...merged,
+    maxIndividualScorersPerTeam: 999,
+    scorerCapScope: 'event',
+  };
+  const npScored = calculatePoints(R, noPoolSettings, {
+    scorerRosterOverrides: overrides,
+    conferenceForMerge: undefined,
+    resultsForPdfHint: hint,
+  });
+
+  const { eventsOrder, seen } = buildFastSwapEventOrder(R);
+
+  // Baseline team groups per event, from the no-pool scoring.
+  const npTeamByEvent = groupNoPoolTeamRowsByEvent(npScored, isTeam);
+  const baseGroupsByEvent = buildBaseGroupsByEvent(npTeamByEvent, diverPattern, diverWeight);
+
+  // SELF-VALIDATION: the sweep must reproduce the real baseline exactly.
+  // This is the only gate that can silently disable the fast path on a regime
+  // it is otherwise allowed to run on — it fails closed (correct but slow), so
+  // a modelling bug here shows up as "the optimizer is slow", never as a wrong
+  // number. scripts/test_fast_swap_context.mjs guards that it stays satisfied.
+  //
+  // HISTORY (2026-07-20 → 2026-08-16). This check used to fail on the seeded
+  // HSU+NSISC merged workspace (sweep 933.79 vs real 1117.83 on Henderson State
+  // men), and the note here blamed relay-leg pool seeding. That was wrong:
+  // seedAbRelayLegsIntoPool only runs under relayEligibleFromScorerPool, which
+  // the gate above already rejects. The real cause was TeamScoreGroup awarding
+  // points per distinct NAME while calculatePoints awards them per ROW — see
+  // TeamScoreGroupMember.points. The workspace carries several athletes as BOTH a
+  // recruit row and an active optimizer plan for the same event, so those
+  // placements hold more rows than names and the sweep under-counted them.
+  const sweepBase = sweepTeamIndividualTotal(eventsOrder, baseGroupsByEvent, cap);
+  if (Math.abs(sweepBase - realIndivT) > 1e-4) return null;
+
+  // Rows grouped by event for fast subset assembly, and the roster lookup for
+  // the X-eligibility gate + override pinning.
+  const rRowsByEvent = groupRowsByEvent(R);
+  const rById = new Map(R.map(r => [r.id, r]));
+  const rosterLookup: ScorerRosterLookup = buildScorerRosterLookup(R, merged, overrides);
+  const rosterMode = usesScorerRoster(merged);
+
+  // Because no-pool scoring is independent per event, event A (add) and event D
+  // (drop) can be re-scored separately and memoized across the many candidates
+  // that share the same add or the same drop.
+  const scoreOneEventNoPool = (eventStr: string, rows: SwimmerResult[]): TeamScoreGroup[] => {
+    const projected = projectRanksInField(rows);
+    const subOverrides: ScorerRosterOverride[] = [];
+    const pinned = new Set<string>();
+    for (const r of projected) {
+      const t = String(r.team ?? '').trim() || 'Unknown';
+      const g = (r.gender ?? gender) as Gender;
+      const key = `${t}|||${g}|||${normalizeSwimmerName(r.name)}`;
+      if (pinned.has(key)) continue;
+      pinned.add(key);
+      subOverrides.push({ team: t, gender: g, name: r.name, isScorer: rosterLookup.isScorer(r.name, t, g) });
+    }
+    const np = calculatePoints(projected, noPoolSettings, {
+      scorerRosterOverrides: subOverrides,
+      conferenceForMerge: undefined,
+      resultsForPdfHint: hint,
+    });
+    const teamRows = np.filter(r => !isRelayResult(r) && isTeam(r) && r.event === eventStr);
+    return buildTeamGroupsForEvent(teamRows, eventStr, diverPattern, diverWeight);
+  };
+
+  const dropMemo = new Map<string, { eventStr: string; groups: TeamScoreGroup[] } | null>();
+  const dropGroupsFor = (drop: DroppableEntry): { eventStr: string; groups: TeamScoreGroup[] } | null => {
+    if (dropMemo.has(drop.id)) return dropMemo.get(drop.id)!;
+    const dropRow = rById.get(drop.id);
+    let out: { eventStr: string; groups: TeamScoreGroup[] } | null = null;
+    if (dropRow) {
+      const eventStr = dropRow.event;
+      const rows = (rRowsByEvent.get(eventStr) ?? []).filter(r => r.id !== drop.id);
+      out = { eventStr, groups: scoreOneEventNoPool(eventStr, rows) };
+    }
+    dropMemo.set(drop.id, out);
+    return out;
+  };
+
+  const addMemo = new Map<string, TeamScoreGroup[]>();
+  const addGroupsFor = (newEntry: PlannedSwimEntry, addEventStr: string): TeamScoreGroup[] => {
+    const key = `${normalizeSwimmerName(newEntry.name)}|${addEventStr}`;
+    const cached = addMemo.get(key);
+    if (cached) return cached;
+    // The added row must carry the SAME (remapped) event label as its group so
+    // projectRanksInField ranks it against the real meet field.
+    const addedRow = { ...planToResult(newEntry), event: addEventStr };
+    const rows = [...(rRowsByEvent.get(addEventStr) ?? []), addedRow];
+    const groups = scoreOneEventNoPool(addEventStr, rows);
+    addMemo.set(key, groups);
+    return groups;
+  };
+
+  const newTotalFor = (
+    drop: DroppableEntry,
+    newEntry: PlannedSwimEntry,
+    _addEvent: string
+  ): number | null => {
+    const dropRow = rById.get(drop.id);
+    if (!dropRow) return null; // e.g. a plan that replaced a result row — fall back.
+    // X must already be a baseline scorer so the roster lookup (relays + all
+    // other events) is invariant under the swap.
+    if (rosterMode && !rosterLookup.isScorer(newEntry.name, team, gender)) return null;
+
+    const dropEventStr = dropRow.event;
+    // Add-event group: the loaded meet's real label (merged remap) or the
+    // canonical label when unmatched / roster-only — matching buildWhatIfResults.
+    const addEventStr = remapEvent(newEntry.event);
+    if (dropEventStr === addEventStr) return null; // nothing localizable.
+
+    const dropRes = dropGroupsFor(drop);
+    if (!dropRes) return null;
+    const addGroups = addGroupsFor(newEntry, addEventStr);
+
+    // Overlay the two recomputed events onto the cached baseline groups.
+    const modGroups = new Map(baseGroupsByEvent);
+    modGroups.set(dropEventStr, dropRes.groups);
+    modGroups.set(addEventStr, addGroups);
+    let order = eventsOrder;
+    if (!seen.has(addEventStr)) {
+      // A brand-new canonical add-event: added rows sort at the meet-order tail.
+      order = [...eventsOrder, addEventStr].sort(
+        (a, b) => eventMeetSortKey(a) - eventMeetSortKey(b)
+      );
+    }
+
+    const indivT = sweepTeamIndividualTotal(order, modGroups, cap);
+    return baseRelayT + indivT;
+  };
+
+  // --- drop-only / add-only incremental scorers (same overlay machinery) ----
+
+  // The base workspace's own projection regime (mirrors buildWhatIfResults:
+  // overlay mode + at least one projected plan for this gender => field
+  // projection). The baseline R above is ALWAYS projected, so a drop-only
+  // overlay is only valid when the base regime projects too — otherwise the
+  // dropped workspace scores on stored ranks and we must fall back.
+  const plansAll = workspace.meetEntryPlans ?? [];
+  const planProjects = (p: PlannedSwimEntry): boolean =>
+    p.gender === gender &&
+    (p.projectedRank != null || p.source === 'optimizer' || p.source === 'swimcloud');
+  const baseProjects = plansAll.some(planProjects);
+
+  const dropOnlyTotalFor = (drop: DroppableEntry): number | null => {
+    // Roster mode: removing a row can flip auto-derived scorer flags (an
+    // A/B-final row disappearing un-marks its athlete), which couples relays
+    // and every other event — not localizable, fall back.
+    if (rosterMode) return null;
+    if (!baseProjects) return null;
+    // Removing the last projected plan would flip the whole workspace back to
+    // stored-rank scoring — a regime change the overlay cannot model.
+    if (drop.source === 'plan' && !plansAll.some(p => p.id !== drop.id && planProjects(p))) {
+      return null;
+    }
+    const dropRes = dropGroupsFor(drop);
+    if (!dropRes) return null;
+    const modGroups = new Map(baseGroupsByEvent);
+    modGroups.set(dropRes.eventStr, dropRes.groups);
+    return baseRelayT + sweepTeamIndividualTotal(eventsOrder, modGroups, cap);
+  };
+
+  const addOnlyTotalFor = (newEntry: PlannedSwimEntry): number | null => {
+    // Same roster gate as swaps: the athlete must already be a baseline scorer
+    // so the roster lookup (relays + all other events) is invariant.
+    if (rosterMode && !rosterLookup.isScorer(newEntry.name, team, gender)) return null;
+    const addEventStr = remapEvent(newEntry.event);
+    const addGroups = addGroupsFor(newEntry, addEventStr);
+    const modGroups = new Map(baseGroupsByEvent);
+    modGroups.set(addEventStr, addGroups);
+    let order = eventsOrder;
+    if (!seen.has(addEventStr)) {
+      order = [...eventsOrder, addEventStr].sort(
+        (a, b) => eventMeetSortKey(a) - eventMeetSortKey(b)
+      );
+    }
+    return baseRelayT + sweepTeamIndividualTotal(order, modGroups, cap);
+  };
+
+  return { newTotalFor, dropOnlyTotalFor, addOnlyTotalFor };
+}
