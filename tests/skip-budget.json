@@ -20,6 +20,11 @@
       "local": 0,
       "ci": 2,
       "reason": "it.skipIf(no local results PDF and text). data/relay-programs/sources/*.pdf and *.txt are gitignored because they name every athlete at the GLVC meet (public repo, decision U8). The manifest and the data file are tracked."
+    },
+    "tests/swimcloudSimulatorAdapter.test.ts": {
+      "local": 0,
+      "ci": 1,
+      "reason": "it.skipIf(no local archive), the provenance-hash test. Reads data/swimcloud-captures/simulator/ (gitignored raw recon evidence; never committed, decision U12). Added 2026-11-05: the skip came in with 92c438d6 (2026-10-26) and failed the CI budget because the file was missing here."
     }
   }
 }
