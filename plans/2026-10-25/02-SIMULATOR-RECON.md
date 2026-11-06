@@ -628,3 +628,28 @@ extra request per team (approved, R84). Not sent in this recon.
 Chrome (no injected element on the simulator page). The user must load
 `apps/extension/dist` unpacked first; changing Chrome's extension
 settings is the user's step.
+
+## D7 live checks, 2026-11-05 (second visit)
+
+Route: Claude in Chrome, a new tab on the simulator for teams 48, 58 and
+412 (men, SCY), the user's own sign-in. Same-origin `fetch()` from the
+page, at least 3.5 s apart. No challenge and no 403 on any request. Raw
+bodies were not saved; only the counts and values below.
+
+| # | Result |
+|---|---|
+| 1 | `/team/58/roster/?gender=M`: 200, no `cf-mitigated`, no `_cf_chl_opt`. Title "Roster - Henderson State University", heading "Season 2026-2027 Men", select 30, 42 rows, 70,627 bytes. A background fetch from the page gets the table, not a challenge. |
+| 2 | `/team/58/roster/?page=1&gender=F&season_id=30&sort=name`: 200, heading "Season 2026-2027 Women", select 30, gender F checked, 19 rows (FR 4, SO 7, JR 6, SR 2). `gender` and `season_id` both work. |
+| 3 | The page's own seasonchoices body: 10 entries; 30 = 2026-2027 (2026-09-01 to 2027-08-31), 29 = 2025-2026, 28 = 2024-2025. Decision S's season id equals the roster select value. |
+| 4 | Id join verified: the 42 roster `/swimmer/{id}` ids equal the 42 simulator swimmer ids for team 58 (overlap 42). |
+| 5 | No pagination markup on rosters 58 (42 rows), 48 (24) or 412 (44). |
+| 6 | `eventcourse=L`, team 58, 2025-06-01 to 2025-08-31: 200, 42 swimmers, 0 individual records, 0 relays, 0 splits. HSU's own team scope holds no summer LCM swims. Finding 1 stands: LCM through the team route is mostly empty; U1 is the only route to club LCM swims. |
+| 7 | Season 2019-2020 window, team 58: 0 individual records (no current swimmer swam for HSU then), relays 2006:81.36, 2007:91.14, 4006:180.40, 4007:203.56, 8006:399.99. These differ from every other season seen, so the server honors a window 7 years back. Span 2019-09-01 to 2026-11-05: 291 individual records, 113 splits. Span 2023-11-05 to 2026-11-05 (3 years): 290 individual records. The relay lists of the 7-year and 3-year spans are identical (2006:76.50, 2007:85.60, 4006:172.81, 4007:190.62, 8006:394.33, plus 300H, 5006, 15006). |
+| 8 | The 7-year span adds exactly one individual best over the 3-year span. Records carry no date field (keys: id, eventdistance, eventstroke, eventcourse, eventgender, numlegs, eventtime, flystart, pointvalue), so the old swim cannot be named from this response. A fixture needs a diff by swimmer and event; not taken. |
+| 9 | Not run: needs the extension loaded (E4). |
+| 10 | Class values: 58 men FR 8, SO 12, JR 12, SR 7, "–" 3; 48 men FR 7, SO 3, JR 7, SR 7; 412 men FR 19, SO 10, JR 9, SR 5, "–" 1; 58 women FR 4, SO 7, JR 6, SR 2. Vocabulary seen: FR, SO, JR, SR, "–". No GR or 5Y in these rosters. |
+| 11 | 2026-27 relays differ from the 2022-23 rows for all three teams (for example team 48 2007: 91.24 against 88.60). An old window does not return current relays. |
+
+**F1.1 depth:** the window is honored at 7 years (check 7), but for team 58
+the 7-year span adds one individual best and no relay over 3 years. F1.1
+stays last (U11 default). Pin the depth at 7 years, citing this section.
