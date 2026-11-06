@@ -4,7 +4,7 @@
   "restartHandoff": {
     "writtenAt": "2026-11-05 (before a Claude Code restart to install an update)",
     "readFirst": "This block is the current picture. Older blocks below are history; where they disagree, this block and git log win.",
-    "head": "498ee8e8 \"Refresh the session planner from the change bus\" is the last code commit, pushed to origin nvitthanala/extension-redesign (draft PR #8). A docs-only handoff commit follows it. Tree clean except untracked omniswim-suite/data/ (never commit it).",
+    "head": "498ee8e8 \"Refresh the session planner from the change bus\" is the last code commit, pushed to origin nvitthanala/extension-redesign (draft PR #8). Two handoff commits follow it: e3c7e281 (this state file, questions, INVARIANTS.md) and c42a4f2b (scripts/orca/dispatch-codex.sh). Tree clean except untracked omniswim-suite/data/ (never commit it).",
     "gatesAtHead": {
       "status": "all green at 498ee8e8, run by the lead before the commit",
       "buildExtension": "npm run build:extension",
@@ -698,7 +698,7 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
-    "RESUME (2026-11-05, after a Claude Code restart): read restartHandoff at the top of this file. 1) git status (expect only omniswim-suite/data/ untracked) and git log -2 (expect the handoff docs commit on top of 498ee8e8). 2) orca orchestration check --json: expect no live worker. 3) Settle restartHandoff.pendingUserRequest (the subagent config) with the user. 4) Then build restartHandoff.nextUnblocked (explanation-limit-ui, planner-meet-token), each reviewed by another provider, full gates, advisor audit, one commit each. 5) Everything else waits on the 34 questions in plans/2026-10-25/QUESTIONS_FOR_USER.md."
+    "RESUME (2026-11-05, after a Claude Code restart): read restartHandoff at the top of this file. 1) git status (expect only omniswim-suite/data/ untracked) and git log -4 (expect the handoff commits e3c7e281 and c42a4f2b, and a one-line fix, on top of 498ee8e8). 2) orca orchestration check --json: expect no live worker. 3) Settle restartHandoff.pendingUserRequest (the subagent config) with the user. 4) Then build restartHandoff.nextUnblocked (explanation-limit-ui, planner-meet-token), each reviewed by another provider, full gates, advisor audit, one commit each. 5) Everything else waits on the 34 questions in plans/2026-10-25/QUESTIONS_FOR_USER.md."
   ],
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
