@@ -14,6 +14,8 @@ import { simSnapshotSchema } from './bridgeSchema';
 import { isHexColor } from './theme';
 import type { ThemePreference } from './theme';
 import type { SimSnapshot } from './bridgeSchema';
+import { FETCH_FEATURES } from './fetchProtocol';
+import type { FetchFeature, FetchTarget } from './fetchProtocol';
 import type { PresetRef } from '../storage/schema';
 import type { RulePreset } from '@omniswim/engine';
 import type { SessionPreset } from '@omniswim/engine';
@@ -178,4 +180,74 @@ export function isPanelPing(m: unknown): m is PanelPing {
 export function isPanelPong(m: unknown): m is PanelPong {
   const r = m as { kind?: unknown; n?: unknown; nonce?: unknown } | null;
   return typeof r === 'object' && r !== null && r.kind === 'pong' && typeof r.n === 'number' && typeof r.nonce === 'string';
+}
+
+// ---- Extra SwimCloud requests (D7 section 3) -----------------------------------------------------------------------------------------
+// The docked panel asks; the overlay fetches in its own world and sends back each raw 200 body. The panel parses it again and writes
+// (decisions Q, W, C). Nothing here starts from a page, a snapshot or a bridge message: a run starts only on `fetch-run` from the port.
+
+export type FetchStopReason = 'challenge' | 'forbidden' | 'rate-limited' | 'server-error' | 'unexpected-status' | 'network' | 'redirected'
+  | 'cancelled' | 'lock-held' | 'lock-unavailable' | 'busy'
+  /** Added to D7's list: the run held a target whose path `fetchPathFor` would not round-trip. No request was sent. */
+  | 'refused'
+  /** Added by the architect's ruling of 2026-11-05: the overlay's own code failed mid-run. A bug in the extension, not in SwimCloud's answer. `status` is 0. */
+  | 'internal';
+
+/** Panel to overlay: start one run. The panel sends it only from a click handler and only when `fetchPosture === 'on-click'`. */
+export interface FetchRunMessage {
+  readonly kind: 'fetch-run';
+  readonly runId: string;
+  readonly feature: FetchFeature;
+  readonly targets: readonly FetchTarget[];
+}
+/** Panel to overlay: stop the run with this id. */
+export interface FetchCancelMessage {
+  readonly kind: 'fetch-cancel';
+  readonly runId: string;
+}
+/** Overlay to panel: request `index` is about to start after `waitMs`. `why` is `start` (first), `pacing` or `rate-limited`. */
+export interface FetchProgressMessage {
+  readonly kind: 'fetch-progress';
+  readonly runId: string;
+  readonly index: number;
+  readonly waitMs: number;
+  readonly why: 'start' | 'pacing' | 'rate-limited';
+}
+/** Overlay to panel: one `200` the overlay classified as the page it asked for. `body` is the raw text. `fetchedAt` is ISO 8601. */
+export interface FetchItemMessage {
+  readonly kind: 'fetch-item';
+  readonly runId: string;
+  readonly index: number;
+  readonly path: string;
+  readonly finalPath: string;
+  readonly contentType: string;
+  readonly body: string;
+  readonly fetchedAt: string;
+}
+export interface FetchStopped {
+  readonly reason: FetchStopReason;
+  /** The target that was being fetched. */
+  readonly index: number;
+  /** The HTTP status, or 0 when none applies (network, lock, busy, refused, cancelled). */
+  readonly status: number;
+  readonly detail: string;
+}
+/** Overlay to panel: exactly one per `fetch-run`. `stopped` is null when every target was delivered. */
+export interface FetchEndMessage {
+  readonly kind: 'fetch-end';
+  readonly runId: string;
+  readonly delivered: number;
+  readonly stopped: FetchStopped | null;
+}
+
+export function isFetchRun(m: unknown): m is FetchRunMessage {
+  if (!m || typeof m !== 'object') return false;
+  const v = m as Partial<Record<keyof FetchRunMessage, unknown>>;
+  return v.kind === 'fetch-run' && typeof v.runId === 'string' && v.runId.length > 0 && FETCH_FEATURES.includes(v.feature as FetchFeature) && Array.isArray(v.targets);
+}
+
+export function isFetchCancel(m: unknown): m is FetchCancelMessage {
+  if (!m || typeof m !== 'object') return false;
+  const v = m as Partial<Record<keyof FetchCancelMessage, unknown>>;
+  return v.kind === 'fetch-cancel' && typeof v.runId === 'string';
 }

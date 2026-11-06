@@ -9,8 +9,9 @@
  * extension, so it has the extension's IndexedDB and may start the optimizer worker. This script
  * runs as www.swimcloud.com and does neither.
  *
- * Trust rule (D3 2.7): a message on the port only sets a state attribute on the shadow host. It
- * starts no storage write and no SwimCloud request.
+ * Trust rule (D3 2.7): a message on the port starts no storage write. It starts no SwimCloud request
+ * either, with one exception (D7 section 3): `fetch-run`, which only the docked panel can send. The overlay's
+ * `bindFetchQueue` is its one reader. `onDisconnect` tells it to stop that run when the panel goes away.
  *
  * Connect timing: `runtime.connect` fails with "Receiving end does not exist" until the iframe has
  * registered its `onConnect` listener. So the overlay connects on the iframe's `load` event and
@@ -56,6 +57,8 @@ export interface DockedPanel {
   sendSnapshot(snapshot: SimSnapshot): void;
   sendMessage(message: unknown): void;
   onMessage(listener: (message: unknown) => void): void;
+  /** Called when the live port closes, before any reconnect. A message sent while there is no port is lost. */
+  onDisconnect(listener: () => void): void;
 }
 
 /** 32 lower-case hex characters from `crypto.getRandomValues`. */
@@ -101,6 +104,7 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
   let activePort: PanelPort | null = null;
   let latest: PanelSnapshot | null = null;
   const messageListeners = new Set<(message: unknown) => void>();
+  const disconnectListeners = new Set<() => void>();
   const connect = (): void => {
     attempt += 1;
     unanswered += 1;
@@ -119,8 +123,10 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
     });
     port.onMessage.addListener((message) => { for (const listener of messageListeners) listener(message); });
     port.onDisconnect.addListener(() => {
-      if (activePort === port) activePort = null;
+      const wasLive = activePort === port;
+      if (wasLive) activePort = null;
       void runtime.lastError;
+      if (wasLive) for (const listener of disconnectListeners) listener();
       if (unanswered < maxAttempts) setTimeout(connect, retryDelayMs);
       else {
         host.dataset.osxPanel = 'unreachable' satisfies PanelState;
@@ -139,6 +145,7 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
     iframe, nonce, url,
     sendMessage(message) { activePort?.postMessage(message); },
     onMessage(listener) { messageListeners.add(listener); },
+    onDisconnect(listener) { disconnectListeners.add(listener); },
     sendSnapshot(snapshot) {
       const message: PanelSnapshot = { kind: 'simulator-snapshot', snapshot };
       if (!isPanelSnapshot(message)) return;

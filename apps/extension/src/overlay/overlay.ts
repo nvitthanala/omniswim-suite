@@ -12,9 +12,17 @@
  *
  * It logs a valid SimSnapshot to the console and hands it to `onSnapshot`,
  * which forwards it to the docked panel (D3 15).
+ *
+ * The one exception to "no SwimCloud request" is `bindFetchQueue` below (D7 section 3). A run starts
+ * only when the docked panel sends `fetch-run` on its extension port. The window `message` listener
+ * never starts one, so a forged page message cannot.
  */
-import { parseBridgeMessage } from '../shared/bridgeSchema';
-import type { SimSnapshot } from '../shared/bridgeSchema';
+import { parseBridgeMessage, parseSeasonChoices } from '../shared/bridgeSchema';
+import type { ParsedSeasonChoices, SimSnapshot } from '../shared/bridgeSchema';
+import { isFetchCancel, isFetchRun } from '../shared/panelProtocol';
+import type { FetchEndMessage } from '../shared/panelProtocol';
+import { newFetchPacer, runFetchQueue } from './fetchQueue';
+import type { FetchQueueDeps } from './fetchQueue';
 import { bindTheme } from '../shared/theme';
 import type { ThemeController, ThemeOptions, ThemePreference } from '../shared/theme';
 import { ROOT_CLASS, SHADOW_CSS } from './shadowStyle';
@@ -84,6 +92,8 @@ export function startOverlay(
   onSnapshot: (snapshot: SimSnapshot) => void = () => undefined,
   onWriteAcknowledged: (token: string) => void = () => undefined,
   onPageSettingsChanged: (settings: SimSnapshot['settings']) => void = () => undefined,
+  /** The page's own season list, checked. Called at capture and again after `ready`. A list that fails the check is logged and dropped. */
+  onSeasons: (seasons: Extract<ParsedSeasonChoices, { ok: true }>) => void = () => undefined,
 ): () => void {
   const host = mountShadowHost(win.document);
   const showCompatibilityError = (message?: string): void => {
@@ -169,6 +179,12 @@ export function startOverlay(
       case 'response':
         log.debug(`${LOG_PREFIX} team response`, m.url);
         break;
+      case 'seasons': {
+        const seasons = parseSeasonChoices(m.body);
+        if (!seasons.ok) log.warn(`${LOG_PREFIX} dropped the season list (${seasons.reason})`);
+        else onSeasons(seasons);
+        break;
+      }
       case 'error':
         host.dataset.osxState = 'error';
         log.error(`${LOG_PREFIX} bridge error: ${m.code}: ${m.detail}`);
@@ -193,4 +209,108 @@ export function startOverlay(
   // The bridge posted its first snapshot before this script loaded. Ask for the latest.
   win.postMessage({ source: OVERLAY_SOURCE, v: BRIDGE_VERSION, kind: 'ready' }, win.location.origin);
   return () => { win.removeEventListener('message', onMessage); writeApi.delete(win); if (pending) clearTimeout(pending.timeout); };
+}
+
+/** The slice of the docked panel `bindFetchQueue` uses. `mountDockedPanel` returns it. */
+export interface FetchPanel {
+  sendMessage(message: unknown): void;
+  onMessage(listener: (message: unknown) => void): void;
+  /** Called when the port to the panel closes. A message sent after that is lost, so `bindFetchQueue` stops the run. */
+  onDisconnect(listener: () => void): void;
+}
+
+export interface FetchController {
+  /** The id of the run in progress, or null. A run is over once its `fetch-end` is posted, even if it still holds the lock for the pacing gap. */
+  activeRunId(): string | null;
+}
+
+/**
+ * The real clocks, network and lock manager of a page. A test passes fakes. Content scripts reach the page's origin with their own `fetch`.
+ * Pacing runs on `performance.now()`, which a change of the system clock cannot move. `wallNow` is for `fetchedAt` and an HTTP-date `Retry-After`.
+ * `bindFetchQueue` adds the pacer and `post`.
+ */
+export function browserFetchDeps(win: Window & typeof globalThis): Omit<FetchQueueDeps, 'post' | 'pacer'> {
+  return {
+    fetch: (input, init) => win.fetch(input, init),
+    sleep: (ms, signal) =>
+      new Promise<void>((resolve) => {
+        const done = (): void => {
+          clearTimeout(timer);
+          signal.removeEventListener('abort', done);
+          resolve();
+        };
+        const timer = setTimeout(done, ms);
+        signal.addEventListener('abort', done, { once: true });
+      }),
+    now: () => win.performance.now(),
+    wallNow: () => Date.now(),
+    locks: win.navigator.locks as FetchQueueDeps['locks'],
+    origin: win.location.origin,
+  };
+}
+
+/**
+ * Run `fetch-run` from the docked panel (D7 section 3, decisions Q, W, C). Reads the panel port only: a window `message` is never an
+ * input, and nothing runs on load, on a snapshot or on a bridge message.
+ *
+ * - A second `fetch-run` during a run gets `fetch-end` with `busy`, and the first run goes on. A `fetch-run` that reuses the running
+ *   id is dropped and logged: answering it would end the live run in the panel's eyes.
+ * - `fetch-cancel` for the running id aborts it, in flight too. So does a closed port, because nobody is left to read the answers.
+ * - One pacer serves every run of this tab. A run that starts while the last one still holds the lock for the pacing gap waits for it.
+ * - If the queue's own code throws, the panel gets `fetch-end` with `internal`, the index in progress and the real delivered count.
+ */
+export function bindFetchQueue(panel: FetchPanel, deps: Omit<FetchQueueDeps, 'post' | 'pacer'>, log: OverlayLog = console): FetchController {
+  const pacer = newFetchPacer();
+  let active: { readonly runId: string; readonly abort: AbortController } | null = null;
+  let tail: Promise<unknown> = Promise.resolve(); // the last run, until it let go of the lock
+  const post = (message: unknown): void => panel.sendMessage(message);
+  const endWith = (runId: string, delivered: number, stopped: NonNullable<FetchEndMessage['stopped']>): void => post({ kind: 'fetch-end', runId, delivered, stopped } satisfies FetchEndMessage);
+  panel.onDisconnect(() => active?.abort.abort('the panel disconnected'));
+  panel.onMessage((message) => {
+    if (isFetchCancel(message)) {
+      if (active?.runId === message.runId) active.abort.abort();
+      return;
+    }
+    const kind = message && typeof message === 'object' ? (message as { kind?: unknown }).kind : undefined;
+    if (kind !== 'fetch-run') return;
+    const claimed = (message as { runId?: unknown }).runId;
+    if (active && claimed === active.runId) {
+      log.warn(`${LOG_PREFIX} dropped a fetch-run that reuses the running id`);
+      return;
+    }
+    if (!isFetchRun(message)) {
+      log.warn(`${LOG_PREFIX} dropped a malformed fetch-run`);
+      if (typeof claimed === 'string') endWith(claimed, 0, { reason: 'refused', index: 0, status: 0, detail: 'the fetch-run message is malformed' });
+      return;
+    }
+    if (active) {
+      endWith(message.runId, 0, { reason: 'busy', index: 0, status: 0, detail: `run ${active.runId} is still going` });
+      return;
+    }
+    const abort = new AbortController();
+    const run = { runId: message.runId, abort };
+    active = run;
+    let ended = false;
+    let delivered = 0;
+    let index = 0;
+    const runPost: FetchQueueDeps['post'] = (m) => {
+      if (m.kind === 'fetch-progress') index = m.index;
+      if (m.kind === 'fetch-end') {
+        ended = true;
+        if (active === run) active = null; // the run is over; the lock may still be held for the gap
+      }
+      post(m);
+      if (m.kind === 'fetch-item') delivered += 1;
+    };
+    const previous = tail;
+    const result = previous.then(() => runFetchQueue(message, { ...deps, pacer, post: runPost }, abort.signal));
+    tail = result.catch(() => undefined);
+    result
+      .catch((error: unknown) => {
+        log.error(`${LOG_PREFIX} fetch queue failed`, error);
+        if (!ended) endWith(message.runId, delivered, { reason: 'internal', index, status: 0, detail: `the overlay's fetch queue failed: ${error instanceof Error ? error.message : String(error)}` });
+      })
+      .finally(() => { if (active === run) active = null; });
+  });
+  return { activeRunId: () => active?.runId ?? null };
 }

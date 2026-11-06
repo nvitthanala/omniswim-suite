@@ -6,7 +6,7 @@
  * can run it.
  */
 import { mountDockedPanel } from './dockedPanel';
-import { mountShadowHost, startOverlay, themeOf, writeSimulatorSettings } from './overlay';
+import { bindFetchQueue, browserFetchDeps, mountShadowHost, startOverlay, themeOf, writeSimulatorSettings } from './overlay';
 import { mountPagePanel } from './pagePanel';
 import { isAutoBuildStatus, isPanelSize, isScorerTagState, isThemeState } from '../shared/panelProtocol';
 import { createAccentSync } from '../shared/theme';
@@ -32,6 +32,8 @@ panel.onMessage((message) => {
     pagePanel.refresh();
   }
 });
+// The only SwimCloud requests this script makes: a run the docked panel asks for with `fetch-run` (D7 section 3).
+bindFetchQueue(panel, browserFetchDeps(window));
 pagePanel.onScorerAction((action) => panel.sendMessage(action));
 pagePanel.onApplyRule((settings) => {
   if (!settings) { pagePanel.setApplyStatus('Not applied: this preset has compatibility refusals.'); return; }

@@ -6,7 +6,9 @@
  *
  * It does two things and nothing else:
  *  1. Wraps XMLHttpRequest and fetch, and reads the body of the one request the
- *     simulator makes: `GET /api/teams/{id}/simulator/`.
+ *     simulator makes: `GET /api/teams/{id}/simulator/`. It also reads the page's own
+ *     `GET /api/seasonchoices/` (the season list; it makes no request of its own), keeps the latest
+ *     one and posts it again when the overlay says `ready` (D7 section 3).
  *  2. Finds the page's Redux store after #simulator mounts and posts a debounced
  *     snapshot of it.
  *
@@ -17,9 +19,9 @@
  * The store path is a React and Redux internal:
  *   #simulator -> __reactContainer$... fiber -> Provider memoizedProps.store.
  * A missing link posts an `error` message. The bridge never falls back to a
- * guess. This file must stay under 5 KB built (tests/extensionBundleBoundaries).
+ * guess. This file must stay under 10,000 B built (tests/extensionBundleBoundaries, README R79).
  */
-import { BRIDGE_SOURCE, OVERLAY_SOURCE, SETTINGS_KEYS, SIMULATOR_PATH, SIM_WRITE_KEYS } from '../shared/protocol';
+import { BRIDGE_SOURCE, OVERLAY_SOURCE, SEASONCHOICES_PATH, SETTINGS_KEYS, SIMULATOR_PATH, SIM_WRITE_KEYS } from '../shared/protocol';
 
 type O = Record<string, unknown>;
 interface Store {
@@ -130,14 +132,20 @@ export function installBridge(win: Window & typeof globalThis, opts: BridgeOptio
     }
   };
   const fail = (code: string, detail: string) => post('error', { code, detail });
-  /** The simulator URL, as path and query, or null for any other request. */
+  /** The simulator or season-list URL, as path and query, or null for any other request. */
   const sim = (u: string): string | null => {
     try {
       const x = new URL(u, win.location.href);
-      return x.origin === win.location.origin && SIMULATOR_PATH.test(x.pathname) ? x.pathname + x.search : null;
+      return x.origin === win.location.origin && (SIMULATOR_PATH.test(x.pathname) || SEASONCHOICES_PATH.test(x.pathname)) ? x.pathname + x.search : null;
     } catch {
       return null;
     }
+  };
+  let seasons: O | undefined; // the latest season list, posted again on `ready`
+  const capture = (u: string, body: unknown) => {
+    if (!SEASONCHOICES_PATH.test(u.replace(/\?.*/, ''))) return post('response', { url: u, body });
+    seasons = { url: u, body };
+    post('seasons', seasons);
   };
 
   const proto = win.XMLHttpRequest.prototype;
@@ -164,7 +172,7 @@ export function installBridge(win: Window & typeof globalThis, opts: BridgeOptio
             // The detail names the requested simulator URL, never the final URL: no other URL leaves this script.
             if (sim(this.responseURL) !== u) return fail('response-url', u);
             const t = this.responseType;
-            post('response', { url: u, body: t === '' || t === 'text' ? JSON.parse(this.responseText) : this.response });
+            capture(u, t === '' || t === 'text' ? JSON.parse(this.responseText) : this.response);
           } catch (e) {
             fail('unreadable', '' + e);
           }
@@ -187,7 +195,7 @@ export function installBridge(win: Window & typeof globalThis, opts: BridgeOptio
               ? fail('http-status', `${r.status} ${u}`)
               : sim(r.url) !== u
                 ? fail('response-url', u)
-                : r.clone().json().then((body) => post('response', { url: u, body })),
+                : r.clone().json().then((body) => capture(u, body)),
           ).catch((e) => fail('unreadable', '' + e));
         }
       } catch (e) {
@@ -259,7 +267,10 @@ export function installBridge(win: Window & typeof globalThis, opts: BridgeOptio
   win.addEventListener('message', (e) => {
     const d = e.data as O | null;
     if (e.source !== win || d?.source !== OVERLAY_SOURCE) return;
-    if (d.kind === 'ready') emit(true);
+    if (d.kind === 'ready') {
+      emit(true);
+      if (seasons) post('seasons', seasons);
+    }
     if (d.kind === 'write' && typeof d.token === 'string' && d.settings && typeof d.settings === 'object') {
       try {
         if (!store?.dispatch) throw new Error('setter unavailable');

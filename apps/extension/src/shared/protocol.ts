@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Constants that the bridge (MAIN world) and the overlay (ISOLATED world) share.
- * This file imports nothing, so the 5 KB bridge can use it without pulling in zod.
+ * This file imports nothing, so the bridge (under 10,000 B) can use it without pulling in zod.
  */
 
 /** `source` on every message the bridge posts. */
@@ -30,7 +30,14 @@ export const SIMULATOR_PATH = /^\/api\/teams\/\d+\/simulator\/$/;
  * (`data/swimcloud-captures/simulator/`, function `Hp`) and from `settings` in
  * `tests/fixtures/swimcloud/simulator/config-*.json`.
  * A name missing from the live store is an error, never a default.
- * One string, split at load, so the built bridge stays under 5 KB.
+ * One string, split at load, so the built bridge stays small (limit 10,000 B).
  */
 export const SETTINGS_KEYS: readonly string[] =
   'seasonId startDate endDate startSeason endSeason dateToUse pointSystem gender timeToUse eventCourse eventIds maxScorersPerTeam maxIndrecordsPerAthlete maxIndrecordsPerTeam maxRelaysPerAthlete maxRelaysPerTeam maxTotalPerAthlete freeRelayStrategy relayDataSource selectedShortcut'.split(' ');
+
+/**
+ * The page's own season list request, `GET /api/seasonchoices/?count=10&from_next=false` (recon item 5).
+ * The bridge forwards the response body of this one extra path and nothing else (D7 section 3).
+ * The body is a bare array: the page does `seasonChoices = response.data` and calls `.find` on it.
+ */
+export const SEASONCHOICES_PATH = /^\/api\/seasonchoices\/$/;

@@ -171,6 +171,13 @@ export const bridgeMessageSchema = z.discriminatedUnion('kind', [
     url: z.string().check(z.regex(/^\/api\/teams\/\d+\/simulator\/(\?.*)?$/)),
     body: z.object({ swimmers: z.array(z.unknown()), relays: z.array(z.unknown()) }),
   }),
+  /** The page's own `GET /api/seasonchoices/` body, a bare array. The row rules are in {@link parseSeasonChoices}. */
+  z.object({
+    ...header,
+    kind: z.literal('seasons'),
+    url: z.string().check(z.regex(/^\/api\/seasonchoices\/(\?.*)?$/)),
+    body: z.array(z.unknown()),
+  }),
   z.object({ ...header, kind: z.literal('error'), code: z.string(), detail: z.string() }),
   z.object({ ...header, kind: z.literal('write-result'), token: z.string(), status: z.literal('error'), detail: z.string() }),
 ]);
@@ -179,6 +186,50 @@ export type SimulatorWriteSettings = Partial<Record<'pointSystem' | 'maxScorersP
 export const simulatorWriteSettingsSchema = writableSettings;
 
 export type ParsedBridgeMessage = { ok: true; message: BridgeMessage } | { ok: false; reason: string };
+
+/** One row of `GET /api/seasonchoices/`, recon item 5. `label` is the season key (D7 decision S). */
+export interface SeasonChoice {
+  readonly seasonId: number | string;
+  readonly label: string;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly isCurrent: boolean;
+}
+
+export type ParsedSeasonChoices = { ok: true; seasons: readonly SeasonChoice[]; current: SeasonChoice } | { ok: false; reason: string };
+
+const SEASON_LABEL = /^\d{4}-\d{4}$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** A real calendar date. `Date.parse('2018-02-30')` is not an error in V8, so the parts are compared after the round trip. */
+const isIsoDate = (v: unknown): v is string => typeof v === 'string' && ISO_DATE.test(v) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v);
+
+/**
+ * Check the season list the page loaded (D7 section 3). One bad row, a duplicate label, or a count of
+ * current seasons other than one drops the whole list with a reason. No row is filtered out and no
+ * current season is picked by a guess. Never throws.
+ */
+export function parseSeasonChoices(body: unknown): ParsedSeasonChoices {
+  if (!Array.isArray(body) || body.length === 0) return { ok: false, reason: '(root): expected a non-empty array' };
+  const seasons: SeasonChoice[] = [];
+  for (const [i, raw] of body.entries()) {
+    const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+    const bad = (why: string) => ({ ok: false as const, reason: `[${i}].${why}` });
+    const { seasonId, label, startDate, endDate, isCurrent } = r;
+    if (typeof seasonId !== 'number' && typeof seasonId !== 'string') return bad('seasonId: expected number or string');
+    if (seasonId === '' || (typeof seasonId === 'number' && !Number.isFinite(seasonId))) return bad('seasonId: empty');
+    if (typeof label !== 'string' || !SEASON_LABEL.test(label)) return bad('label: expected YYYY-YYYY');
+    if (!isIsoDate(startDate)) return bad('startDate: expected an ISO date');
+    if (!isIsoDate(endDate)) return bad('endDate: expected an ISO date');
+    if (typeof isCurrent !== 'boolean') return bad('isCurrent: expected boolean');
+    if (seasons.some((s) => s.label === label)) return bad(`label: duplicate ${label}`);
+    if (seasons.some((s) => String(s.seasonId) === String(seasonId))) return bad(`seasonId: duplicate ${String(seasonId)}`);
+    seasons.push({ seasonId, label, startDate, endDate, isCurrent });
+  }
+  const current = seasons.filter((s) => s.isCurrent);
+  const [only] = current;
+  if (current.length !== 1 || !only) return { ok: false, reason: `(root): expected exactly one current season, found ${current.length}` };
+  return { ok: true, seasons, current: only };
+}
 
 /** Validate one `message` event payload. Never throws. */
 export function parseBridgeMessage(data: unknown): ParsedBridgeMessage {

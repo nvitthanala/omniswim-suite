@@ -186,7 +186,7 @@ describe('sim-bridge: network hook (D3 2.7)', () => {
     sim.open('GET', SIM_PATH);
     sim.send();
     const other = new h.win.XMLHttpRequest();
-    other.open('GET', '/api/seasonchoices/?count=10&from_next=false');
+    other.open('GET', '/api/teams/search/?q=&page=1');
     other.send();
     const lookalike = new h.win.XMLHttpRequest();
     lookalike.open('GET', '/api/teams/58/simulator/extra/');
@@ -237,9 +237,9 @@ describe('sim-bridge: network hook (D3 2.7)', () => {
     const x = new h.win.XMLHttpRequest() as unknown as FakeXHR;
     x.open('GET', '/api/teams/58/simulator/?eventgender=M');
     x.send(); // never answered: aborted
-    x.open('GET', '/api/seasonchoices/?count=10');
+    x.open('GET', '/api/teams/search/?ids=58');
     x.send();
-    x.respond(200, JSON.stringify({ seasons: [] }));
+    x.respond(200, JSON.stringify({ teams: [] }));
     expect(h.posted).toHaveLength(0);
     expect(x.bodyReads).toBe(0);
   });
@@ -298,7 +298,7 @@ describe('sim-bridge: network hook (D3 2.7)', () => {
     const h = makeWindow();
     installBridge(h.win, { deadlineMs: 5_000 });
     await h.win.fetch(SIM_PATH);
-    await h.win.fetch('/api/seasonchoices/?count=10&from_next=false');
+    await h.win.fetch('/api/teams/search/?q=&page=1');
     await h.win.fetch(new URL(SIM_PATH, 'https://www.swimcloud.com') as unknown as string);
     await h.win.fetch(new h.win.Request(`https://www.swimcloud.com${SIM_PATH}`));
     await sleep(5);
