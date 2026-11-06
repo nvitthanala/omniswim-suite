@@ -1,8 +1,19 @@
 # Open questions for the user
 
-Updated 2026-10-31. Each question names the default the build uses now.
+Updated 2026-11-05. Each question names the default the build uses now.
 Answer by number. Write "keep" to accept the default. Answers go to the
 README decision table as new R rows.
+
+**Status 2026-11-05:** 34 questions are open (A1-A10, B1-B3, C1, D1-D5,
+E1-E4, F1-F4, G1-G2, I1-I4). Phases P6 and P7 are built to these
+defaults. Three groups need you before work can move:
+
+- **I4:** the Excel check. Only you can run it.
+- **D1-D5:** approval for extra SwimCloud fetches. They block phase P4.
+- **E4:** may I open the SwimCloud simulator in your Chrome for a
+  read-only live check of the planner, AutoBuilder and dashboard?
+
+The rest change only a default. Answer them in any order.
 
 ## A. AutoBuilder (plans/2026-10-25/D5-AUTOBUILDER.md section 14)
 

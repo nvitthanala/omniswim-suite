@@ -365,3 +365,26 @@ A swim fills a leg only when all of these hold (R1, plans/2026-09-24):
 The departed swimmer's swim comes from the relay's own team
 (`findDepartedLegSwim`'s `team`). Guarded by
 `tests/relayFollowUpsR1.test.ts`.
+
+## 20. An extension storage rev is never reused
+
+Every row in the extension's IndexedDB carries a `rev`. An optimistic
+write passes the rev it read, and the repo refuses the write if the stored
+rev differs. That check fails if a key is deleted and re-created with a
+rev it held before, because a stale writer then matches the new row.
+
+So each transaction commits `changeRev = max(previous + 1, every rev it
+wrote or deleted)`, and a new row takes `max(changeRev, stored + 1)`.
+Use `bumpChangeRev` and `currentChangeRev` (`apps/extension/src/storage/repo.ts`).
+Never reset a rev to 1. Rows from an older build with revs above
+`changeRev` are covered: deleting one lifts `changeRev` to its rev.
+Source: D6 amendment 7 (slice S1, `e90887b5`). Guarded by
+`tests/extensionStorageS1.test.ts`.
+
+## 21. A missing swimmer or team name says it is missing
+
+A bare id reads like a name. When a swimmer or team has no display name,
+show `swimmerLabel` or `teamLabel` (`apps/extension/src/shared/names.ts`):
+"Swimmer 148001 (name not loaded)". Never show the id alone, and never
+guess a name. This is the data provenance rule "absent is said, not
+guessed" applied to names. Source: D6 amendment 6 (`ab97f3d6`).

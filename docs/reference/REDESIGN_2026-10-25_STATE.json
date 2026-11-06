@@ -1,6 +1,76 @@
 {
   "initiative": "chrome-extension-redesign-2026-10-25",
   "plan": "plans/2026-10-25/01-REDESIGN-PLAN.md",
+  "restartHandoff": {
+    "writtenAt": "2026-11-05 (before a Claude Code restart to install an update)",
+    "readFirst": "This block is the current picture. Older blocks below are history; where they disagree, this block and git log win.",
+    "head": "498ee8e8 \"Refresh the session planner from the change bus\" is the last code commit, pushed to origin nvitthanala/extension-redesign (draft PR #8). A docs-only handoff commit follows it. Tree clean except untracked omniswim-suite/data/ (never commit it).",
+    "gatesAtHead": {
+      "status": "all green at 498ee8e8, run by the lead before the commit",
+      "buildExtension": "npm run build:extension",
+      "lint": "npm run lint",
+      "vitest": "SKIP_BUDGET_ENV=local npx vitest run --maxWorkers=4 -> 204 files, 3441 tests",
+      "npmTest": "npm test -> 65",
+      "golden": "npx tsx tests/coreReviewGoldenHarness.ts && git diff --exit-code docs/reference/golden-after-F1.json",
+      "mutation": "npx vitest run tests/mutation -> 413",
+      "harness": "npm run test:extension-harness -> 2 variants, 14 records",
+      "lpBaseline": "bash tests/fixtures/lp-baseline/lpBaseline.sh check -> 5 identical",
+      "bundleLeak": "grep -l \"none_found_within_limits\\|restoreIdleRemovals\" apps/extension/dist/*.js lists only autobuilder.worker.js (do not grep for HiGHS: false hits)"
+    },
+    "phases": {
+      "P0-P3": "done (P3 open items are user questions B1-B3, C1)",
+      "P4": "partial; blocked on user fetch approvals D1-D5",
+      "P5": "done at test level; live UI check needs the user (E4)",
+      "P6": "done (AutoBuilder engine A1-A9, worker, panel, mode scorer, closest fallback 48807c97, E1 b10c2ce2). Live Chrome check needs the user",
+      "P7": "done (C1, C2, U-a 35b17900, U-b, U-c 5fed3047, U-d, U-e bb07e676, F ab97f3d6, F2 68a5e77d, S1 e90887b5, F3 498ee8e8). Only the user-run Excel check (I4) is left",
+      "P8": "pending (opponent prediction, SwimCloud-wide hints); not designed yet",
+      "P9": "pending (share-ready)"
+    },
+    "nextUnblocked": [
+      {
+        "id": "explanation-limit-ui",
+        "scope": "dashboard (worker or Codex)",
+        "what": "The AutoBuilder panel shows proposal.explanationLimit (D5 amendment 12): a line such as \"Explanations are incomplete\" with the reason and the omitted count. The engine already returns it (b10c2ce2)."
+      },
+      {
+        "id": "planner-meet-token",
+        "scope": "apps/extension/src/dashboard/sessionPlannerEditor.tsx (worker)",
+        "what": "Replace the single alive flag with a per-meet token so an action started on one meet cannot set state after the view switches to another meet."
+      }
+    ],
+    "thenDesignNext": "P8 opponent prediction needs a design pass (architect) before any build. Ask the user before starting it.",
+    "blockedOnUser": {
+      "file": "plans/2026-10-25/QUESTIONS_FOR_USER.md",
+      "count": 34,
+      "ids": "A1-A10, B1-B3, C1, D1-D5, E1-E4, F1-F4, G1-G2, I1-I4",
+      "mostImportant": "I4 Excel check (only the user can run it); D1-D5 SwimCloud fetch approvals (block P4); E4 approval to open the simulator in the user's Chrome for a read-only live check",
+      "builtToDefault": "Every question names the default the build uses now. G2 (undoable Accept) is built to its default in e90887b5."
+    },
+    "pendingUserRequest": {
+      "asked": "2026-11-05",
+      "text": "use the new subagents config that uses 99% less usage, apply it as best fit, if needed restart claude",
+      "status": "OPEN. Nothing matching was found on disk before the restart (checked ~/.claude/agents, .claude/agents and settings). The user restarted Claude Code to install an update (the Orca \"claude agents\" terminal showed \"Update installed - Restart to update\"). After the restart: check whether the update added a subagent or model setting (release notes, /config, /agents). If not, ask the user for the path, link or setting name. Do not invent a config. Do not change agent files until it is identified."
+    },
+    "agents": {
+      "claude": "The previous session used executor ad2051c440db6ce85 (engine, storage) and worker a32c73e6b18c0d4a1 (dashboard, overlay). Both were idle. Agent ids belong to that session; a new session briefs fresh agents from this file instead of using SendMessage.",
+      "codex": "No Codex worker is active. The last run, run_a365359b0be7 (E1 and F3 reviews), delivered worker_done and was released. About 27 idle Codex terminals remain open in Orca at the prompt. They hold no unsaved work and can be closed.",
+      "dispatchHelper": "scripts/orca/dispatch-codex.sh <brief-file> \"<objective>\" starts one Codex worker in the current worktree, clears the Codex update prompt, and prints run, dispatch and terminal. It replaces the literal RUNID in the brief file. Wait: until orca orchestration check --run R --json | grep -q '\"worker_done\"\\|\"escalation\"'; do sleep 30; done. Follow-up: orca terminal send --terminal T --text \"...\" --enter --wait-submit 20, then wait for \"Worked for\" on the screen. Release: orca orchestration worker-release --dispatch ctx_... (no --run flag)."
+    },
+    "rules": [
+      "A diff is reviewed by a different provider than its author (Codex reviews Claude work; architect or Codex reviews Codex work). Review notes go to docs/reference/<SLICE>_CODEX_REVIEW.md.",
+      "Advisor diff-contract audit before every commit (skip only for docs-only diffs, and say so).",
+      "Commits and pushes to PR #8 are approved, one area per commit. Subagents never run git.",
+      "Never edit tests/fixtures/extension-db/* or FROZEN.json. DB_VERSION stays 2. packages/engine/src/lib/** is frozen.",
+      "Storage rev rule (S1): each transaction commits changeRev = max(prev + 1, every rev it wrote or deleted); a new row takes max(changeRev, stored + 1). Use bumpChangeRev and currentChangeRev; never reuse a rev.",
+      "Data provenance: absent is never 0; a missing name shows \"Swimmer <id> (name not loaded)\" via apps/extension/src/shared/names.ts; never invent a value.",
+      "Never accept a worker that pins a failure in a test instead of fixing it. Read the diff size before trusting a worker_done (a stub once reported done).",
+      "No PowerShell (Avast); use Bash. Briefs to Codex name Git Bash by full path, never bare \"bash\" (WSL).",
+      "Codex screenshots and scratch files go outside the repo; check git status for a stray scratchpad/ before each commit.",
+      "Extra SwimCloud fetches need the user's yes. Stop on a Cloudflare challenge or a 403. Never commit raw captures.",
+      "Do not click the legacy \"Copy for Omniswim\" or \"Multi team crawl (Omniswim)\" buttons. Do not submit forms without permission."
+    ],
+    "budget": "2026-11-05: Budget tier full, 7d 4% used, resets in 7d."
+  },
   "decisions": "plans/2026-10-25/README.md#decisions-user-2026-10-25",
   "created": "2026-10-25",
   "branch": {
@@ -582,12 +652,12 @@
     {
       "id": "P6",
       "name": "AutoBuilder (F4)",
-      "status": "engine A1-A9, prune fix 73800dd9, autoBuildObjective c6183e33; U1-a 88535957, U1-b 46c23705, Accept in mode terms 1d257e46. Done except a live check in Chrome (needs user E4-style approval)."
+      "status": "done (AutoBuilder engine A1-A9, worker, panel, mode scorer, closest fallback 48807c97, E1 b10c2ce2). Live Chrome check needs the user"
     },
     {
       "id": "P7",
       "name": "Dashboard, theming, charts, carry-overs",
-      "status": "C1 b55f9ede, C2 cc92734b, U-b ScoreChart 06187e69, U-d MeetReport+EntryCsvButton 188b3372 (components, not mounted). Next: U-a Shell (docked tabs Score/Chart/Build/Plan/Save, tab left nav, theme from settings, theme-state to page panel, one meetKeyFor), then U-c snapshots/diff/undo UI, then F (visual check both themes, Excel check)."
+      "status": "done (C1, C2, U-a 35b17900, U-b, U-c 5fed3047, U-d, U-e bb07e676, F ab97f3d6, F2 68a5e77d, S1 e90887b5, F3 498ee8e8). Only the user-run Excel check (I4) is left"
     },
     {
       "id": "P8",
@@ -628,25 +698,7 @@
     "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
-    "RESUME (2026-11-05): E1 b10c2ce2 and F3 committed (see git log). Unblocked follow-ups: show proposal.explanationLimit in the AutoBuilder panel; per-meet token for planner actions across a meet change. Everything else needs the user: 34 questions (I4 Excel check, D1-D5 fetch approvals). Open: user asked to apply a new subagent config that uses 99% less usage; not found on disk, asked the user for its location.",
-    "RESUME (2026-10-31): tree clean at 188b3372 after full-gate checkpoint. Next: U-a Shell to Codex (brief: D6 section 1 and 5, amendments 1-2; mount AutoBuilderPanel in Build, ScoreChart in Chart, SessionPlannerEditor in Plan, Save tab with snapshot save incl. facts via captureReportFacts and tags; tab host left nav Meets/Presets/Settings with MeetReport + EntryCsvButton; theme from settings.theme + accent via applyAccent; panelProtocol theme-state; dedupe meetKeyFor). Then U-c. Workers idle: executor ad2051c440db6ce85, worker a32c73e6b18c0d4a1.",
-    "RESUME: A9 in flight (executor ad2051c440db6ce85). 1) git status. 2) If no report, SendMessage the executor. 3) Codex review, gates, advisor audit, commit. Then U1 per D5 amendment 7 (worker or Codex). User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md.",
-    "RESUME after the limit: 1) git status; diff packages/engine/src/autobuilder, tests/engineAutoBuild.test.ts, tests/helpers/nodeMipSolve.ts, plans/2026-10-25/D5-AUTOBUILDER.md (amendment 1 appended, uncommitted). 2) If the executor report is missing, resume it with SendMessage (A1 agent) rather than re-briefing. 3) npm run build:extension, then full gates; check defaultLimitsConfigC returns improved within 11 s, 3 runs. 4) Commit A1 + amendment as one commit (Codex J8 review: no defect, on the pre-amendment diff; re-review the amendment diff with Codex J terminal term_a6fd5787 first). 5) Next: D5 slice A2 (relays). Open user questions: D5 14.1-14.5, R70 x3, P4 fetch approval, cap-boundary tie rule.",
-    "RESUME (if interrupted 2026-10-29 afternoon): read N2 and J4 reports (orca orchestration inbox); review sessionLoad.ts against D2 3.11; rebuild + full gates; commit planner core, then planner UI.",
-    "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
-    "step 2: git status. Delete tmp-flake-load*.txt (Cursor K scratch, untracked) once K reports. Leave omniswim-suite/data/ out of commits.",
-    "step 3: npm run build:extension, then the full gates (lint, vitest --maxWorkers=4, npm test, golden, mutation, harness). extensionBuildFreshness should go green after the rebuild.",
-    "step 4: review and commit separately: (a) L engine relay checks after an architect review (rule schema change); (b) J extension followups (parity.ts files new); (c) K flake fix; (d) scripts/bench/rosterSuggestTiming.ts + PROVIDER_ROUTING.json (Cursor available, agent.ps1 workaround). Release dispatches ctx_1e5b5591c135 and ctx_68371d15afd3.",
-    "step 5: ask the user the inFlight[2026-10-29 round].userDecisions questions.",
-    "DONE: answers backlog (NSISC v2, storage fields, zod/mini, colors, conversion capture).",
-    "DONE: engine LCM->SCY (8d188a27)",
-    "DONE: P2 risk. profile_fastest_times answers without a challenge (bests only; see p2Risk).",
-    "DONE (d22375ee): P2 UI. Overlay forwards the validated snapshot over the nonce port and keeps the console log; dashboard re-scores and shows team totals plus the parity line. Codex wrote it; Claude reviewed (advisor audit). Gates green: vitest 2693, npm test 65, golden, harness 2/2.",
-    "DONE (24a0eee1): stored rule presets migrate on read, ties pending. Diff audit skipped: one-function mechanical change with a red test; no cross-provider review for the same reason.",
-    "NEXT: P3 rules per plan (preset editor and pickers). Then P4 sourcing (flyover, history, cut-tag wiring incl. estimated-cut tag, conversion-source picker hiding retired built-ins), then P5 planner.",
-    "DONE: P3.core-a over-cap removal (see p3CoreA). NEXT unblocked: P3.ui (preset editor, dropdowns) against the Results surface, budget permitting. P3.core-b waits on Q-roster-untagged.",
-    "2026-10-27 plan: (1) DONE abe52033 mixed-event fix. (2) R68 recon by the lead in Chrome: every-swim endpoint and relay splits. (3) R67 relay exhibition: scoring-relay limit with over-limit relays exhibition (executor). (4) P3.core-b roster mode per R65 (executor). (5) R66 design: write path into the SwimCloud page (architect), then P3.ui on the page.",
-    "DONE 2026-10-27: R68 recon (see r68Recon). NEXT: R67 relay exhibition, then P3.core-b (R65), then R66 write-path design, then P4 history adapter."
+    "RESUME (2026-11-05, after a Claude Code restart): read restartHandoff at the top of this file. 1) git status (expect only omniswim-suite/data/ untracked) and git log -2 (expect the handoff docs commit on top of 498ee8e8). 2) orca orchestration check --json: expect no live worker. 3) Settle restartHandoff.pendingUserRequest (the subagent config) with the user. 4) Then build restartHandoff.nextUnblocked (explanation-limit-ui, planner-meet-token), each reviewed by another provider, full gates, advisor audit, one commit each. 5) Everything else waits on the 34 questions in plans/2026-10-25/QUESTIONS_FOR_USER.md."
   ],
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
@@ -662,7 +714,7 @@
     {
       "id": "undo-accept-expect-absent",
       "note": "AutoBuilder Accept is not undoable (U-c ruling 2026-10-31): undoing a tag delete needs putMany to expect an absent row (no rev exists after a delete). Add an expectAbsent op to putMany, then record Accept in the undo stack.",
-      "status": "closed 2026-10-31 (S1, D6 amendment 7)"
+      "status": "closed 2026-10-31 (e90887b5, S1): Accept is undoable"
     },
     {
       "id": "U-c-lineup-no-results",
@@ -671,7 +723,7 @@
     {
       "id": "U-e-raw-db-no-bus",
       "note": "importData and clearFetchedSwimCloudData write through a raw IDB handle (openOmniDb in tabHost), not the repo, so other contexts (docked panel, Meets, theme) see an imported settings or tags change only after a reload. Route through the repo or emit a change-bus notice.",
-      "status": "closed 2026-10-31 (S1, D6 amendment 7)"
+      "status": "closed 2026-10-31 (e90887b5, S1): import and clear cache announce on the change bus"
     },
     {
       "id": "planner-meet-token",
@@ -923,7 +975,7 @@
   "liveCheckNext": [
     "Storage: nothing to check until a UI feature opens the database (preset editor, P3.ui)."
   ],
-  "budget": "2026-10-29: Claude windows reset (user-stated); Codex and Cursor available",
+  "budget": "2026-11-05: Budget tier full, 7d 4% used, resets in 7d.",
   "conversionCapture": {
     "done": "2026-10-26",
     "archive": "data/conversions/swimswam/lcm-to-scy-2026-10-26.json (53 captures) + README.md (fitted model)",
@@ -1183,7 +1235,8 @@
     },
     {
       "id": "A8-explain-in-gate-reserve",
-      "note": "explain runs after the gate inside the 1 s gate reserve with no bound; 0.4 s on config C, but it grows with unusual entries x skipped events. Bound it for large meets."
+      "note": "explain runs after the gate inside the 1 s gate reserve with no bound; 0.4 s on config C, but it grows with unusual entries x skipped events. Bound it for large meets.",
+      "status": "closed 2026-11-05 (b10c2ce2, D5 amendment 12): explain is bounded by work and a time margin"
     },
     {
       "id": "U1-clone-determinism",
@@ -1196,7 +1249,8 @@
     },
     {
       "id": "U1a-harness-worker",
-      "note": "scripts/run-extension-harness.mjs:44 omits autobuilder.worker.js; fix in U1-b"
+      "note": "scripts/run-extension-harness.mjs:44 omits autobuilder.worker.js; fix in U1-b",
+      "status": "closed: scripts/run-extension-harness.mjs:44 lists autobuilder.worker.js"
     },
     {
       "id": "U1a-fixture-rowCounter",
@@ -1204,11 +1258,13 @@
     },
     {
       "id": "A9-gate-duplication",
-      "note": "gate.ts inline objective scoring duplicates objectiveOfBuilt; merge later"
+      "note": "gate.ts inline objective scoring duplicates objectiveOfBuilt; merge later",
+      "status": "closed 2026-11-05 (b10c2ce2): one scorer, objectiveOfScored in gate.ts"
     },
     {
       "id": "P7-architect-findings",
-      "note": "dashboard ignores settings.theme (main.tsx:100); accent validator accepts any string (validate.ts:322); two meet keys (main.tsx:48 vs 109); snapshots record no tags; legacy CSV escaper misses \r. All in D6."
+      "note": "dashboard ignores settings.theme (main.tsx:100); accent validator accepts any string (validate.ts:322); two meet keys (main.tsx:48 vs 109); snapshots record no tags; legacy CSV escaper misses \r. All in D6.",
+      "status": "closed except one item: theme from settings, the #rrggbb accent validator (validate.ts:356), one meet key (dashboard/meetKey.ts) and snapshot tags all landed in C2 and U-a. The new engine CSV (report/csv.ts:125) quotes \\r. The frozen legacy lib/entryExport.ts:104 still misses \\r; the dashboard does not use it"
     },
     {
       "id": "lp-baseline-texts-stale",
@@ -1225,15 +1281,18 @@
     },
     {
       "id": "planner-no-change-subscription",
-      "note": "Session planner state has no change-bus subscription (only main.tsx:134 watches tags/settings). A later multi-store batch touching session presets will not refresh it across contexts. Add a subscriber in U-a or C2."
+      "note": "Session planner state has no change-bus subscription (only main.tsx:134 watches tags/settings). A later multi-store batch touching session presets will not refresh it across contexts. Add a subscriber in U-a or C2.",
+      "status": "closed 2026-11-05 (498ee8e8)"
     },
     {
       "id": "U-e-settings",
-      "note": "New slice U-e (D6 section 1, gap found by the Codex U-a review): Settings cut threshold, storage estimate, backup export and import; Presets view (still a placeholder)."
+      "note": "New slice U-e (D6 section 1, gap found by the Codex U-a review): Settings cut threshold, storage estimate, backup export and import; Presets view (still a placeholder).",
+      "status": "closed 2026-10-31 (bb07e676)"
     },
     {
       "id": "U-c-diff-times-from-display",
-      "note": "diffResults reads time changes from lineup.display; a record stripped of SwimCloud data shows no time changes. U-c must say so in the UI."
+      "note": "diffResults reads time changes from lineup.display; a record stripped of SwimCloud data shows no time changes. U-c must say so in the UI.",
+      "status": "closed 2026-10-31 (5fed3047): DiffView shows diff-stripped-note"
     }
   ],
   "p3CoreA": {
@@ -1267,7 +1326,7 @@
       "toLegacyScoringSettings drops relayOverCap; only scoreMeet calls it."
     ]
   },
-  "questionsFile": "plans/2026-10-25/QUESTIONS_FOR_USER.md (all open user questions, numbered A1-E4, 2026-10-29)",
+  "questionsFile": "plans/2026-10-25/QUESTIONS_FOR_USER.md (34 open: A1-A10, B1-B3, C1, D1-D5, E1-E4, F1-F4, G1-G2, I1-I4; updated 2026-11-05)",
   "codexJTerminal": "J15: term_d6e74d3f-fb0f-45ff-98e6-634f4e2edb0c (run_a2e09d4827fd). Old J run run_da9d5ce0db6f stopped.",
   "a9BriefNotes": [
     "A7: under propose-swaps a coach-tagged swimmer becomes free, so a frozen entry moves from frozenIn (x = 1) to held (x = z): test it survives",
@@ -1278,5 +1337,26 @@
   "u1Prereqs": [
     "DONE: where autoBuild runs — architect decision, D5 amendment 7 (dedicated autobuilder.worker)",
     "DONE: flaky protocol test fixed (e53edf6e)"
+  ],
+  "resumeOrderHistory": [
+    "RESUME (2026-11-05): E1 b10c2ce2 and F3 committed (see git log). Unblocked follow-ups: show proposal.explanationLimit in the AutoBuilder panel; per-meet token for planner actions across a meet change. Everything else needs the user: 34 questions (I4 Excel check, D1-D5 fetch approvals). Open: user asked to apply a new subagent config that uses 99% less usage; not found on disk, asked the user for its location.",
+    "RESUME (2026-10-31): tree clean at 188b3372 after full-gate checkpoint. Next: U-a Shell to Codex (brief: D6 section 1 and 5, amendments 1-2; mount AutoBuilderPanel in Build, ScoreChart in Chart, SessionPlannerEditor in Plan, Save tab with snapshot save incl. facts via captureReportFacts and tags; tab host left nav Meets/Presets/Settings with MeetReport + EntryCsvButton; theme from settings.theme + accent via applyAccent; panelProtocol theme-state; dedupe meetKeyFor). Then U-c. Workers idle: executor ad2051c440db6ce85, worker a32c73e6b18c0d4a1.",
+    "RESUME: A9 in flight (executor ad2051c440db6ce85). 1) git status. 2) If no report, SendMessage the executor. 3) Codex review, gates, advisor audit, commit. Then U1 per D5 amendment 7 (worker or Codex). User questions: plans/2026-10-25/QUESTIONS_FOR_USER.md.",
+    "RESUME after the limit: 1) git status; diff packages/engine/src/autobuilder, tests/engineAutoBuild.test.ts, tests/helpers/nodeMipSolve.ts, plans/2026-10-25/D5-AUTOBUILDER.md (amendment 1 appended, uncommitted). 2) If the executor report is missing, resume it with SendMessage (A1 agent) rather than re-briefing. 3) npm run build:extension, then full gates; check defaultLimitsConfigC returns improved within 11 s, 3 runs. 4) Commit A1 + amendment as one commit (Codex J8 review: no defect, on the pre-amendment diff; re-review the amendment diff with Codex J terminal term_a6fd5787 first). 5) Next: D5 slice A2 (relays). Open user questions: D5 14.1-14.5, R70 x3, P4 fetch approval, cap-boundary tie rule.",
+    "RESUME (if interrupted 2026-10-29 afternoon): read N2 and J4 reports (orca orchestration inbox); review sessionLoad.ts against D2 3.11; rebuild + full gates; commit planner core, then planner UI.",
+    "RESUME 2026-10-29 step 1: orca orchestration check --run run_da9d5ce0db6f (Codex J, terminal term_a6fd5787-12bf-4902-bef9-9627a029c0c4) and --run run_cb454d21a62d (Cursor K, terminal term_dc0f1aa0-7faf-4229-a984-9d1675db52c1). Read their last report body; if a terminal is idle without a report, read the terminal.",
+    "step 2: git status. Delete tmp-flake-load*.txt (Cursor K scratch, untracked) once K reports. Leave omniswim-suite/data/ out of commits.",
+    "step 3: npm run build:extension, then the full gates (lint, vitest --maxWorkers=4, npm test, golden, mutation, harness). extensionBuildFreshness should go green after the rebuild.",
+    "step 4: review and commit separately: (a) L engine relay checks after an architect review (rule schema change); (b) J extension followups (parity.ts files new); (c) K flake fix; (d) scripts/bench/rosterSuggestTiming.ts + PROVIDER_ROUTING.json (Cursor available, agent.ps1 workaround). Release dispatches ctx_1e5b5591c135 and ctx_68371d15afd3.",
+    "step 5: ask the user the inFlight[2026-10-29 round].userDecisions questions.",
+    "DONE: answers backlog (NSISC v2, storage fields, zod/mini, colors, conversion capture).",
+    "DONE: engine LCM->SCY (8d188a27)",
+    "DONE: P2 risk. profile_fastest_times answers without a challenge (bests only; see p2Risk).",
+    "DONE (d22375ee): P2 UI. Overlay forwards the validated snapshot over the nonce port and keeps the console log; dashboard re-scores and shows team totals plus the parity line. Codex wrote it; Claude reviewed (advisor audit). Gates green: vitest 2693, npm test 65, golden, harness 2/2.",
+    "DONE (24a0eee1): stored rule presets migrate on read, ties pending. Diff audit skipped: one-function mechanical change with a red test; no cross-provider review for the same reason.",
+    "NEXT: P3 rules per plan (preset editor and pickers). Then P4 sourcing (flyover, history, cut-tag wiring incl. estimated-cut tag, conversion-source picker hiding retired built-ins), then P5 planner.",
+    "DONE: P3.core-a over-cap removal (see p3CoreA). NEXT unblocked: P3.ui (preset editor, dropdowns) against the Results surface, budget permitting. P3.core-b waits on Q-roster-untagged.",
+    "2026-10-27 plan: (1) DONE abe52033 mixed-event fix. (2) R68 recon by the lead in Chrome: every-swim endpoint and relay splits. (3) R67 relay exhibition: scoring-relay limit with over-limit relays exhibition (executor). (4) P3.core-b roster mode per R65 (executor). (5) R66 design: write path into the SwimCloud page (architect), then P3.ui on the page.",
+    "DONE 2026-10-27: R68 recon (see r68Recon). NEXT: R67 relay exhibition, then P3.core-b (R65), then R66 write-path design, then P4 history adapter."
   ]
 }
