@@ -19,13 +19,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { Window as HappyWindow } from 'happy-dom';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { AUTOBUILD_DEFAULT_LIMITS, AUTOBUILD_DEFAULT_ROBUST } from '@omniswim/engine';
-import type { AutoBuildExplanation, AutoBuildProof, AutoBuildProposal, AutoBuildResult } from '@omniswim/engine';
+import type { AutoBuildExplanation, AutoBuildProof, AutoBuildProposal, AutoBuildResult, ExplanationLimit } from '@omniswim/engine';
 import { AutoBuildResultView } from '../apps/extension/src/dashboard/autoBuilderPanel';
 import type { AcceptView, AutoBuildResultViewProps } from '../apps/extension/src/dashboard/autoBuilderPanel';
 import { acceptBlock, acceptProposal, defaultRemoveChoices, DEFAULT_REMOVE_CHOICE, writeRosterTags } from '../apps/extension/src/dashboard/autoBuilderAccept';
 import type { RemoveChoice } from '../apps/extension/src/dashboard/autoBuilderAccept';
 import { DEFAULT_LIMITS, DEFAULT_ROBUST, defaultControls, objectiveOf, prepareRequest, snapshotKey } from '../apps/extension/src/dashboard/autoBuilderRequest';
-import { changeLines, explanationLine, frozenPairsOf, headlineOf, proofText, refusalText } from '../apps/extension/src/dashboard/autoBuilderResult';
+import { changeLines, explanationLimitText, explanationLine, frozenPairsOf, headlineOf, proofText, refusalText } from '../apps/extension/src/dashboard/autoBuilderResult';
 import type { TaggedResult } from '../apps/extension/src/dashboard/autoBuilderResult';
 import { mountPagePanel } from '../apps/extension/src/overlay/pagePanel';
 import { isAutoBuildStatus } from '../apps/extension/src/shared/panelProtocol';
@@ -272,6 +272,51 @@ describe('the point change, the diff and the explanations', () => {
     expect(text).toContain('joins the scoring roster');
     expect(text).toContain('leaves the scoring roster');
     for (const [, why] of BINDING_TEXT) expect(text).toContain(`Why: ${why}.`);
+  });
+});
+
+describe('explanations that stopped early (D5 amendment 12)', () => {
+  const limitLine = (html: string): string | null => {
+    const m = /data-testid="ab-explanation-limit"[^>]*>([^<]*)</.exec(html);
+    return m === null ? null : textOf(m[1] as string);
+  };
+  const NOTHING = 'No swimmer is placed in an unusual event';
+
+  it('the real config C proposal is complete, so it shows no limit line', () => {
+    expect(proposal.explanationLimit).toBeUndefined();
+    expect(explanationLimitText(undefined)).toBeNull();
+    expect(limitLine(view(base))).toBeNull();
+  });
+
+  it('a work limit names the work used and the limit, and counts only what was left out', () => {
+    const limit: ExplanationLimit = { reason: 'work_limit', workUsed: 25_010, workLimit: 25_000, omitted: { rosterAdds: 0, rosterRemoves: 1, swimmers: 3 } };
+    const html = view(withResult({ ...current(), proposal: { ...proposal, explanationLimit: limit } }));
+    const line = limitLine(html);
+    expect(line).toBe(explanationLimitText(limit));
+    expect(line).toMatch(/^Explanations are incomplete: the explanation work limit was reached \(25,?010 of 25,?000 entries scored\)\./);
+    expect(line).toContain('Not explained: 1 roster remove.');
+    // The engine counts swimmers it did not get to check, not swimmers known to be in an unusual event.
+    expect(line).toContain('Not checked for unusual events: 3 swimmers.');
+    expect(line).not.toContain('roster add');
+    // The explanations that were kept still render in full.
+    expect((html.match(/data-explanation="/g) ?? []).length).toBe(proposal.explanations.length);
+  });
+
+  it('a time limit with no work bound in force prints no limit number', () => {
+    const limit: ExplanationLimit = { reason: 'time_limit', workUsed: 120, workLimit: null, omitted: { rosterAdds: 2, rosterRemoves: 0, swimmers: 0 } };
+    const line = limitLine(view(withResult({ ...current(), proposal: { ...proposal, explanationLimit: limit } })));
+    expect(line).toBe('Explanations are incomplete: the run was close to its time limit (120 entries scored). Every reason listed is whole; the proposal itself is not affected. Not explained: 2 roster adds.');
+  });
+
+  it('an empty list with a limit never says there was nothing to explain', () => {
+    const limit: ExplanationLimit = { reason: 'time_limit', workUsed: 0, workLimit: 25_000, omitted: { rosterAdds: 1, rosterRemoves: 0, swimmers: 4 } };
+    const stopped = textOf(view(withResult({ ...current(), proposal: { ...proposal, explanations: [], explanationLimit: limit } })));
+    expect(stopped).toContain('Explanations are incomplete');
+    expect(stopped).not.toContain(NOTHING);
+    // Without the flag, an empty list does mean nothing to explain.
+    const complete = textOf(view(withResult({ ...current(), proposal: { ...proposal, explanations: [] } })));
+    expect(complete).toContain(NOTHING);
+    expect(complete).not.toContain('Explanations are incomplete');
   });
 });
 

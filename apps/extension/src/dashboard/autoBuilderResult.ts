@@ -22,6 +22,7 @@ import type {
   AutoBuildRestriction,
   AutoBuildResult,
   EntryChange,
+  ExplanationLimit,
   Lineup,
   LineupEntry,
   RivalRef,
@@ -312,6 +313,24 @@ export function explanationLine(e: AutoBuildExplanation, names: Names, frozen: R
       };
     }
   }
+}
+
+/**
+ * D5 amendment 12 item 6: the sentence a host must show when the explanations stopped early, or `null` when they are complete. It names the
+ * reason and counts what was left out; a zero count is not listed. `omitted.swimmers` counts the swimmers the engine did not get to check
+ * (`explain.ts` queues every owned swimmer with an individual entry), not swimmers known to sit in an unusual event, so it reads "not checked".
+ */
+export function explanationLimitText(limit: ExplanationLimit | undefined): string | null {
+  if (limit === undefined) return null;
+  const used = limit.workLimit === null ? `${plain(limit.workUsed)} entries scored` : `${plain(limit.workUsed)} of ${plain(limit.workLimit)} entries scored`;
+  const why = limit.reason === 'work_limit' ? `the explanation work limit was reached (${used})` : `the run was close to its time limit (${used})`;
+  const { rosterAdds, rosterRemoves, swimmers } = limit.omitted;
+  const left: string[] = [];
+  if (rosterAdds > 0) left.push(plural(rosterAdds, 'roster add'));
+  if (rosterRemoves > 0) left.push(plural(rosterRemoves, 'roster remove'));
+  const omitted = left.length === 0 ? '' : ` Not explained: ${left.join(', ')}.`;
+  const unchecked = swimmers > 0 ? ` Not checked for unusual events: ${plural(swimmers, 'swimmer')}.` : '';
+  return `Explanations are incomplete: ${why}. Every reason listed is whole; the proposal itself is not affected.${omitted}${unchecked}`;
 }
 
 // ---- the proof -----------------------------------------------------------------------------------

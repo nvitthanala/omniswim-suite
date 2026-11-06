@@ -171,7 +171,8 @@ export type AutoBuildExplanation =
 /**
  * D5 amendment 12: the explanations of a proposal stopped early. They are a prefix of the full list: every item present is whole, and `omitted` counts
  * what is missing. `work_limit`: the work bound was reached (`workUsed` of `workLimit`, in lineup entries scored). `time_limit`: the request's time limit
- * was near (`workLimit` is the bound that was in force, `null` when none was). A swimmer counts in `omitted.swimmers` when any of his unusual events was left out.
+ * was near (`workLimit` is the bound that was in force, `null` when none was). `omitted.swimmers` counts the owned swimmers with an individual entry that were
+ * not yet checked when the explanations stopped; some of them may have no unusual event (architect review, 2026-11-05).
  */
 export interface ExplanationLimit {
   readonly reason: 'work_limit' | 'time_limit';

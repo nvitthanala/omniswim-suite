@@ -29,6 +29,7 @@ import {
   changeLines,
   changeSummary,
   describeViolation,
+  explanationLimitText,
   explanationLine,
   frozenPairsOf,
   headlineOf,
@@ -83,6 +84,7 @@ function ProposalSection({ tagged, blockReason, accept, choices, onChoice, onAcc
   const roster = rosterLines(proposal, names);
   const change = tagged.result.kind === 'improved' ? pointChangeOf(tagged.request.objective, tagged.result.current, proposal.evaluation, names) : null;
   const frozen = frozenPairsOf(tagged.result.proof);
+  const limitText = explanationLimitText(proposal.explanationLimit);
   const busy = accept.phase === 'checking' || accept.phase === 'accepted';
   return (
     <>
@@ -117,7 +119,8 @@ function ProposalSection({ tagged, blockReason, accept, choices, onChoice, onAcc
       </section>
       <section className="osx-ab-block" data-testid="ab-explanations">
         <h4>Why</h4>
-        {proposal.explanations.length === 0 ? <p className="osx-ab-note">No swimmer is placed in an unusual event, and nobody joins or leaves the roster.</p> : (
+        {limitText !== null && <p className="osx-ab-note" data-testid="ab-explanation-limit">{limitText}</p>}
+        {proposal.explanations.length === 0 ? (limitText === null && <p className="osx-ab-note">No swimmer is placed in an unusual event, and nobody joins or leaves the roster.</p>) : (
           <ul className="osx-ab-list">
             {proposal.explanations.map((e, i) => {
               const line = explanationLine(e, names, frozen);

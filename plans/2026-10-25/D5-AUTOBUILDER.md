@@ -1114,6 +1114,14 @@ This closes follow-up `A8-explain-in-gate-reserve`. It adds to section 9.
    gate's check against the MIP all read it. Behaviour is unchanged: the LP texts
    are byte-identical (`tests/fixtures/lp-baseline/lpBaseline.sh check`).
 
+Correction (lead, 2026-11-05, architect review of the panel line): item 6
+says `swimmers` counts the swimmers with at least one unusual event left
+out. The engine counts every owned swimmer with an individual entry that
+it had not checked yet (`explain.ts` builds one item per such swimmer).
+Some of them may have nothing to explain, and knowing which would cost the
+work the bound skipped. So `swimmers` means "not checked", and the panel
+says "Not checked for unusual events: N swimmers".
+
 Review note (lead, 2026-11-05, Codex E1 review): the explain time guard
 checks the clock before each unit, so it can overrun by at most one unit.
 The slowest unit measured is one `scoreMeet` on config C, about 20 ms
