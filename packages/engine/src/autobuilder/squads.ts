@@ -108,7 +108,14 @@ function flyoverOption(swimmerId: SwimmerId, expected: string, sources: LegSourc
   }
   if (flat === null) return null;
   const estimate = estimateFlyingLeg(flat, expected, sources.sourcing.flyover);
-  return estimate === null ? null : { swimmerId, value: estimate.hundredths, basis: { kind: 'flyover-estimate', swimId: flat.swimId }, id: flat.swimId };
+  return estimate === null
+    ? null
+    : {
+        swimmerId,
+        value: estimate.hundredths,
+        basis: { kind: 'flyover-estimate', swimId: flat.swimId },
+        id: flat.swimId,
+      };
 }
 
 /** One swimmer's option at one position (D5 3.2), or `null`. */
@@ -223,7 +230,7 @@ export function currentSquad(entry: RelayEntry, sources: LegSources): Squad {
       const swim = sources.swimById.get(basis.swimId);
       value = swim === undefined ? null : scyValue(swim);
     } else if (basis.kind === 'flyover-estimate') {
-      // Leg 1 takes no estimate (`scoreMeet` throws on it), and a leg event the meet does not name has none to check.
+      // Leg 1 takes no estimate (`scoreMeet` gives it no time and a `basis_position` violation), and a leg event the meet does not name has none to check.
       const swim = sources.swimById.get(basis.swimId);
       const legEvent = expected === null ? undefined : expected[position];
       value = swim === undefined || position === 0 || legEvent === undefined ? null : (estimateFlyingLeg(swim, legEvent, sources.sourcing.flyover)?.hundredths ?? null);

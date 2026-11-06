@@ -4,6 +4,7 @@ import type { MeetModel } from '../model/meet';
 import { entryKey, type Lineup, type LineupEntry } from '../model/lineup';
 import { buildIndex, resolveLineup, type Results, type ResultRow, type Violation } from '../model/results';
 import type { CompleteRulePreset } from '../rules/rulePreset';
+import type { SourcingSettings } from '../sourcing/flyover';
 import type { LoadPreference, ScheduledEvent, SessionPreset, SessionRef } from './types';
 
 type SessionLoadResult = {
@@ -17,11 +18,15 @@ const genderList = (g: ScheduledEvent['gender']): readonly Gender[] => g === 'bo
 const sessionKey = (s: SessionRef): string => `${s.day}/${s.slot}`;
 const scheduleKey = (e: EventKey, g: Gender): string => `${e}\u0000${g}`;
 
+/**
+ * `sourcing` is the settings `results` was scored under: a split timed final and a c-final order the entries by their seeds, and a relay seed
+ * that rests on a flyover estimate or a converted split has the value only those settings give. Pass the same settings as `scoreMeet`.
+ */
 // eslint-disable-next-line complexity -- one pass coordinates schedule lookup, rounds, pending settings and per-session totals (D2 3.11)
-export function sessionLoad(model: MeetModel, lineup: Lineup, results: Results, schedule: SessionPreset, pref: LoadPreference, rules: CompleteRulePreset): SessionLoadResult {
+export function sessionLoad(model: MeetModel, lineup: Lineup, results: Results, schedule: SessionPreset, pref: LoadPreference, rules: CompleteRulePreset, sourcing: SourcingSettings): SessionLoadResult {
   const violations: Violation[] = [];
   let resolvedByKey: Map<string, { readonly value: number | null }> | undefined;
-  const resolvedSeeds = () => resolvedByKey ??= new Map(resolveLineup(model, lineup, buildIndex(model)).resolved.map(row => [row.key, row]));
+  const resolvedSeeds = () => resolvedByKey ??= new Map(resolveLineup(model, lineup, buildIndex(model, sourcing)).resolved.map(row => [row.key, row]));
   const scheduled = new Map<string, ScheduledEvent>();
   for (const row of schedule.events) for (const gender of genderList(row.gender)) scheduled.set(scheduleKey(row.eventKey, gender), row);
   const entriesByEvent = new Map<string, LineupEntry[]>();

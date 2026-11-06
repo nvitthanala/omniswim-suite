@@ -170,7 +170,7 @@ function buildPlannerState(snapshot: SimSnapshot, meetKey: string, rules: RulePr
     const repeatWarnings = visibleRepeats.map(v => `Relay rule violation: ${v.swimmerId} appears on multiple relays for ${v.eventKey} (${v.gender}).`);
     const note = schedule ? [] : ['No schedule chosen; relay event formats are unknown, so relay repeat violations are unfiltered.'];
     if (!schedule) return { perSwimmer: [], violations: [...repeatWarnings, ...note] };
-    const load = sessionLoad(rescored.adapted.model, rescored.adapted.lineup, results, schedule, preference, completeRules);
+    const load = sessionLoad(rescored.adapted.model, rescored.adapted.lineup, results, schedule, preference, completeRules, SIMULATOR_SOURCING);
     const loadWarnings = load.violations.map(v => v.kind === 'session_load' ? `Session load: swimmer ${String(v.swimmerId)} has ${v.races} races on day ${v.session.day} (${v.session.slot}); limit ${v.limit}.` : v.kind === 'pending_setting' ? `Pending setting: ${v.setting} for ${v.eventKey}.` : v.kind === 'unscheduled_event' ? `Unscheduled event: ${v.eventKey}.` : `Session load issue: ${v.kind}.`);
     return { perSwimmer: load.perSwimmer.map(s => ({ swimmerId: String(s.swimmerId), sessions: s.sessions })), violations: [...repeatWarnings, ...loadWarnings] };
   } catch (cause) {

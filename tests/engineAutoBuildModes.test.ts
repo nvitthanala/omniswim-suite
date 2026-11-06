@@ -416,7 +416,7 @@ function bruteRows(key: string, fx: Mini, sizeUnits = 9, load: NonNullable<AutoB
       let extra = 0;
       let over = false;
       if (load !== null) {
-        const run = sessionLoad(fx.model, l, results, load.schedule, load.preference, fx.rules);
+        const run = sessionLoad(fx.model, l, results, load.schedule, load.preference, fx.rules, SOURCING);
         const own = new Set(scorers.filter((t) => t.teamId === 'A' && t.role === 'scorer').map((t) => t.swimmerId));
         const max = load.preference.mode === 'off' || load.preference.maxRacesPerSession.state !== 'set' ? 0 : load.preference.maxRacesPerSession.value;
         over = run.violations.some((v) => v.kind === 'session_load' && own.has(v.swimmerId));

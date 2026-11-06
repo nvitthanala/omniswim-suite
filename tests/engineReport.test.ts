@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildIndex, resolveLineup } from '../packages/engine/src/model/results';
-import { adaptSimulatorSnapshot } from '@omniswim/swimcloud/browser';
+import { adaptSimulatorSnapshot, SIMULATOR_SOURCING } from '@omniswim/swimcloud/browser';
 import { buildSnapshot } from './helpers/simulatorFixtures';
 import { entryKey, type IndividualEntry, type Lineup, type LineupEntry, type RelayLeg } from '../packages/engine/src/model/lineup';
 import type { MeetModel, MeetSwim } from '../packages/engine/src/model/meet';
@@ -154,8 +154,8 @@ describe('swimmerPoints and diffResults', () => {
 
 describe('captureReportFacts', () => {
   it('captures every seed from resolveLineup and chooses recorded on a recorded/converted tie', () => {
-    const { model, lineup: l } = seedModel(); const resolved = resolveLineup(model, l, buildIndex(model)).resolved;
-    const facts = captureReportFacts(model, l);
+    const { model, lineup: l } = seedModel(); const resolved = resolveLineup(model, l, buildIndex(model, SIMULATOR_SOURCING)).resolved;
+    const facts = captureReportFacts(model, l, SIMULATOR_SOURCING);
     for (const seed of resolved) { const fact = facts.seeds[seed.key]; expect(fact && 'hundredths' in fact ? fact.hundredths : null).toBe(seed.value); }
     expect(facts.seeds[resolved[0]!.key]).toEqual({ kind: 'time', hundredths: resolved[0]!.value, estimated: false });
   });
@@ -164,8 +164,8 @@ describe('captureReportFacts', () => {
     const adapted = adaptSimulatorSnapshot(snapshot, { meetKey: 'report-config-C', snapshotId: 'test' });
     if (adapted.kind !== 'ready') throw new Error(`config C did not adapt: ${adapted.kind}`);
     const { model, lineup: configLineup } = adapted.adapted;
-    const resolved = resolveLineup(model, configLineup, buildIndex(model)).resolved;
-    const facts = captureReportFacts(model, configLineup);
+    const resolved = resolveLineup(model, configLineup, buildIndex(model, SIMULATOR_SOURCING)).resolved;
+    const facts = captureReportFacts(model, configLineup, SIMULATOR_SOURCING);
     for (const item of resolved) {
       const fact = facts.seeds[item.key];
       expect(fact && 'hundredths' in fact ? fact.hundredths : null).toBe(item.value);
@@ -177,7 +177,7 @@ describe('captureReportFacts', () => {
       ...model,
       swims: model.swims.map(swim => ({ ...swim, scy: { kind: 'not-convertible', reason: 'no_conversion_available' } })),
     };
-    const fact = captureReportFacts(noConversion, l).seeds[entryKey(l.entries[0]!)];
+    const fact = captureReportFacts(noConversion, l, SIMULATOR_SOURCING).seeds[entryKey(l.entries[0]!)];
     expect(fact).toEqual({ kind: 'none', reason: 'not_convertible' });
   });
 });

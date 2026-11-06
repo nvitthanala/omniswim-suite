@@ -213,7 +213,7 @@ export function scoreLineup(
   const results = known.results ?? scoreMeet(req.model, lineup, tagsForScoring, req.rules, req.sourcing);
   // D5 8.2: the load of the lineup, and a penalty over the own swimmers on the roster only (never `sessionLoad`'s own total).
   const rule = problem.support.load;
-  const load: SessionLoadResult | null = known.load !== undefined ? known.load : rule === null ? null : sessionLoad(req.model, lineup, results, rule.schedule, rule.preference, req.rules);
+  const load: SessionLoadResult | null = known.load !== undefined ? known.load : rule === null ? null : sessionLoad(req.model, lineup, results, rule.schedule, rule.preference, req.rules, req.sourcing);
   const penaltyPoints = ownPenalty(rule, load, scorerIds(tagsForScoring, req.ownTeamId));
   // D5 5.4 and 8.2: robust mode ranks the lineup with the robust swims pinned on the entries of the swimmers the solver owns. The pinned copy is
   // scored by `scoreMeet` for the objective only. Everything else (`results`, the load, the violations) is the lineup as given.

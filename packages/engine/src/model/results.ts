@@ -94,11 +94,16 @@
  * ## Relay legs and the sourcing settings (D7 section 5, F1.3a)
  * - A `flyover-estimate` leg (legs 2 to 4) is worth `estimateFlyingLeg`: the flat swim's yards time minus the
  *   flyover. `null` is no time, and the relay has no total. With the flyover `unset` it is always `null`.
- *   On leg 1 it throws `leg_basis_unsupported`: no rule says what it would mean.
+ *   On leg 1 it has no time and a `basis_position` violation: storage accepts the basis in any position, so a
+ *   stored lineup with one must not stop the whole meet. A flat swim of another event than the leg's is
+ *   no estimate either: no time and an `event_mismatch` violation (invariant 13).
  * - A `split` leg is worth `splitScyValue`: a SCY split as is, any other course converted (README R62), `null`
  *   when nothing converts. The flyover is never subtracted from a split.
- * - `buildIndex` without sourcing settings keeps the older behaviour: a `flyover-estimate` leg throws
- *   `leg_basis_unsupported` and a non-SCY split throws `split_not_scy`. `scoreMeet` always passes them.
+ * - `buildIndex` takes the sourcing settings, always: every caller that resolves a lineup (the planner, the report
+ *   facts, the auto-builder) passes the settings the lineup is scored under.
+ * - A leg valued by an estimate says so in `Resolved.legEstimates` (`LegEstimate`): a flyover estimate (and whether
+ *   its flat swim was a converted one), a converted split, or a converted flat swim. A relay with any such leg is an
+ *   estimated relay in the report facts.
  *
  * Every row is scored as an `A Final`, so the legacy place index equals `rank - 1`. This is a label
  * for the legacy scorer, not a statement about how the meet was swum.
@@ -293,9 +298,7 @@ export type ScoreMeetErrorCode =
   | 'roster_not_member'
   | 'duplicate_entry'
   | 'seed_mismatch'
-  | 'leg_basis_unsupported'
-  | 'leg_missing'
-  | 'split_not_scy';
+  | 'leg_missing';
 
 export class ScoreMeetError extends Error {
   readonly code: ScoreMeetErrorCode;
@@ -337,6 +340,19 @@ export function settled<T>(setting: Setting<T>, path: string): T {
 /* Entry resolution                                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * How a relay leg's yards value was reached, when it is not a stated yards time. Absent: the leg is a SCY split, a recorded
+ * yards swim or has no time. Nothing here is stored: `captureReportFacts` reads it to label a relay "estimated".
+ * - `flyover`: the flat swim's yards time minus the flyover (`estimateFlyingLeg`). `usedConverted` is present (and `true`)
+ *   when that flat swim was itself a converted one, so the leg rests on two estimates.
+ * - `converted-split`: a split recorded in another course, converted to yards (README R62).
+ * - `converted-swim`: a flat-start swim whose yards time is a converted one.
+ */
+export type LegEstimate =
+  | { readonly kind: 'flyover'; readonly usedConverted?: true }
+  | { readonly kind: 'converted-split' }
+  | { readonly kind: 'converted-swim' };
+
 interface Resolved {
   readonly entry: LineupEntry;
   readonly key: string;
@@ -346,6 +362,11 @@ interface Resolved {
   readonly swimmerIds: readonly SwimmerId[];
   /** The seed value: hundredths of a second, or of a point for a dive. `null`: no time. */
   readonly value: Hundredths | null;
+  /**
+   * A relay only, and only when at least one leg is valued by an estimate: one slot per leg in leg order, `null` for a leg
+   * that is not. Absent otherwise, so an entry with no estimate resolves exactly as it did before P4.
+   */
+  readonly legEstimates?: readonly (LegEstimate | null)[];
 }
 
 interface Index {
@@ -356,14 +377,14 @@ interface Index {
   readonly swimsByKey: ReadonlyMap<string, readonly MeetSwim[]>;
   readonly splits: ReadonlyMap<string, RelaySplit>;
   readonly divisions: ReadonlyMap<TeamId, DivisionRef>;
-  /** `null`: the caller passed none. A flyover estimate and a non-SCY split then throw, as before P4. */
-  readonly sourcing: SourcingSettings | null;
+  /** The settings a flyover-estimate leg and a non-SCY split are valued under. */
+  readonly sourcing: SourcingSettings;
 }
 
 const eventId = (eventKey: EventKey, gender: Gender): string => `${gender}\u0000${eventKey}`;
 const seedKey = (swimmerId: SwimmerId, eventKey: EventKey): string => `${swimmerId}\u0000${eventKey}`;
 
-export function buildIndex(model: MeetModel, sourcing?: SourcingSettings): Index {
+export function buildIndex(model: MeetModel, sourcing: SourcingSettings): Index {
   const swimsByKey = new Map<string, MeetSwim[]>();
   for (const swim of model.swims) {
     const k = seedKey(swim.swimmerId, swim.eventKey);
@@ -379,7 +400,7 @@ export function buildIndex(model: MeetModel, sourcing?: SourcingSettings): Index
     swimsByKey,
     splits: new Map(model.relaySplits.map((s) => [s.splitId, s])),
     divisions: new Map(model.teams.map((t) => [t.teamId, t.division])),
-    sourcing: sourcing ?? null,
+    sourcing,
   };
 }
 
@@ -432,8 +453,37 @@ export function expectedLegEvents(event: MeetEvent): readonly EventKey[] | null 
 interface LegRead {
   readonly value: Hundredths | null;
   readonly eventKey: EventKey | null;
-  /** A flat-start swim on leg 2 to 4: legal in SwimCloud's aggregate relay, not on a real relay. */
+  /**
+   * A flat-start swim on leg 2 to 4 (legal in SwimCloud's aggregate relay, not on a real relay), or a flyover estimate on
+   * leg 1 (a flat start takes no flyover). Both give a `basis_position` violation.
+   */
   readonly offPosition?: true;
+  /** A flyover estimate whose flat swim is not of the leg's event, or whose leg event the meet cannot name: no time, and an `event_mismatch` violation (invariant 13). */
+  readonly eventMismatch?: true;
+  /** How the value was reached, when it is an estimate (see `LegEstimate`). */
+  readonly estimate?: LegEstimate;
+}
+
+function readFlyoverLeg(leg: RelayEntry['legs'][number], basis: { readonly swimId: string }, position: number, key: string, index: Index, expected: readonly EventKey[] | null): LegRead {
+  const swim = index.swims.get(basis.swimId);
+  if (!swim) return fail('unresolved_swim', `${key}: leg ${position + 1} swim "${basis.swimId}" is not in the model`, key);
+  if (swim.swimmerId !== leg.swimmerId) {
+    return fail('seed_mismatch', `${key}: leg ${position + 1} swim "${swim.swimId}" belongs to ${swim.swimmerId}, not ${leg.swimmerId}`, key);
+  }
+  // The leg's expected event, not the swim's own: a swim of another event gets no estimate (invariant 13).
+  // When the meet names no expected event for the leg, nothing can be compared: the leg has no time and is flagged, as an unverifiable
+  // flat-start leg is ("flagged, not trusted"), so a relay whose legs cannot be checked never passes quietly.
+  const legEvent = expected === null ? null : (expected[position] ?? null);
+  const mismatch = legEvent === null || swim.eventKey !== legEvent ? ({ eventMismatch: true } as const) : {};
+  // Leg 1 is a flat start: no rule gives it a flyover. Flagged, not thrown: storage accepts the basis in any position.
+  if (position === 0) return { value: null, eventKey: null, offPosition: true, ...mismatch };
+  const estimate = legEvent === null ? null : estimateFlyingLeg(swim, legEvent, index.sourcing.flyover);
+  if (estimate === null) return { value: null, eventKey: null, ...mismatch };
+  return {
+    value: estimate.hundredths,
+    eventKey: legEvent,
+    estimate: { kind: 'flyover', ...(estimate.usedConverted ? { usedConverted: true as const } : {}) },
+  };
 }
 
 function readLeg(entry: RelayEntry, position: number, key: string, index: Index, expected: readonly EventKey[] | null): LegRead {
@@ -443,27 +493,20 @@ function readLeg(entry: RelayEntry, position: number, key: string, index: Index,
   switch (basis.kind) {
     case 'no-time':
       return { value: null, eventKey: null };
-    case 'flyover-estimate': {
-      const sourcing = index.sourcing;
-      if (sourcing === null) return fail('leg_basis_unsupported', `${key}: leg ${position + 1} uses a flyover estimate and no sourcing settings were passed`, key);
-      if (position === 0) return fail('leg_basis_unsupported', `${key}: leg 1 is a flat start and takes no flyover estimate`, key);
-      const swim = index.swims.get(basis.swimId);
-      if (!swim) return fail('unresolved_swim', `${key}: leg ${position + 1} swim "${basis.swimId}" is not in the model`, key);
-      if (swim.swimmerId !== leg.swimmerId) {
-        return fail('seed_mismatch', `${key}: leg ${position + 1} swim "${swim.swimId}" belongs to ${swim.swimmerId}, not ${leg.swimmerId}`, key);
-      }
-      // The leg's expected event, not the swim's own: a swim of another event gets no estimate (invariant 13).
-      const legEvent = expected === null ? null : (expected[position] ?? null);
-      const estimate = legEvent === null ? null : estimateFlyingLeg(swim, legEvent, sourcing.flyover);
-      return estimate === null ? { value: null, eventKey: null } : { value: estimate.hundredths, eventKey: legEvent };
-    }
+    case 'flyover-estimate':
+      return readFlyoverLeg(leg, basis, position, key, index, expected);
     case 'flat-start-swim': {
       const swim = index.swims.get(basis.swimId);
       if (!swim) return fail('unresolved_swim', `${key}: leg ${position + 1} swim "${basis.swimId}" is not in the model`, key);
       if (swim.swimmerId !== leg.swimmerId) {
         return fail('seed_mismatch', `${key}: leg ${position + 1} swim "${swim.swimId}" belongs to ${swim.swimmerId}, not ${leg.swimmerId}`, key);
       }
-      return { value: scyValue(swim), eventKey: swim.eventKey, ...(position === 0 ? {} : { offPosition: true as const }) };
+      return {
+        value: scyValue(swim),
+        eventKey: swim.eventKey,
+        ...(position === 0 ? {} : { offPosition: true as const }),
+        ...(swim.scy.kind === 'converted' ? { estimate: { kind: 'converted-swim' } as const } : {}),
+      };
     }
     case 'split': {
       const split = index.splits.get(basis.splitId);
@@ -472,13 +515,11 @@ function readLeg(entry: RelayEntry, position: number, key: string, index: Index,
         return fail('seed_mismatch', `${key}: leg ${position + 1} split "${split.splitId}" belongs to ${split.swimmerId}, not ${leg.swimmerId}`, key);
       }
       if (split.course === 'SCY') return { value: split.split.hundredths, eventKey: split.legEventKey };
-      if (index.sourcing === null) {
-        return fail('split_not_scy', `${key}: leg ${position + 1} split "${split.splitId}" is ${split.course ?? 'of unknown course'} and no sourcing settings were passed`, key);
-      }
       // README R62: the individual conversion for the leg's stroke and distance, by the relay's gender. The flyover is not applied.
       const division = index.divisions.get(entry.teamId);
       if (division === undefined) return fail('unresolved_team', `${key}: team "${entry.teamId}" is not in the model`, key);
-      return { value: splitScyValue(split, division, entry.gender, index.sourcing), eventKey: split.legEventKey };
+      const value = splitScyValue(split, division, entry.gender, index.sourcing);
+      return { value, eventKey: split.legEventKey, ...(value === null ? {} : { estimate: { kind: 'converted-split' } as const }) };
     }
   }
 }
@@ -534,14 +575,24 @@ export function resolveLineup(model: MeetModel, lineup: Lineup, index: Index): R
       const read = readLeg(entry, i, key, index, expected);
       legs.push(read);
       if (read.offPosition) violations.push({ kind: 'relay_leg', entryKey: key, leg: position, reason: 'basis_position' });
-      // An unverifiable leg event (null) is flagged, not trusted: the leg may be a different stroke.
-      if (read.value !== null && (expected === null || read.eventKey !== expected[i])) {
+      // An unverifiable leg event (null) is flagged, not trusted: the leg may be a different stroke. A flyover estimate
+      // on a swim of another event has no value, so it is flagged by its own mark; the two tests never both hold.
+      if (read.eventMismatch === true || (read.value !== null && (expected === null || read.eventKey !== expected[i]))) {
         violations.push({ kind: 'relay_leg', entryKey: key, leg: position, reason: 'event_mismatch' });
       }
     });
     const timed = legs.every((l) => l.value !== null);
     const total = timed ? legs.reduce((sum, l) => sum + (l.value as number), 0) : null;
-    resolved.push({ entry, key, event: ev, gender: entry.gender, swimmerIds: legSwimmers, value: total });
+    const legEstimates = legs.map((l) => l.estimate ?? null);
+    resolved.push({
+      entry,
+      key,
+      event: ev,
+      gender: entry.gender,
+      swimmerIds: legSwimmers,
+      value: total,
+      ...(legEstimates.some((e) => e !== null) ? { legEstimates } : {}),
+    });
   }
 
   return { resolved, violations, rosterUnknown: [...unknown].sort() };

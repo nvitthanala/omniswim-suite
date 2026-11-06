@@ -90,7 +90,7 @@ export type {
 export { entryKey, stripSwimCloudData } from './model/lineup';
 
 // 3.8 Results and scoring (P2)
-export type { NotScoredReason, ResultRow, Results, ScoreMeetErrorCode, Violation } from './model/results';
+export type { LegEstimate, NotScoredReason, ResultRow, Results, ScoreMeetErrorCode, Violation } from './model/results';
 export { ScoreMeetError, scoreMeet, stripResultsDisplay } from './model/results';
 
 // 3.14 Suggested opponent rosters (P3.core-c). The solver is injected: the engine takes no `highs` dependency.

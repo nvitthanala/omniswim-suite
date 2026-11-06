@@ -139,7 +139,12 @@ export function autoBuild(req: AutoBuildRequest, solve: MipSolve): Promise<AutoB
 
 ### 2.1 Refusals (in this order; every one throws)
 
-1. Preflight. Run `scoreMeet(model, lineup, tags, rules, sourcing)` on the current lineup (and `sessionLoad` when `load` is set). Its `ScoreMeetError` reaches the caller unchanged. This covers `scoring_roster_missing` for an untagged own or opponent side (R65), `leg_basis_unsupported`, and `roster_not_member`. Same pattern as `rosterSuggest.ts:616-623`.
+1. Preflight. Run `scoreMeet(model, lineup, tags, rules, sourcing)` on the current lineup (and `sessionLoad` when `load` is set). Its `ScoreMeetError` reaches the caller unchanged. This covers `scoring_roster_missing` for an untagged own or opponent side (R65), `roster_not_member`, and a leg whose swim or split is missing or belongs to another swimmer (`unresolved_swim`, `unresolved_split`, `seed_mismatch`). Same pattern as `rosterSuggest.ts:616-623`.
+
+   A flyover-estimate leg 1 no longer throws (F1.3a follow-up; the codes `leg_basis_unsupported` and `split_not_scy` are removed). `scoreMeet` gives that relay no time and a `relay_leg` / `basis_position` violation, and a flyover leg on a swim of another event gets `relay_leg` / `event_mismatch`. `isHard` treats both as hard (`gate.ts:46`), but `repairable()` skips them (`gate.ts:61`), so they never produce `current_infeasible`. What the AutoBuilder then does with a relay that carries one:
+   - Unbuilt event, or another team's relay: the entry stays as entered, with no time and no place. The violation is in `current.results` and in every proposal's results. `blockersOf` (`gate.ts:314`) does not refuse it, because the same violation is already in `currentViolations`. It is not a warning either (`isWarning`), so `proposal.newWarnings` does not list it. The only report is `Results.violations`.
+   - Own relay of a built event: it stays only if its squad is chosen. `currentSquad` values it at `Infinity`, so the solver replaces it, and the violation leaves the proposal. A kept copy would carry the same violation, unrefused for the same reason.
+   So it is quiet by design: no throw, no refusal, no warning. A caller that wants it shown must read `Results.violations`.
 2. `draft_meet`: `model.teams` is empty (R54). `own_team_unknown`: `ownTeamId` is not in the model. `nothing_to_build`: no decision swimmer in any built gender.
 3. `own_tag_not_coach`: an own-team tag has `source` set.
 4. `rule_unsupported`, with the setting path as subject:

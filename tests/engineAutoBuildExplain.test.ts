@@ -336,7 +336,7 @@ function expected(fx: Fx, proposal: AutoBuildProposal, o: OracleOpts): AutoBuild
           // The races over the limit of every swimmer on the roster, from sessionLoad of a whole lineup.
           const overLimit = (entriesOf: readonly LineupEntry[], res: Results): { mine: boolean; extra: number } => {
             if (o.load === undefined) return { mine: false, extra: 0 };
-            const run = sessionLoad(fx.model, lineup(...entriesOf), res, o.load.schedule, o.load.preference, fx.rules);
+            const run = sessionLoad(fx.model, lineup(...entriesOf), res, o.load.schedule, o.load.preference, fx.rules, SOURCING);
             const max = (o.load.preference as { maxRacesPerSession: { value: number } }).maxRacesPerSession.value;
             let extra = 0;
             for (const s of run.perSwimmer) if (owned.has(s.swimmerId)) for (const x of s.sessions) if (x.races > max) extra += x.races - max;
@@ -946,7 +946,7 @@ describe('autoBuild (D5, slice A8: explanations)', () => {
       const problem = buildProblem(request(fx, { load }), { ...checkRules(fx.rules), load: loadRuleOf(load) }, scoreMeet(fx.model, fx.lineup, fx.tags, fx.rules, SOURCING));
       const entries = [...fx.lineup.entries.filter((e) => !(e.kind === 'individual' && e.teamId === 'A')), ind('A', 'S', E1), ind('A', 'S', E3)];
       const results = scoreMeet(fx.model, lineup(...entries), fx.tags, fx.rules, SOURCING);
-      const ran = sessionLoad(fx.model, lineup(...entries), results, load.schedule, load.preference, fx.rules);
+      const ran = sessionLoad(fx.model, lineup(...entries), results, load.schedule, load.preference, fx.rules, SOURCING);
       const proposal: AutoBuildProposal = {
         lineup: lineup(...entries),
         rosterAdds: [],

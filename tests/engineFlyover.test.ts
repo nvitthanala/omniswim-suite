@@ -12,8 +12,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   builtinLcmToScy,
+  captureReportFacts,
   closeThresholdFromPercent,
   cutTagForSwim,
+  entryKey,
   estimateFlyingLeg,
   flyoverFromSeconds,
   formatHundredths,
@@ -441,13 +443,13 @@ describe('T-S3 scoreMeet: a split leg keeps its exact time when the flyover is s
     expect(row.notScoredReason).toBe('no_time');
   });
 
-  it('without sourcing settings the index throws as before P4', () => {
-    const scm = splitOf('a2', 5200, { course: 'SCM' });
-    const m = worldOf({ swimmers, swims: [flatA], splits: [scm, splitsA[1]!, splitsA[2]!] });
-    const l = lineupOf(relayOf('T1', 'A', [flatLeg('a1', flatA.swimId), splitLeg('a2', scm.splitId), splitLeg('a3', splitsA[1]!.splitId), splitLeg('a4', splitsA[2]!.splitId)] as unknown as RelayEntry['legs']));
-    expect(() => resolveLineup(m, l, buildIndex(m))).toThrow(ScoreMeetError);
-    const fl = lineupOf(relayOf('T1', 'A', [flatLeg('a1', flatA.swimId), estimateLeg('a2', flatA.swimId), splitLeg('a3', splitsA[1]!.splitId), splitLeg('a4', splitsA[2]!.splitId)] as unknown as RelayEntry['legs']));
-    expect(() => resolveLineup(m, fl, buildIndex(m))).toThrow(ScoreMeetError);
+  it('the index takes the settings it is given: the same flyover leg is worth a different time under another allowance (MEDIUM-1)', () => {
+    const flat2 = swimOf('a2', '100 Freestyle', 4950);
+    const m = worldOf({ swimmers, swims: [flatA, flat2], splits: [splitsA[1]!, splitsA[2]!] });
+    const fl = lineupOf(relayOf('T1', 'A', [flatLeg('a1', flatA.swimId), estimateLeg('a2', flat2.swimId), splitLeg('a3', splitsA[1]!.splitId), splitLeg('a4', splitsA[2]!.splitId)] as unknown as RelayEntry['legs']));
+    expect(valueOf(m, fl, settings(flyover(30)))).toEqual([5000 + 4920 + 2 * 4901]);
+    expect(valueOf(m, fl, settings(flyover(80)))).toEqual([5000 + 4870 + 2 * 4901]);
+    expect(valueOf(m, fl, settings(UNSET))).toEqual([null]);
   });
 });
 
@@ -492,18 +494,74 @@ describe('scoreMeet: a flyover-estimate leg', () => {
     expect(r.violations.filter((v) => v.kind === 'relay_leg')).toEqual([]);
   });
 
-  it('a swim of another event is no estimate for the leg (invariant 13): no time, not a wrong time', () => {
+  const legViolations = (r: ReturnType<typeof scoreMeet>) => r.violations.filter((v) => v.kind === 'relay_leg');
+
+  it('a swim of another event is no estimate for the leg (invariant 13): no time, an event_mismatch violation (MEDIUM-3)', () => {
     const wrong = swimOf('a3', '50 Freestyle', 2300);
     const entry = withEstimate(wrong.swimId, 'a3');
-    // a3 now also holds leg 3 as a duplicate; the leg value is what matters here.
+    // a3 now also holds leg 3 as a duplicate; the leg value and the leg 2 violation are what matter here.
     expect(valueOf(model, lineupOf(entry), settings(flyover(30)))[0]).toBeNull();
+    const r = scoreMeet(model, lineupOf(entry), [], pointsPreset(), settings(flyover(30)));
+    expect(legViolations(r).filter((v) => v.leg === 2 && v.reason === 'event_mismatch')).toHaveLength(1);
+    // The mismatch is a fact about the lineup, not about the allowance: it shows with the flyover unset too.
+    const unset = scoreMeet(model, lineupOf(entry), [], pointsPreset(), settings(UNSET));
+    expect(legViolations(unset).filter((v) => v.leg === 2 && v.reason === 'event_mismatch')).toHaveLength(1);
+    expect(r.events[0]!.rows[0]!.notScoredReason).toBe('no_time');
   });
 
-  it('refuses a leg 1 estimate, a missing swim and another swimmer swim loudly', () => {
+  it('a matching event raises no event_mismatch even when the estimate is not available', () => {
+    const r = scoreMeet(model, lineupOf(withEstimate(flat2.swimId)), [], pointsPreset(), settings(UNSET));
+    expect(legViolations(r)).toEqual([]);
+  });
+
+  it('a leg 1 estimate has no time and a basis_position violation: the meet still scores (ruling 1)', () => {
     const leg1 = relayOf('T1', 'A', [estimateLeg('a1', flat1.swimId), ...splitsA.map((s) => splitLeg(s.swimmerId, s.splitId)), splitLeg('a4', splitsA[1]!.splitId)] as unknown as RelayEntry['legs']);
-    expect(codeOf(() => scoreMeet(model, lineupOf(leg1), [], pointsPreset(), settings(flyover(30))))).toBe('leg_basis_unsupported');
+    const l = lineupOf(leg1, rival);
+    expect(valueOf(model, l, settings(flyover(30)))).toEqual([null, 5000 + 3 * 4900]);
+    const r = scoreMeet(model, l, [], pointsPreset(), settings(flyover(30)));
+    expect(legViolations(r)).toContainEqual(expect.objectContaining({ leg: 1, reason: 'basis_position' }));
+    expect(legViolations(r).filter((v) => v.leg === 1 && v.reason === 'event_mismatch')).toEqual([]);
+    const rows = r.events[0]!.rows;
+    expect(rows.find((x) => x.teamId === 'T1')!.notScoredReason).toBe('no_time');
+    expect(rows.find((x) => x.teamId === 'T2')!.place).toBe(1);
+  });
+
+  it('a leg 1 estimate on the wrong event gets both violations', () => {
+    const wrong = swimOf('a1', '50 Freestyle', 2300);
+    const leg1 = relayOf('T1', 'A', [estimateLeg('a1', wrong.swimId), splitLeg('a3', splitsA[0]!.splitId), splitLeg('a4', splitsA[1]!.splitId), flatLeg('a2', flat2.swimId)] as unknown as RelayEntry['legs']);
+    const m = worldOf({ swimmers, swims: [flat1, wrong, flat2, flatB], splits: [...splitsA, ...splitsB] });
+    const v = legViolations(scoreMeet(m, lineupOf(leg1), [], pointsPreset(), settings(flyover(30))));
+    expect(v).toContainEqual(expect.objectContaining({ leg: 1, reason: 'basis_position' }));
+    expect(v).toContainEqual(expect.objectContaining({ leg: 1, reason: 'event_mismatch' }));
+  });
+
+  it('a leg 1 estimate on another swimmer swim throws seed_mismatch, as on every other leg', () => {
+    const leg1 = relayOf('T1', 'A', [estimateLeg('a1', flatB.swimId), ...splitsA.map((s) => splitLeg(s.swimmerId, s.splitId)), splitLeg('a4', splitsA[1]!.splitId)] as unknown as RelayEntry['legs']);
+    expect(codeOf(() => scoreMeet(model, lineupOf(leg1), [], pointsPreset(), settings(flyover(30))))).toBe('seed_mismatch');
+  });
+
+  it('a relay whose leg events the meet cannot name flags a flyover leg as it flags a flat-start leg (MEDIUM-A)', () => {
+    // 402 yards is not divisible by 4: no expected leg events. Both kinds of leg are unverifiable, and neither passes quietly.
+    const odd: MeetEvent = { ...EVENT_RELAY, distanceYards: 402 };
+    const m: MeetModel = { ...model, events: [EVENT_100, odd] };
+    const entry = relayOf('T1', 'A', [flatLeg('a1', flat1.swimId), estimateLeg('a2', flat2.swimId), ...splitsA.map((s) => splitLeg(s.swimmerId, s.splitId))] as unknown as RelayEntry['legs']);
+    const r = scoreMeet(m, lineupOf(entry), [], pointsPreset(), settings(flyover(30)));
+    expect(valueOf(m, lineupOf(entry), settings(flyover(30)))[0]).toBeNull();
+    const mismatches = legViolations(r).filter((v) => v.reason === 'event_mismatch').map((v) => v.leg);
+    expect(mismatches).toContain(1); // the flat-start leg: existing behaviour
+    expect(mismatches).toContain(2); // the flyover leg
+    // Leg 1 flyover, same relay: flagged at any position.
+    const first = relayOf('T1', 'B', [estimateLeg('a1', flat1.swimId), ...splitsA.map((s) => splitLeg(s.swimmerId, s.splitId)), splitLeg('a4', splitsA[1]!.splitId)] as unknown as RelayEntry['legs']);
+    const r1 = scoreMeet(m, lineupOf(first), [], pointsPreset(), settings(flyover(30)));
+    expect(legViolations(r1)).toContainEqual(expect.objectContaining({ leg: 1, reason: 'event_mismatch' }));
+  });
+
+  it('refuses a missing swim and another swimmer swim loudly', () => {
     expect(codeOf(() => scoreMeet(model, lineupOf(withEstimate('nope')), [], pointsPreset(), settings(flyover(30))))).toBe('unresolved_swim');
     expect(codeOf(() => scoreMeet(model, lineupOf(withEstimate(flatB.swimId)), [], pointsPreset(), settings(flyover(30))))).toBe('seed_mismatch');
+    // Leg 1 is flagged, not trusted: a missing swim there still throws.
+    const leg1 = relayOf('T1', 'A', [estimateLeg('a1', 'nope'), ...splitsA.map((s) => splitLeg(s.swimmerId, s.splitId)), splitLeg('a4', splitsA[1]!.splitId)] as unknown as RelayEntry['legs']);
+    expect(codeOf(() => scoreMeet(model, lineupOf(leg1), [], pointsPreset(), settings(flyover(30))))).toBe('unresolved_swim');
   });
 });
 
@@ -600,5 +658,63 @@ describe('T-S4 squads: a flyover option only where the swimmer has no split opti
     // Leg 1 takes no estimate.
     const leg1 = relayOf('T1', 'A', [estimateLeg('a', 'a:100 Freestyle:SCY:4800'), splitLeg('a', aSplit.splitId), splitLeg('a', aSplit.splitId), splitLeg('a', aSplit.splitId)] as unknown as RelayEntry['legs']);
     expect(currentSquad(leg1, buildLegSources(model, settings(flyover(30)))).time).toBe(Infinity);
+  });
+});
+
+/* ---------------------------------------------------------------------------------------------- */
+/* MEDIUM-2: an estimated relay time keeps its "estimated" label                                   */
+/* ---------------------------------------------------------------------------------------------- */
+
+describe('captureReportFacts: a relay valued by an estimate is labeled estimated (MEDIUM-2)', () => {
+  const swimmers = ['a1', 'a2', 'a3', 'a4'].map((id) => ({ id, team: 'T1' }));
+  const flat1 = swimOf('a1', '100 Freestyle', 5000);
+  const flat2 = swimOf('a2', '100 Freestyle', 4950);
+  const flat2Converted = swimOf('a2', '100 Freestyle', 5300, { course: 'SCM', scy: convertedScy(4950), id: 'a2-scm' });
+  const flat1Converted = swimOf('a1', '100 Freestyle', 5300, { course: 'SCM', scy: convertedScy(5000), id: 'a1-scm' });
+  const scyA = ['a2', 'a3', 'a4'].map((id) => splitOf(id, 4900));
+  const scmA = ['a2', 'a3', 'a4'].map((id) => splitOf(id, 5200, { course: 'SCM' }));
+  const factsOf = (swims: readonly MeetSwim[], splits: readonly RelaySplit[], legs: unknown, s: SourcingSettings) => {
+    const model = worldOf({ swimmers, swims, splits });
+    const entry = relayOf('T1', 'A', legs as RelayEntry['legs']);
+    const lineup = lineupOf(entry);
+    return { fact: captureReportFacts(model, lineup, s).seeds[entryKey(entry)], resolved: resolveLineup(model, lineup, buildIndex(model, s)).resolved[0]! };
+  };
+
+  it('all SCY legs: a recorded time, not estimated, no leg estimates', () => {
+    const { fact, resolved } = factsOf([flat1], scyA, [flatLeg('a1', flat1.swimId), ...scyA.map((s) => splitLeg(s.swimmerId, s.splitId))], settings(flyover(30), true));
+    expect(fact).toStrictEqual({ kind: 'time', hundredths: 5000 + 3 * 4900, estimated: false });
+    expect(resolved.legEstimates).toBeUndefined();
+  });
+
+  it('a flyover leg on a recorded SCY flat swim: estimated, and the flat swim is not converted', () => {
+    const { fact, resolved } = factsOf([flat1, flat2], [scyA[1]!, scyA[2]!], [flatLeg('a1', flat1.swimId), estimateLeg('a2', flat2.swimId), splitLeg('a3', scyA[1]!.splitId), splitLeg('a4', scyA[2]!.splitId)], settings(flyover(30)));
+    expect(fact).toStrictEqual({ kind: 'time', hundredths: 5000 + 4920 + 2 * 4900, estimated: true });
+    expect(resolved.legEstimates).toStrictEqual([null, { kind: 'flyover' }, null, null]);
+  });
+
+  it('a flyover leg on a converted flat swim: estimated, and usedConverted says both times are estimates', () => {
+    const { fact, resolved } = factsOf([flat1, flat2Converted], [scyA[1]!, scyA[2]!], [flatLeg('a1', flat1.swimId), estimateLeg('a2', flat2Converted.swimId), splitLeg('a3', scyA[1]!.splitId), splitLeg('a4', scyA[2]!.splitId)], settings(flyover(30)));
+    expect(fact).toStrictEqual({ kind: 'time', hundredths: 5000 + 4920 + 2 * 4900, estimated: true });
+    expect(resolved.legEstimates).toStrictEqual([null, { kind: 'flyover', usedConverted: true }, null, null]);
+  });
+
+  it('a converted split behind a recorded flat swim: estimated', () => {
+    const converted = splitScyValue(scmA[0]!, D2, 'Men', settings(UNSET, true));
+    expect(converted).not.toBeNull();
+    const { fact, resolved } = factsOf([flat1], scmA, [flatLeg('a1', flat1.swimId), ...scmA.map((s) => splitLeg(s.swimmerId, s.splitId))], settings(UNSET, true));
+    expect(fact).toStrictEqual({ kind: 'time', hundredths: 5000 + 3 * (converted as number), estimated: true });
+    expect(resolved.legEstimates).toStrictEqual([null, { kind: 'converted-split' }, { kind: 'converted-split' }, { kind: 'converted-split' }]);
+  });
+
+  it('a converted flat swim on leg 1 behind SCY splits: still estimated', () => {
+    const { fact, resolved } = factsOf([flat1Converted], scyA, [flatLeg('a1', flat1Converted.swimId), ...scyA.map((s) => splitLeg(s.swimmerId, s.splitId))], settings(UNSET, true));
+    expect(fact).toStrictEqual({ kind: 'time', hundredths: 5000 + 3 * 4900, estimated: true });
+    expect(resolved.legEstimates).toStrictEqual([{ kind: 'converted-swim' }, null, null, null]);
+  });
+
+  it('a flyover leg with no time (wrong event) gives a no-time seed, never a time', () => {
+    const wrong = swimOf('a2', '50 Freestyle', 2300);
+    const { fact } = factsOf([flat1, wrong], [scyA[1]!, scyA[2]!], [flatLeg('a1', flat1.swimId), estimateLeg('a2', wrong.swimId), splitLeg('a3', scyA[1]!.splitId), splitLeg('a4', scyA[2]!.splitId)], settings(flyover(30)));
+    expect(fact).toStrictEqual({ kind: 'none', reason: 'no_time' });
   });
 });

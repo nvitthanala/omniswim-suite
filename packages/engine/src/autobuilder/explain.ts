@@ -206,7 +206,7 @@ function bindingOf(
     size !== 'unlimited' && rosterSpots({ ...proposal.lineup, entries }, scorers, weight, req.model.events, true).numerator > size * weight.denominator;
   if (after.violations.some((v) => v.kind === 'entry_cap' && v.swimmerId === swimmerId && isNew(v, before))) return 'entry_cap';
   if (rule !== null) budget.charge(proposal.lineup.entries.length + 1);
-  const load = rule === null ? null : sessionLoad(req.model, { ...proposal.lineup, entries: [...proposal.lineup.entries, entry] }, after, rule.schedule, rule.preference, req.rules);
+  const load = rule === null ? null : sessionLoad(req.model, { ...proposal.lineup, entries: [...proposal.lineup.entries, entry] }, after, rule.schedule, rule.preference, req.rules, req.sourcing);
   if (rule !== null && !rule.prefer) {
     const base = violationsOf(proposal.evaluation.results, proposal.evaluation.load, rule.schedule);
     if (violationsOf(after, load, rule.schedule).some((v) => v.kind === 'session_load' && v.swimmerId === swimmerId && isNew(v, base))) return 'session_load';

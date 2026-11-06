@@ -12,7 +12,7 @@
  */
 import { captureReportFacts } from '@omniswim/engine';
 import type { LpSolve } from '@omniswim/engine';
-import { rescoreSimulator } from '@omniswim/swimcloud/browser';
+import { rescoreSimulator, SIMULATOR_SOURCING } from '@omniswim/swimcloud/browser';
 import type { SimSnapshot } from '../shared/bridgeSchema';
 import { readScorerOwnTeam, readScorerRulePreset, readSessionPreset, resolveRulePreset } from '../storage';
 import type { LineupRecord, StorageRepo } from '../storage';
@@ -79,7 +79,8 @@ export async function buildSnapshotRecord(snapshot: SimSnapshot, name: string, d
     },
     results: scored.results,
     tags: { coach, suggested },
-    facts: captureReportFacts(scored.adapted.model, scored.adapted.lineup),
+    // The settings `rescoreSimulator` scored `results` under, so a seed fact and its result row come from one valuation.
+    facts: captureReportFacts(scored.adapted.model, scored.adapted.lineup, SIMULATOR_SOURCING),
   };
   return { kind: 'built', record, coachTags: coach.length, suggestedTags: suggested.length };
 }

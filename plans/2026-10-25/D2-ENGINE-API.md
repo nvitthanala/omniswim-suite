@@ -673,13 +673,16 @@ export interface Results {
   readonly display?: LineupDisplay;   // names and times, removable
 }
 export function scoreMeet(model: MeetModel, lineup: Lineup, tags: readonly ScorerTag[],
-  rules: CompleteRulePreset, sourcing: ConversionSettings): Results;   // P2 reads nothing from `sourcing`; 8.12
+  rules: CompleteRulePreset, sourcing: SourcingSettings): Results;   // F1.3a: the flyover and the split conversion read `sourcing`; 8.12
 export function stripResultsDisplay(r: Results): Results;
 export type ScoreMeetErrorCode = 'meet_key_mismatch' | 'roster_mode_unsupported' | 'tags_need_roster_mode'
   | 'scoring_roster_missing' | 'duplicate_tag' | 'team_size_scope_unsupported'   // P3.core-b; roster_mode_unsupported no longer thrown
   | 'placement_unsupported' | 'name_collision' | 'unresolved_team' | 'unresolved_swimmer' | 'unresolved_event'
   | 'unresolved_swim' | 'unresolved_split' | 'team_mismatch' | 'gender_mismatch' | 'event_kind_mismatch'
-  | 'roster_not_member' | 'duplicate_entry' | 'seed_mismatch' | 'leg_basis_unsupported' | 'leg_missing' | 'split_not_scy';
+  | 'roster_not_member' | 'duplicate_entry' | 'seed_mismatch' | 'leg_missing';
+// F1.3a follow-up: 'leg_basis_unsupported' and 'split_not_scy' are removed, nothing throws them. A flyover-estimate leg 1 has no time and a
+// `relay_leg` / `basis_position` violation. A flyover-estimate leg whose swim is not the leg's event (or whose leg event the meet cannot name)
+// has no time and a `relay_leg` / `event_mismatch` violation. A non-SCY split is valued by `splitScyValue`, or has no time.
 export class ScoreMeetError extends Error { readonly code: ScoreMeetErrorCode; readonly subject: string | null;
   readonly teamIds: readonly TeamId[];   // P3.core-b: scoring_roster_missing only, else empty
   readonly missingRosters: readonly { readonly teamId: TeamId; readonly gender: Gender }[] }   // same

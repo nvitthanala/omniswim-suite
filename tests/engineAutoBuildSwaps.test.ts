@@ -419,7 +419,7 @@ function swapRows(key: string, fx: World, allowSwaps: boolean, load: NonNullable
       let extra = 0;
       let over = false;
       if (load !== null) {
-        const run = sessionLoad(fx.model, l, results, load.schedule, load.preference, fx.rules);
+        const run = sessionLoad(fx.model, l, results, load.schedule, load.preference, fx.rules, SOURCING);
         const roster = new Set(scorers.filter((s) => s.teamId === 'A' && s.role === 'scorer').map((s) => s.swimmerId));
         const max = load.preference.mode === 'off' || load.preference.maxRacesPerSession.state !== 'set' ? 0 : load.preference.maxRacesPerSession.value;
         over = run.violations.some((v) => v.kind === 'session_load' && roster.has(v.swimmerId));

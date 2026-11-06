@@ -181,7 +181,7 @@ export function buildProblem(req: AutoBuildRequest, support: Support, currentRes
       }
     }
     const own = new Set(req.model.swimmers.filter((m) => m.teamId === req.ownTeamId).map((m) => m.swimmerId));
-    races = fixedRaces(rule, req.model, req.lineup, currentResults, (e) => builtIds.has(eventId(e.eventKey, e.gender)), own, req.rules);
+    races = fixedRaces(rule, req.model, req.lineup, currentResults, (e) => builtIds.has(eventId(e.eventKey, e.gender)), own, req.rules, req.sourcing);
   }
   const robust =
     req.objective.kind === 'robust'
@@ -203,7 +203,7 @@ export function buildProblem(req: AutoBuildRequest, support: Support, currentRes
       held.add(key);
     }
   }
-  const currentLoad = rule === null ? null : sessionLoad(req.model, req.lineup, currentResults, rule.schedule, rule.preference, req.rules);
+  const currentLoad = rule === null ? null : sessionLoad(req.model, req.lineup, currentResults, rule.schedule, rule.preference, req.rules, req.sourcing);
   return {
     req,
     support,

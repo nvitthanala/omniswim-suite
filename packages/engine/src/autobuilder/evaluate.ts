@@ -350,6 +350,6 @@ export class Evaluator {
   private racesOf(event: MeetEvent, lineup: Lineup, rows: readonly ResultRow[], model: MeetModel | null, results: Results | null, build: (lineup: Lineup) => MeetModel): Races {
     const load = this.base.load;
     if (load === null) return NO_RACES;
-    return columnRaces(load, model ?? build(lineup), lineup, results ?? this.resultsOf(event, rows), event, this.base.decision, this.base.rules);
+    return columnRaces(load, model ?? build(lineup), lineup, results ?? this.resultsOf(event, rows), event, this.base.decision, this.base.rules, this.base.sourcing);
   }
 }

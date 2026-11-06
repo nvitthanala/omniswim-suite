@@ -217,7 +217,7 @@ async function autoError(run: () => Promise<unknown>): Promise<AutoBuildError> {
 function wholeObjective(fx: Fx, entries: readonly LineupEntry[], scorers: readonly ScorerTag[], load: NonNullable<AutoBuildRequest['load']>): number | null {
   const l = lineup(...entries);
   const results = scoreMeet(fx.model, l, scorers, fx.rules, SOURCING);
-  const run = sessionLoad(fx.model, l, results, load.schedule, load.preference, fx.rules);
+  const run = sessionLoad(fx.model, l, results, load.schedule, load.preference, fx.rules, SOURCING);
   const own = new Set(scorers.filter((t) => t.teamId === 'A' && t.role === 'scorer').map((t) => t.swimmerId));
   const points = (results.teams.find((t) => t.teamId === 'A') as { points: number }).points;
   const pref = load.preference;

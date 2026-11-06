@@ -13,6 +13,7 @@ import type { Lineup, ScorerTag } from '../model/lineup';
 import type { MeetEvent, MeetModel } from '../model/meet';
 import type { EventKey, Gender, SwimmerId, TeamId } from '../model/primitives';
 import type { CompleteRulePreset } from '../rules/rulePreset';
+import type { SourcingSettings } from '../sourcing/flyover';
 import type { ScheduledEvent, SessionPreset, SessionRef } from '../planner/types';
 import { relayRepeatsForSchedule } from '../planner/relayRepeats';
 import type { LoadRule } from './support';
@@ -71,10 +72,11 @@ export function columnRaces(
   results: Results,
   event: MeetEvent,
   who: ReadonlySet<SwimmerId>,
-  rules: CompleteRulePreset
+  rules: CompleteRulePreset,
+  sourcing: SourcingSettings
 ): Races {
   if (scheduledOf(load.schedule, event.eventKey, event.gender) === undefined) return NO_RACES;
-  const run = sessionLoad(model, lineup, results, restricted(load.schedule, event.eventKey, event.gender), load.preference, rules);
+  const run = sessionLoad(model, lineup, results, restricted(load.schedule, event.eventKey, event.gender), load.preference, rules, sourcing);
   refusePending(run.violations);
   return sessionsOf(run, (id) => who.has(id));
 }
@@ -90,10 +92,11 @@ export function fixedRaces(
   results: Results,
   isBuilt: (entry: { readonly eventKey: EventKey; readonly gender: Gender }) => boolean,
   own: ReadonlySet<SwimmerId>,
-  rules: CompleteRulePreset
+  rules: CompleteRulePreset,
+  sourcing: SourcingSettings
 ): Races {
   const entries = lineup.entries.filter((e) => !isBuilt(e));
-  const run = sessionLoad(model, { ...lineup, entries }, results, load.schedule, load.preference, rules);
+  const run = sessionLoad(model, { ...lineup, entries }, results, load.schedule, load.preference, rules, sourcing);
   return sessionsOf(run, (id) => own.has(id));
 }
 

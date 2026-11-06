@@ -3,6 +3,7 @@ import { buildIndex, resolveLineup, scyValue } from '../model/results';
 import type { Lineup } from '../model/lineup';
 import type { MeetModel, MeetSwim } from '../model/meet';
 import type { Hundredths, SwimmerId } from '../model/primitives';
+import type { SourcingSettings } from '../sourcing/flyover';
 
 export type ClassYearCode = MeetModel['swimmers'][number]['classYear'];
 
@@ -30,18 +31,13 @@ function noTimeReason(model: MeetModel, swimmerId: SwimmerId, eventKey: string, 
   return swims.length > 0 && swims.every(swim => swim.scy.kind === 'not-convertible') ? 'not_convertible' : 'no_time';
 }
 
-function relaySwims(model: MeetModel, lineupEntry: Extract<Lineup['entries'][number], { kind: 'relay' }>): MeetSwim[] {
-  return lineupEntry.legs.flatMap(leg => {
-    if (leg.basis.kind !== 'flat-start-swim') return [];
-    const swimId = leg.basis.swimId;
-    const swim = model.swims.find(candidate => candidate.swimId === swimId);
-    return swim === undefined ? [] : [swim];
-  });
-}
-
-/** Resolve each lineup seed once, then preserve its selected value and provenance for snapshots. */
-export function captureReportFacts(model: MeetModel, lineup: Lineup): ReportFacts {
-  const resolved = resolveLineup(model, lineup, buildIndex(model)).resolved;
+/**
+ * Resolve each lineup seed once, then preserve its selected value and provenance for snapshots. `sourcing` is the settings the
+ * lineup is scored under (the dashboard passes `SIMULATOR_SOURCING`): a flyover leg and a converted split have a value only under them.
+ * A relay is `estimated` when any leg is valued by an estimate: a flyover leg, a converted split or a converted flat swim.
+ */
+export function captureReportFacts(model: MeetModel, lineup: Lineup, sourcing: SourcingSettings): ReportFacts {
+  const resolved = resolveLineup(model, lineup, buildIndex(model, sourcing)).resolved;
   const seeds: Record<string, SeedFact> = {};
   for (const item of resolved) {
     if (item.value === null) {
@@ -63,12 +59,10 @@ export function captureReportFacts(model: MeetModel, lineup: Lineup): ReportFact
     const selected = item.entry.kind === 'individual'
       ? chosenIndividualSwim(model, item.entry.swimmerId, item.entry.eventKey, item.value, item.entry.seedSwimId)
       : undefined;
-    const relatedSwims = item.entry.kind === 'relay' ? relaySwims(model, item.entry) : selected ? [selected] : [];
-    seeds[item.key] = {
-      kind: 'time',
-      hundredths: item.value,
-      estimated: relatedSwims.some(swim => swim.scy.kind === 'converted'),
-    };
+    const estimated = item.entry.kind === 'relay'
+      ? item.legEstimates !== undefined
+      : selected?.scy.kind === 'converted';
+    seeds[item.key] = { kind: 'time', hundredths: item.value, estimated };
   }
 
   const classYears: Record<SwimmerId, ClassYearCode> = {};
